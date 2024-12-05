@@ -8,7 +8,7 @@ plugins {
 }
 
 application {
-    mainClass.set("MainKt")
+    mainClass.set("com.uabutler.CompileKt")
 }
 
 group = "com.uabutler"

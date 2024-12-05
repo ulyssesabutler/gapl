@@ -1,3 +1,5 @@
+package com.uabutler
+
 import org.antlr.v4.kotlinruntime.CharStreams
 import org.antlr.v4.kotlinruntime.CommonTokenStream
 import com.uabutler.parsers.generated.MyLanguageLexer
