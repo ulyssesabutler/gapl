@@ -114,4 +114,54 @@ portDefinitionList: portDefinition*;
 portDefinition: Id Colon interfaceExpression SemiColon;
 
 // Interface Expressions
-interfaceExpression: Wire | instantiation | interfaceExpression SquareL staticExpression SquareR | Id;
+interfaceExpression:
+      Wire
+    | instantiation
+    | interfaceExpression SquareL staticExpression SquareR
+    | Id
+;
+
+/* FUNCTIONS */
+
+// Function Definition
+functionDefinition:
+    functionType Function Id
+    genericInterfaceDefinitionList
+    genericParameterDefinitionList
+    functionIOList Connector functionIOList
+    CurlyL (circuitStatement)* CurlyR;
+
+functionType: (Sequential | Combinational)?;
+
+functionIOList: Null | (functionIOType Id Colon interfaceExpression)+;
+
+functionIOType: (Sequential | Combinational)?;
+
+// Circuit Statement
+circuitStatement: conditionalCircuitStatement | (circuitExpression SemiColon);
+
+conditionalCircuitStatement:
+    If ParanL staticExpression ParanR (circuitStatement | CurlyL circuitStatement* CurlyR)
+    (Else (circuitStatement | CurlyL circuitStatement* CurlyR))?;
+
+circuitExpression: circuitConnectorExpression;
+
+circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpression)*;
+
+circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
+
+circuitNodeExpression:
+    | interfaceExpression
+    | Id Colon interfaceExpression
+    | Id (memberAccessOperation|singleArrayAccessOperation)* multipleArrayAccessOperation?
+    | ParanL circuitExpression ParanR
+    | circuitRecordInterfaceConstructorExpression
+;
+
+memberAccessOperation: Dot Id;
+
+singleArrayAccessOperation: SquareL IntLiteral SquareR;
+
+multipleArrayAccessOperation: SquareL IntLiteral Colon IntLiteral SquareR;
+
+circuitRecordInterfaceConstructorExpression: CurlyL (circuitStatement)* CurlyR;
