@@ -9,6 +9,7 @@ plugins {
 
 application {
     mainClass.set("com.uabutler.CompileKt")
+    applicationName = "gapl"
 }
 
 group = "com.uabutler"
@@ -47,6 +48,7 @@ val generateKotlinGrammarSource = tasks.register<AntlrKotlinTask>("generateKotli
 }
 
 val gen = generateKotlinGrammarSource
+val install = tasks.installDist
 
 tasks.withType<KotlinCompile> {
     dependsOn(generateKotlinGrammarSource)
