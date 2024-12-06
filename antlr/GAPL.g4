@@ -54,7 +54,7 @@ Id: [a-zA-Z_] [a-zA-Z0-9_]*;
 program: (interfaceDefinition | functionDefinition)+;
 
 // Static Expressions
-staticExpression:
+staticExpression: // TODO: This gramar currently ignores precendece
       True #trueStaticExpression
     | False #falseStaticExpression
     | IntLiteral #intLiteralStaticExpression
