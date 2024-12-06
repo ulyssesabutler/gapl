@@ -105,7 +105,7 @@ recordInterfaceDefinition:
 
 // Interface Definition Helpers
 
-inheritList: interfaceExpression (Comma interfaceExpression)*;
+inheritList: interfaceExpression (Comma interfaceExpression)* Comma?;
 
 portDefinitionList: portDefinition*;
 
