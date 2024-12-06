@@ -12,7 +12,7 @@ application {
 }
 
 group = "com.uabutler"
-version = "1.0-SNAPSHOT"
+version = "1.0"
 
 repositories {
     mavenCentral()
@@ -45,6 +45,8 @@ val generateKotlinGrammarSource = tasks.register<AntlrKotlinTask>("generateKotli
     val outDir = "generatedAntlr/${pkgName.replace(".", "/")}"
     outputDirectory = layout.buildDirectory.dir(outDir).get().asFile
 }
+
+val gen = generateKotlinGrammarSource
 
 tasks.withType<KotlinCompile> {
     dependsOn(generateKotlinGrammarSource)

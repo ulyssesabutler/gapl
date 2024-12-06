@@ -1,42 +1,28 @@
 package com.uabutler
 
+import com.uabutler.visitor.ASTVisitor
+import com.uabutler.parsers.generated.*
 import org.antlr.v4.kotlinruntime.CharStreams
 import org.antlr.v4.kotlinruntime.CommonTokenStream
-import com.uabutler.parsers.generated.MyLanguageLexer
-import com.uabutler.parsers.generated.MyLanguageParser
-import com.uabutler.parsers.generated.MyLanguageBaseVisitor
+import org.antlr.v4.kotlinruntime.CharStream
 
-class MyLanguageCustomVisitor: MyLanguageBaseVisitor<Unit>() {
-    override fun visitStatement(ctx: MyLanguageParser.StatementContext) {
-        val expr = ctx.expression()
-        when {
-            expr.STRING() != null -> {
-                val text = expr.STRING()!!.text.trim('"')
-                println(text)
-            }
-            expr.NUMBER() != null -> {
-                val number = expr.NUMBER()!!.text.toInt()
-                println(number)
-            }
-        }
-    }
-
-    override fun defaultResult() {
-        println("Hello World!")
-    }
-}
+fun parse(characterStream: CharStream) =
+    characterStream
+        .let { GAPLLexer(it) }
+        .let { GAPLParser(CommonTokenStream(it)) }
+        .program()
 
 fun main() {
     val input = """
-        print "Hello World";
-        print 123;
+        interface test() wire
+        interface test() { }
+        interface test() { a: wire; }
+        interface test(): parent() { }
     """.trimIndent()
 
     val charStream = CharStreams.fromString(input)
-    val lexer = MyLanguageLexer(charStream)
-    val tokens = CommonTokenStream(lexer)
-    val parser = MyLanguageParser(tokens)
-    val parseTree = parser.program()
-    val visitor = MyLanguageCustomVisitor()
-    visitor.visit(parseTree)
+    val parseTree = parse(charStream)
+    val ast = ASTVisitor().visitProgram(parseTree)
+
+    ast.interfaces.forEach { println(it) }
 }

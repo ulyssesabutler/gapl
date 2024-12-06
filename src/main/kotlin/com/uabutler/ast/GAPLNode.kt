@@ -1,8 +1,6 @@
 package com.uabutler.ast
 
-sealed class GAPLNode
+sealed interface GAPLNode
 
-abstract class TemporaryNode: GAPLNode()
-abstract class PersistentNode: GAPLNode()
-
-class EmptyNode: TemporaryNode()
+interface TemporaryNode: GAPLNode
+interface PersistentNode: GAPLNode

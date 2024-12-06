@@ -55,37 +55,35 @@ program: (interfaceDefinition | functionDefinition)+;
 
 // Static Expressions
 staticExpression:
-      True
-    | False
-    | IntLiteral
-    | Id
-    | ParanL staticExpression ParanR
-    | staticExpression Add staticExpression
-    | staticExpression Subtract staticExpression
-    | staticExpression Multiply staticExpression
-    | staticExpression Divide staticExpression
-    | staticExpression Equals staticExpression
-    | staticExpression NotEquals staticExpression
-    | staticExpression AngleL staticExpression
-    | staticExpression AngleR staticExpression
-    | staticExpression LessThanEquals staticExpression
-    | staticExpression GreaterThanEquals staticExpression
+      True #trueStaticExpression
+    | False #falseStaticExpression
+    | IntLiteral #intLiteralStaticExpression
+    | Id #idStaticExpression
+    | ParanL staticExpression ParanR #paranStaticExpression
+    | lhs=staticExpression Add rhs=staticExpression #addStaticExpression
+    | lhs=staticExpression Subtract rhs=staticExpression #subtractStaticExpression
+    | lhs=staticExpression Multiply rhs=staticExpression #multiplyStaticExpression
+    | lhs=staticExpression Divide rhs=staticExpression #divideStaticExpression
+    | lhs=staticExpression Equals rhs=staticExpression #equalsStaticExpression
+    | lhs=staticExpression NotEquals rhs=staticExpression #notEqualsStaticExpression
+    | lhs=staticExpression AngleL rhs=staticExpression #lessThanStaticExpression
+    | lhs=staticExpression AngleR rhs=staticExpression #greaterThanStaticExpression
+    | lhs=staticExpression LessThanEquals rhs=staticExpression #lessThanEqualsStaticExpression
+    | lhs=staticExpression GreaterThanEquals rhs=staticExpression #greaterThanEqualsStaticExpression
 ;
 
 // Helpers
-genericInterfaceDefinitionList: (AngleL genericInterfaceDefinitionListValues AngleR)?;
+genericInterfaceDefinitionList: (AngleL (Id Comma)* Id? AngleR)?;
 
-genericInterfaceDefinitionListValues: (Id Comma)* Id?;
+genericParameterDefinitionList: ParanL (genericParameterDefinition Comma)* genericParameterDefinition? ParanR | ParanL ParanR;
 
-genericParameterDefinitionList: ParanL genericParameterDefinitionListValues ParanR | ParanL ParanR;
-
-genericParameterDefinitionListValues: (Parameter Id Colon Id)*;
+genericParameterDefinition: Parameter identifier=Id Colon typeIdentifier=Id;
 
 genericInterfaceValueList: (interfaceExpression Comma)* interfaceExpression?;
 
 genericParameterValueList: (staticExpression Comma)* staticExpression?;
 
-instantiation: Id (AngleL genericInterfaceValueList AngleR) ParanL genericParameterValueList ParanR;
+instantiation: Id (AngleL genericInterfaceValueList AngleR)? ParanL genericParameterValueList ParanR;
 
 /* INTERFACES */
 
@@ -102,7 +100,7 @@ recordInterfaceDefinition:
     Interface Id
     genericInterfaceDefinitionList
     genericParameterDefinitionList
-    (Colon inheritList)*
+    (Colon inheritList)?
     CurlyL portDefinitionList CurlyR;
 
 // Interface Definition Helpers
@@ -115,10 +113,10 @@ portDefinition: Id Colon interfaceExpression SemiColon;
 
 // Interface Expressions
 interfaceExpression:
-      Wire
-    | instantiation
-    | interfaceExpression SquareL staticExpression SquareR
-    | Id
+      Wire #wireInterfaceExpression
+    | instantiation #definedInterfaceExpression
+    | interfaceExpression SquareL staticExpression SquareR #vectorInterfaceExpression
+    | Id #identifierInterfaceExpression
 ;
 
 /* FUNCTIONS */
@@ -151,7 +149,7 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 circuitNodeExpression:
-    | interfaceExpression
+      interfaceExpression
     | Id Colon interfaceExpression
     | Id (memberAccessOperation|singleArrayAccessOperation)* multipleArrayAccessOperation?
     | ParanL circuitExpression ParanR

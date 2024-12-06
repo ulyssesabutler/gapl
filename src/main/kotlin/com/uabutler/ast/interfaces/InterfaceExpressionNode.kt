@@ -3,12 +3,21 @@ package com.uabutler.ast.interfaces
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.PersistentNode
 
-sealed class InterfaceExpressionNode: PersistentNode()
+sealed interface InterfaceExpressionNode: PersistentNode
 
-class WireInterfaceExpressionNode: InterfaceExpressionNode()
+data object WireInterfaceExpressionNode: InterfaceExpressionNode
 
-class DefinedInterfaceExpressionNode: InterfaceExpressionNode()
+data class DefinedInterfaceExpressionNode(
+    val interfaceIdentifier: IdentifierNode,
+    val genericInterfaces: List<GenericInterfaceValueNode>,
+    val genericParameters: List<GenericParameterValueNode>,
+): InterfaceExpressionNode
 
-class VectorInterfaceExpressionNode: InterfaceExpressionNode()
+data class VectorInterfaceExpressionNode(
+    val vectoredInterface: InterfaceExpressionNode,
+    val boundsSpecifier: VectorBoundsNode,
+): InterfaceExpressionNode
 
-class IdentifierInterfaceExpressionNode(val interfaceIdentifier: IdentifierNode): InterfaceExpressionNode()
+data class IdentifierInterfaceExpressionNode(
+    val interfaceIdentifier: IdentifierNode,
+): InterfaceExpressionNode
