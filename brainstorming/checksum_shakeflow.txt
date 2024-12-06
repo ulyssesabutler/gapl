@@ -1,0 +1,43 @@
+#[derive(Signal)]
+struct AxisT<T: Signal> {
+  inner: T,
+  tlast: bool,
+}
+
+type AxisCh<T: Signal> = VrCh<AxisT<T>>;
+
+#[derive(Interface)]
+struct I {
+  s_cmd: VrCh<CmdControl>,
+  s_axis: AxisCh<Payload>,
+}
+
+type E = AxisCh<Payload>;
+
+let tx_checksum = composite::<I, E>(|ingress| {
+    let s_axis_cmd = ingress.s_cmd
+        .into_axis();
+
+    let s_axis = ingress.s_axis;
+
+    let (csum_in, data_in) = (s_axis_cmd, s_axis)
+        .axis_rr_mux()
+        .duplicate();
+
+    let csum_out = csum_in
+        .fsm(calc_csum_init, calc_csum)
+        .comb(csum_adder)
+        .map(serialize)
+        .fifo::<CHECKSUM_FIFO_DEPTH>()
+        .map(deserialize);
+
+    let data_out = data_in
+        .filter_map(filter_data)
+        .fifo::<DATA_FIFO_DEPTH>();
+
+    (csum_out, data_out)
+        .axis_r_mux()
+        .fsm(fill_csum_init, fill_csum)
+        .filter_map(filter_data)
+        .buffer_skid();
+});
