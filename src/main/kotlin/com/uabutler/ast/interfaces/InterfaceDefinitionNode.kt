@@ -1,5 +1,7 @@
 package com.uabutler.ast.interfaces
 
+import com.uabutler.ast.GenericInterfaceDefinitionNode
+import com.uabutler.ast.GenericParameterDefinitionNode
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.PersistentNode
 
