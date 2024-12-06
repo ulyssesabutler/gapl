@@ -126,12 +126,16 @@ functionDefinition:
     functionType Function Id
     genericInterfaceDefinitionList
     genericParameterDefinitionList
-    functionIOList Connector functionIOList
+    input=functionIOList Connector output=functionIOList
     CurlyL (circuitStatement)* CurlyR;
 
 functionType: (Sequential | Combinational)?;
 
-functionIOList: Null | (functionIOType Id Colon interfaceExpression)+;
+functionIOList:
+      Null #emptyFunctionIOList
+    | functionIO+ #nonemptyFunctionIOList;
+
+functionIO: functionIOType Id Colon interfaceExpression;
 
 functionIOType: (Sequential | Combinational)?;
 
@@ -149,17 +153,18 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 circuitNodeExpression:
-      interfaceExpression
-    | Id Colon interfaceExpression
-    | Id (memberAccessOperation|singleArrayAccessOperation)* multipleArrayAccessOperation?
-    | ParanL circuitExpression ParanR
-    | circuitRecordInterfaceConstructorExpression
+      interfaceExpression #anonymousNodeCircuitExpression
+    | Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+    | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
+    | ParanL circuitExpression ParanR #paranCircuitExpression
+    | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression
+    // TODO: vector interface constructor
 ;
+
+singleAccessOperation: memberAccessOperation | singleArrayAccessOperation;
 
 memberAccessOperation: Dot Id;
 
-singleArrayAccessOperation: SquareL IntLiteral SquareR;
+singleArrayAccessOperation: SquareL staticExpression SquareR;
 
-multipleArrayAccessOperation: SquareL IntLiteral Colon IntLiteral SquareR;
-
-circuitRecordInterfaceConstructorExpression: CurlyL (circuitStatement)* CurlyR;
+multipleArrayAccessOperation: SquareL staticExpression Colon staticExpression SquareR;
