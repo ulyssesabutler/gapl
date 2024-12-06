@@ -2,7 +2,7 @@ import com.uabutler.Parser
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.IntegerLiteralNode
 import com.uabutler.ast.staticexpressions.*
-import com.uabutler.visitor.ASTVisitor
+import com.uabutler.visitor.StaticExpressionVisitor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -11,7 +11,7 @@ class StaticExpressionTest {
     private fun parseStaticExpression(input: String): StaticExpressionNode {
         val parser = Parser.fromString(input)
         val staticExpression = parser.staticExpression()
-        return ASTVisitor().visitStaticExpression(staticExpression)
+        return StaticExpressionVisitor.visitStaticExpression(staticExpression)
     }
 
     private fun testStaticExpression(input: String, expected: StaticExpressionNode) {

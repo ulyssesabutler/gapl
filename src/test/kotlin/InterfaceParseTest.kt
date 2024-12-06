@@ -1,16 +1,15 @@
 import com.uabutler.Parser
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.IntegerLiteralNode
+import com.uabutler.ast.*
 import com.uabutler.ast.interfaces.*
 import com.uabutler.ast.staticexpressions.IntegerLiteralStaticExpressionNode
-import com.uabutler.visitor.ASTVisitor
+import com.uabutler.visitor.InterfaceVisitor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class InterfaceParseTest {
 
     private fun parseInterfaceDefinition(input: String): InterfaceDefinitionNode {
-        return ASTVisitor()
+        return InterfaceVisitor
             .visitInterfaceDefinition(
                 Parser.fromString(input)
                     .interfaceDefinition()
