@@ -3,23 +3,23 @@ package com.uabutler.ast.interfaces
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.PersistentNode
 
-sealed class InterfaceDefinitionNode(
-    val identifier: IdentifierNode,
-    val genericInterfaces: List<GenericInterfaceDefinitionNode>,
-    val genericParameters: List<GenericParameterDefinitionNode>,
-): PersistentNode()
+sealed interface InterfaceDefinitionNode: PersistentNode {
+    val identifier: IdentifierNode
+    val genericInterfaces: List<GenericInterfaceDefinitionNode>
+    val genericParameters: List<GenericParameterDefinitionNode>
+}
 
-class AliasInterfaceDefinitionNode(
-    identifier: IdentifierNode,
-    genericInterfaces: List<GenericInterfaceDefinitionNode>,
-    genericParameters: List<GenericParameterDefinitionNode>,
+data class AliasInterfaceDefinitionNode(
+    override val identifier: IdentifierNode,
+    override val genericInterfaces: List<GenericInterfaceDefinitionNode>,
+    override val genericParameters: List<GenericParameterDefinitionNode>,
     val aliasedInterface: InterfaceExpressionNode,
-): InterfaceDefinitionNode(identifier, genericInterfaces, genericParameters)
+): InterfaceDefinitionNode
 
-class RecordInterfaceDefinitionNode(
-    identifier: IdentifierNode,
-    genericInterfaces: List<GenericInterfaceDefinitionNode>,
-    genericParameters: List<GenericParameterDefinitionNode>,
-    val inherits: List<DefinedInterfaceExpressionNode>,
+data class RecordInterfaceDefinitionNode(
+    override val identifier: IdentifierNode,
+    override val genericInterfaces: List<GenericInterfaceDefinitionNode>,
+    override val genericParameters: List<GenericParameterDefinitionNode>,
+    val inherits: List<DefinedInterfaceExpressionNode>, // TODO: We should also support identifier expressions
     val ports: List<RecordInterfacePortNode>,
-): InterfaceDefinitionNode(identifier, genericInterfaces, genericParameters)
+): InterfaceDefinitionNode
