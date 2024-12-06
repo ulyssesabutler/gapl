@@ -1,21 +1,20 @@
+import com.uabutler.Parser
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.IntegerLiteralNode
 import com.uabutler.ast.interfaces.*
 import com.uabutler.ast.staticexpressions.IntegerLiteralStaticExpressionNode
-import com.uabutler.parse
 import com.uabutler.visitor.ASTVisitor
-import org.antlr.v4.kotlinruntime.CharStreams
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class InterfaceParseTest {
 
     private fun parseInterfaceDefinition(input: String): InterfaceDefinitionNode {
-        val charStream = CharStreams.fromString(input)
-        val parseTree = parse(charStream)
-        val ast = ASTVisitor().visitProgram(parseTree)
-
-        return ast.interfaces.first()
+        return ASTVisitor()
+            .visitInterfaceDefinition(
+                Parser.fromString(input)
+                    .interfaceDefinition()
+            )
     }
 
     private fun testInterfaceDefinition(input: String, expected: InterfaceDefinitionNode) {

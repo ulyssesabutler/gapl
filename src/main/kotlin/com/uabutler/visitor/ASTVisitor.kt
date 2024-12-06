@@ -17,8 +17,8 @@ object TokenVisitor {
         return IdentifierNode(token!!.text!!)
     }
 
-    fun visitIntegerLiteral(token: TerminalNode?): IntegerLiteralNode {
-        return IntegerLiteralNode(token!!.text.toInt())
+    fun visitIntegerLiteral(token: TerminalNode): IntegerLiteralNode {
+        return IntegerLiteralNode(token.text.toInt())
     }
 }
 
@@ -158,11 +158,7 @@ class ASTVisitor: GAPLBaseVisitor<GAPLNode>() {
         return when (ctx) {
             is GAPLParser.TrueStaticExpressionContext -> TrueStaticExpressionNode
             is GAPLParser.FalseStaticExpressionContext -> FalseStaticExpressionNode
-            is GAPLParser.IntLiteralStaticExpressionContext -> IntegerLiteralStaticExpressionNode(
-                TokenVisitor.visitIntegerLiteral(
-                    ctx.IntLiteral()
-                )
-            )
+            is GAPLParser.IntLiteralStaticExpressionContext -> IntegerLiteralStaticExpressionNode(TokenVisitor.visitIntegerLiteral(ctx.IntLiteral()))
             is GAPLParser.IdStaticExpressionContext -> IdentifierStaticExpressionNode(TokenVisitor.visitId(ctx.Id()))
             is GAPLParser.ParanStaticExpressionContext -> visitStaticExpression(ctx.staticExpression())
             is GAPLParser.AddStaticExpressionContext -> AdditionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
