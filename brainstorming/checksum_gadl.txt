@@ -1,0 +1,140 @@
+// Standard definitions
+interface boolean wire;
+interface byte wire[7:0];
+interface bytes(parameter count: integer) byte[count - 1:0];
+interface booleans(parameter count: integer) boolean[count - 1:0];
+
+// ShakeFlow definitions
+interface axis(parameter type: interface)
+{
+    data: type;
+    last: bool;
+}
+
+interface keep(parameter byte_count: integer)
+{
+    payload: bytes(byte_count);
+    keep: booleans(byte_count);
+}
+
+interface payload
+(
+    parameter data_byte_count: integer,
+    parameter user_byte_count: integer,
+)
+{
+    payload: keep(data_byte_count);
+    user: bytes(user_byte_count);
+    id: byte;
+    dest: byte;
+}
+
+interface checksum_command
+{
+    enable: boolean;
+    start_index: unsigned byte;
+    offset: unsigned byte;
+    initial: unsigned byte;
+}
+
+interface packet_stream(): axis(payload);
+
+/* ShakeFlow combines the command and payload interfaces into a single interface named "I".
+ * That said, we do not want to do this, since we want each interface to maintain its own ready and valid signals.
+ */
+
+function transmit_checksum()
+    commands: command,
+    packets: packet_stream,
+        =>
+            output: packet_stream
+{
+    commands => command_packet_stream: command_to_packet_stream;
+
+    command_packet_stream, packets
+        => axis_arbiter
+        => duplicate
+        => compute_checksum_input, process_data_input;
+}
+
+function command_to_axis() commands: command => output: axis(payload) { /* Implementation omitted */ }
+
+sequential function axis_arbiter(parameter type: interface)
+    input0: axis(type),
+    input1: axis(type),
+        =>
+            output: axis(type)
+{
+    /* Create a register that tracks which of the two current
+     */
+    current_input_selection: register(wire, 0);
+
+    /* On this line, we're creating a multiplexer. A multiplexer (or, mux) is a combinational circuit. This specific mux
+     * is used for streams (see the document about the connector).
+     *
+     * Why do we need to pass the predicate and value of each case into a separate function (i.e., the stream_case)? I
+     * don't think it makes a lot of sense for the individual properties of interfaces to be marked as streams, since
+     * they're more analogous to structs. If we break from the model of each input and each output having, at most, one
+     * ready and valid contract, that might start to get pretty complicated.
+     *
+     * Instead, we're going to feed both the predicate and the value into the stream_case function. Essentially, all
+     * this function does is connect the ready and valid wires of the input value to the output, which basically ignores
+     * the predicate (assuming it's always valid and never signalling to it whether or not it's ready).
+     *
+     * Specifically, the stream_multiplexer will pass through the valid value of the current selection, and pass the
+     * ready value back to that stream. The other stream will receive a ready value of false.
+     *
+     * So, even though the mux is not a sequential function, it still carries the ready and valid signals.
+     *
+     * One final note, in this specific instance, the stream_multiplexer that's being created is anonymous, and the
+     * current_input is a stream that's being declared and assigned with an implicit type (we could also name the
+     * stream_multiplexer to the same effect). Finally, the result of that is connected to the output.
+     */
+    (
+        (current_input_selection, 0 => equal),
+        input0 => stream_case
+    ),
+    (
+        (current_input_selection, 1 => equal),
+        input1 => stream_case
+    ) => stream_multiplexer => current_input => output;
+
+    /* The above code hooks up the data flow (inputs to outputs, along with all the ready and valid signals). That said,
+     * we still need to add the logic
+     * I still need to think up some "syntactic sugar" for "if valid and ready, do this".
+     * For now, we'll just do it "manually".
+     */
+    current_input.valid, output.ready => has_transmission_occurred;
+    has_transmission_occurred, current_input.last => should_switch;
+
+    {
+        should_switch                       => if;
+        current_input_selection, 1 => add   => then;
+        current_input_selection             => else;
+    } => priority => current_input_selection;
+}
+
+function duplicate(parameter type: interface)
+    input: type
+        =>
+            output1: type,
+            output2: type,
+{
+    input.interface => output1.interface;
+    input.interface => output2.interface;
+
+    output1.ready, output2.ready => and => input.ready;
+
+    /* This part is interesting. First, it's obvious why the the input data has to be valid for the output data to be
+     * valid. That said, the validity of the output is also dependent on the readiness of both output. Essentially, we
+     * want to prevent one side from transmitting before the other side transmits.
+     *
+     * The compiler will notice this dependency and mark this function as a "demanding" (as opposed to "helpful")
+     * producer. If either of the consumers of this modules outputs are demanding consumers, the compiler will know to
+     * automatically add a FIFO queue.
+     */
+    output1.ready, output2.ready, input.valid => and => output_valid;
+
+    output_valid => output1.valid;
+    output_valid => output2.valid;
+}
