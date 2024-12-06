@@ -16,10 +16,12 @@ class Parser private constructor(private val characterStream: CharStream) {
 
     companion object {
         fun fromString(input: String) = Parser(CharStreams.fromString(input))
+        fun fromFileName(input: String) = Parser(CharStreams.fromFileName(input))
     }
 
     fun program() = parseTree.value.program()
 
     fun interfaceDefinition() = parseTree.value.interfaceDefinition()
     fun staticExpression() = parseTree.value.staticExpression()
+
 }
