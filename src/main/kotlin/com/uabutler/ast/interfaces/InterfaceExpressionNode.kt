@@ -1,7 +1,6 @@
 package com.uabutler.ast.interfaces
 
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.PersistentNode
+import com.uabutler.ast.*
 
 sealed interface InterfaceExpressionNode: PersistentNode
 
