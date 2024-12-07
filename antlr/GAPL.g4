@@ -140,11 +140,16 @@ functionIO: functionIOType Id Colon interfaceExpression;
 functionIOType: (Sequential | Combinational)?;
 
 // Circuit Statement
-circuitStatement: conditionalCircuitStatement | (circuitExpression SemiColon);
+circuitStatement:
+      conditionalCircuit #conditionalCircuitStatement
+    | circuitExpression SemiColon #nonConditionalCircuitStatement
+;
 
-conditionalCircuitStatement:
-    If ParanL staticExpression ParanR (circuitStatement | CurlyL circuitStatement* CurlyR)
-    (Else (circuitStatement | CurlyL circuitStatement* CurlyR))?;
+conditionalCircuit:
+    If ParanL predicate=staticExpression ParanR ifBody=conditionalCircuitBody
+    (Else elseBody=conditionalCircuitBody)?;
+
+conditionalCircuitBody: circuitStatement | CurlyL circuitStatement* CurlyR;
 
 circuitExpression: circuitConnectorExpression;
 
@@ -161,10 +166,9 @@ circuitNodeExpression:
     // TODO: vector interface constructor
 ;
 
-singleAccessOperation: memberAccessOperation | singleArrayAccessOperation;
+singleAccessOperation:
+      Dot Id #memberAccessOperation
+    | SquareL staticExpression SquareR #singleArrayAccessOperation
+;
 
-memberAccessOperation: Dot Id;
-
-singleArrayAccessOperation: SquareL staticExpression SquareR;
-
-multipleArrayAccessOperation: SquareL staticExpression Colon staticExpression SquareR;
+multipleArrayAccessOperation: SquareL startIndex=staticExpression Colon endIndex=staticExpression SquareR;

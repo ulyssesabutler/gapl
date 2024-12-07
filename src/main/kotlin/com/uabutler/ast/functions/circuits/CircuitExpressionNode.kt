@@ -15,7 +15,7 @@ data class CircuitGroupExpressionNode(
     val expressions: List<CircuitNodeExpressionNode>,
 ): PersistentNode
 
-sealed interface CircuitNodeExpressionNode
+sealed interface CircuitNodeExpressionNode: PersistentNode
 
 data class AnonymousNodeCircuitExpressionNode(
     val type: InterfaceExpressionNode,
@@ -23,14 +23,13 @@ data class AnonymousNodeCircuitExpressionNode(
 
 data class DeclaredNodeCircuitExpressionNode(
     val identifier: IdentifierNode,
-    val type: DeclaredType,
+    val type: InterfaceExpressionNode,
 ): CircuitNodeExpressionNode
 
 data class ReferenceCircuitExpressionNode(
     val identifier: IdentifierNode,
-    val type: InterfaceExpressionNode,
     val singleAccesses: List<SingleAccessOperationNode>,
-    val multipleAccess: MultipleAccessOperationNode,
+    val multipleAccess: MultipleAccessOperationNode?,
 ): CircuitNodeExpressionNode
 
 data class RecordInterfaceConstructorExpressionNode(
