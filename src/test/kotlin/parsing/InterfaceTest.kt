@@ -1,3 +1,5 @@
+package parsing
+
 import com.uabutler.Parser
 import com.uabutler.ast.*
 import com.uabutler.ast.interfaces.*
@@ -6,7 +8,7 @@ import com.uabutler.visitor.InterfaceVisitor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
-class InterfaceParseTest {
+class InterfaceTest {
 
     private fun parseInterfaceDefinition(input: String): InterfaceDefinitionNode {
         return InterfaceVisitor

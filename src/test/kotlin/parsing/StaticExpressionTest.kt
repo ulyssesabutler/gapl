@@ -1,3 +1,5 @@
+package parsing
+
 import com.uabutler.Parser
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.IntegerLiteralNode
