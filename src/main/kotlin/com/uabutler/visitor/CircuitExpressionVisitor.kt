@@ -23,6 +23,7 @@ object CircuitExpressionVisitor: GAPLVisitor() {
 
     fun visitCircuitNodeExpression(ctx: GAPLParser.CircuitNodeExpressionContext): CircuitNodeExpressionNode {
         return when (ctx) {
+            is GAPLParser.IdentifierCircuitExpressionContext -> visitIdentifierCircuitExpression(ctx)
             is GAPLParser.AnonymousNodeCircuitExpressionContext -> visitAnonymousNodeCircuitExpression(ctx)
             is GAPLParser.DeclaredInterfaceCircuitExpressionContext -> visitDeclaredInterfaceCircuitExpression(ctx)
             is GAPLParser.ReferenceCircuitExpressionContext -> visitReferenceCircuitExpression(ctx)
@@ -30,6 +31,10 @@ object CircuitExpressionVisitor: GAPLVisitor() {
             is GAPLParser.RecordInterfaceConstructorCircuitExpressionContext -> visitRecordInterfaceConstructorCircuitExpression(ctx)
             else -> throw Exception("Unrecognized circuit expression")
         }
+    }
+
+    override fun visitIdentifierCircuitExpression(ctx: GAPLParser.IdentifierCircuitExpressionContext): IdentifierCircuitExpressionNode {
+        return IdentifierCircuitExpressionNode(TokenVisitor.visitId(ctx.Id()))
     }
 
     override fun visitAnonymousNodeCircuitExpression(ctx: GAPLParser.AnonymousNodeCircuitExpressionContext): AnonymousNodeCircuitExpressionNode {

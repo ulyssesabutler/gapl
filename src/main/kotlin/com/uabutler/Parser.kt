@@ -25,5 +25,4 @@ class Parser private constructor(private val characterStream: CharStream) {
     fun functionDefinition() = parseTree.value.functionDefinition()
 
     fun staticExpression() = parseTree.value.staticExpression()
-
 }

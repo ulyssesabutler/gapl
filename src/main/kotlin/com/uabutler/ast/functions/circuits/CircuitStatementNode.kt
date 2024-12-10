@@ -15,5 +15,3 @@ data class ConditionalCircuitStatementNode(
 data class NonConditionalCircuitStatementNode(val statement: CircuitExpressionNode): CircuitStatementNode
 
 data class ConditionalCircuitBodyNode(val statements: List<CircuitStatementNode>): TemporaryNode
-
-data class CircuitExpressionStatementNode(val circuitExpression: CircuitExpressionNode): CircuitStatementNode

@@ -1,5 +1,14 @@
 # Gate Array Programming Language [WIP]
 
+## Testing
+
+Tests for this project can be found in the `src/test` directory.
+To run them, using gradle
+
+```text
+./gradlew test
+```
+
 ## Building
 
 This project is managed using the Gradle build system.

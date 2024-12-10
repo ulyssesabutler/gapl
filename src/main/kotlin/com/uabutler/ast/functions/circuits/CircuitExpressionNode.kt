@@ -17,6 +17,10 @@ data class CircuitGroupExpressionNode(
 
 sealed interface CircuitNodeExpressionNode: PersistentNode
 
+data class IdentifierCircuitExpressionNode(
+    val identifier: IdentifierNode,
+): CircuitNodeExpressionNode
+
 data class AnonymousNodeCircuitExpressionNode(
     val type: InterfaceExpressionNode,
 ): CircuitNodeExpressionNode
