@@ -158,8 +158,8 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 circuitNodeExpression:
-    // TODO: Add identifier to resolve ambiguity with referece / generic interface
-      interfaceExpression #anonymousNodeCircuitExpression
+      Id #identifierCircuitExpression
+    | interfaceExpression #anonymousNodeCircuitExpression
     | Id Colon interfaceExpression #declaredInterfaceCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
