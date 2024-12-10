@@ -22,6 +22,8 @@ class Parser private constructor(private val characterStream: CharStream) {
     fun program() = parseTree.value.program()
 
     fun interfaceDefinition() = parseTree.value.interfaceDefinition()
+    fun functionDefinition() = parseTree.value.functionDefinition()
+
     fun staticExpression() = parseTree.value.staticExpression()
 
 }

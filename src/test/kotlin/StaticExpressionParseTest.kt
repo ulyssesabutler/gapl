@@ -6,7 +6,7 @@ import com.uabutler.visitor.StaticExpressionVisitor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
-class StaticExpressionTest {
+class StaticExpressionParseTest {
 
     private fun parseStaticExpression(input: String): StaticExpressionNode {
         val parser = Parser.fromString(input)

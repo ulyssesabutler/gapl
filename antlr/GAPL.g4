@@ -133,7 +133,7 @@ functionType: (Sequential | Combinational)?;
 
 functionIOList:
       Null #emptyFunctionIOList
-    | functionIO+ #nonemptyFunctionIOList;
+    | functionIO+ #nonEmptyFunctionIOList;
 
 functionIO: functionIOType Id Colon interfaceExpression;
 
@@ -158,6 +158,7 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 circuitNodeExpression:
+    // TODO: Add identifier to resolve ambiguity with referece / generic interface
       interfaceExpression #anonymousNodeCircuitExpression
     | Id Colon interfaceExpression #declaredInterfaceCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
