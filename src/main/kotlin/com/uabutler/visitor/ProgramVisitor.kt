@@ -7,7 +7,8 @@ object ProgramVisitor: GAPLVisitor() {
 
     override fun visitProgram(ctx: GAPLParser.ProgramContext): ProgramNode {
         return ProgramNode(
-            ctx.interfaceDefinition().map { InterfaceVisitor.visitInterfaceDefinition(it) }
+            interfaces = ctx.interfaceDefinition().map { InterfaceVisitor.visitInterfaceDefinition(it) },
+            functions = ctx.functionDefinition().map { FunctionVisitor.visitFunctionDefinition(it) },
         )
     }
 

@@ -12,5 +12,6 @@ fun main(args: Array<String>) {
     val parser = Parser.fromFileName(args.first())
     val ast = ProgramNode.fromParser(parser)
 
-    ast.interfaces.forEach { println(it) }
+    ast.interfaces.forEach { println("$it\n") }
+    ast.functions.forEach { println("$it\n") }
 }

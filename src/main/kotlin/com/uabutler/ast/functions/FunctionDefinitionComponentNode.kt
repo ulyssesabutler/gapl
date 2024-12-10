@@ -13,9 +13,9 @@ data object CombinationalFunctionTypeNode: FunctionTypeNode
 
 sealed interface FunctionIOTypeNode: PersistentNode
 
-data object DefaultFunctionIOTypeNode: FunctionTypeNode
-data object SequentialFunctionIOTypeNode: FunctionTypeNode
-data object CombinationalFunctionIOTypeNode: FunctionTypeNode
+data object DefaultFunctionIOTypeNode: FunctionIOTypeNode
+data object SequentialFunctionIOTypeNode: FunctionIOTypeNode
+data object CombinationalFunctionIOTypeNode: FunctionIOTypeNode
 
 data class FunctionIONode(
     val identifier: IdentifierNode,
@@ -23,4 +23,7 @@ data class FunctionIONode(
     val interfaceType: InterfaceExpressionNode,
 ): PersistentNode
 
-data class FunctionIOListNode(val functionIO: List<FunctionIONode>): TemporaryNode
+sealed interface FunctionIOListNode: TemporaryNode
+
+data object EmptyFunctionIOListNode: FunctionIOListNode
+data class NonEmptyFunctionIOListNode(val functionIO: List<FunctionIONode>): FunctionIOListNode
