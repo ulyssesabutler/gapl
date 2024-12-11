@@ -10,39 +10,54 @@ sealed interface CircuitExpressionNode: PersistentNode
 
 data class CircuitConnectionExpressionNode(
     val connectedExpression: List<CircuitGroupExpressionNode>,
-): CircuitExpressionNode
+): CircuitExpressionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class CircuitGroupExpressionNode(
     val expressions: List<CircuitNodeExpressionNode>,
-): PersistentNode
+): PersistentNode {
+    override var parent: PersistentNode? = null
+}
 
 sealed interface CircuitNodeExpressionNode: PersistentNode
 
 data class IdentifierCircuitExpressionNode(
     val identifier: IdentifierNode,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class AnonymousNodeCircuitExpressionNode(
     val type: InterfaceExpressionNode,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class DeclaredNodeCircuitExpressionNode(
     val identifier: IdentifierNode,
     val type: InterfaceExpressionNode,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class ReferenceCircuitExpressionNode(
     val identifier: IdentifierNode,
     val singleAccesses: List<SingleAccessOperationNode>,
     val multipleAccess: MultipleAccessOperationNode?,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class RecordInterfaceConstructorExpressionNode(
     val statements: List<CircuitStatementNode>,
 ): CircuitNodeExpressionNode, ScopeNode {
-    override var scope: Scope? = null
+    override var parent: PersistentNode? = null
+    override var associatedScope: Scope? = null
 }
 
 data class CircuitExpressionNodeCircuitExpression(
     val expression: CircuitExpressionNode,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode {
+    override var parent: PersistentNode? = null
+}

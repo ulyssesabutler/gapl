@@ -15,7 +15,9 @@ data class AliasInterfaceDefinitionNode(
     override val genericInterfaces: List<GenericInterfaceDefinitionNode>,
     override val genericParameters: List<GenericParameterDefinitionNode>,
     val aliasedInterface: InterfaceExpressionNode,
-): InterfaceDefinitionNode
+): InterfaceDefinitionNode {
+    override var parent: PersistentNode? = null
+}
 
 data class RecordInterfaceDefinitionNode(
     override val identifier: IdentifierNode,
@@ -24,5 +26,6 @@ data class RecordInterfaceDefinitionNode(
     val inherits: List<DefinedInterfaceExpressionNode>, // TODO: We should also support identifier expressions
     val ports: List<RecordInterfacePortNode>,
 ): InterfaceDefinitionNode, ScopeNode {
-    override var scope: Scope? = null
+    override var parent: PersistentNode? = null
+    override var associatedScope: Scope? = null
 }

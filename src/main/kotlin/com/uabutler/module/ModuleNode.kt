@@ -1,5 +1,7 @@
 package com.uabutler.module
 
+import com.uabutler.ast.interfaces.InterfaceExpressionNode
+
 sealed class ModuleNodeInterface {
     abstract fun hasInput(): Boolean
     abstract fun getInput(): ModuleNodeInterface?
@@ -11,6 +13,10 @@ sealed class ModuleNodeInterface {
             is ModuleNodeVectorInterface -> (this as ModuleNodeVectorInterface).setInput(input)
             is ModuleNodeRecordInterface -> (this as ModuleNodeRecordInterface).setInput(input)
         }
+    }
+
+    companion object {
+        fun fromInterfaceExpressionNode(node: InterfaceExpressionNode): ModuleNodeInterface = TODO()
     }
 }
 

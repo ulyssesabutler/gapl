@@ -10,8 +10,14 @@ data class ConditionalCircuitStatementNode(
     val predicate: StaticExpressionNode,
     val ifBody: List<CircuitStatementNode>,
     val elseBody: List<CircuitStatementNode>,
-): CircuitStatementNode
+): CircuitStatementNode {
+    override var parent: PersistentNode? = null
+}
 
-data class NonConditionalCircuitStatementNode(val statement: CircuitExpressionNode): CircuitStatementNode
+data class NonConditionalCircuitStatementNode(
+    val statement: CircuitExpressionNode,
+): CircuitStatementNode {
+    override var parent: PersistentNode? = null
+}
 
 data class ConditionalCircuitBodyNode(val statements: List<CircuitStatementNode>): TemporaryNode

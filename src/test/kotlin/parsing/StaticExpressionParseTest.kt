@@ -1,3 +1,5 @@
+package parsing
+
 import com.uabutler.Parser
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.IntegerLiteralNode
@@ -38,7 +40,7 @@ class StaticExpressionParseTest {
     fun `parse true`() {
         testStaticExpression(
             input = "true",
-            expected = TrueStaticExpressionNode
+            expected = TrueStaticExpressionNode()
         )
     }
 
@@ -46,7 +48,7 @@ class StaticExpressionParseTest {
     fun `parse false`() {
         testStaticExpression(
             input = "false",
-            expected = FalseStaticExpressionNode
+            expected = FalseStaticExpressionNode()
         )
     }
 

@@ -1,3 +1,5 @@
+package parsing
+
 import com.uabutler.Parser
 import com.uabutler.ast.GenericInterfaceDefinitionNode
 import com.uabutler.ast.GenericParameterDefinitionNode
@@ -35,15 +37,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
@@ -64,15 +66,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
@@ -96,15 +98,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode,
-                        interfaceType = WireInterfaceExpressionNode,
+                        ioType = DefaultFunctionIOTypeNode(),
+                        interfaceType = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
