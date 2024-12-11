@@ -17,6 +17,7 @@ class IdentifierMap private constructor(
             val programScope = ProgramScope(
                 interfaceDeclarations = node.interfaces.map { InterfaceDeclaration(it.identifier.value, it) },
                 functionDeclarations = node.functions.map { FunctionDeclaration(it.identifier.value, it) },
+                astNode = node,
             )
 
             // Create and add children scopes
@@ -39,6 +40,7 @@ class IdentifierMap private constructor(
                 genericParameters = node.genericParameters.map { GenericParameterDeclaration(it.identifier.value, it) },
                 ports = node.ports.map { PortDeclaration(it.identifier.value, it) },
                 program = program,
+                astNode = node,
             )
         }
 
@@ -103,6 +105,7 @@ class IdentifierMap private constructor(
             val interfaceConstructorScope = InterfaceConstructorScope(
                 nodes = declarationsFromCircuitStatements(node.statements),
                 parent = scope,
+                astNode = node,
             )
 
             val children = scopesFromCircuitStatements(node.statements, interfaceConstructorScope)
@@ -143,6 +146,7 @@ class IdentifierMap private constructor(
                 outputs = node.outputFunctionIO.map { FunctionIODeclaration(it.identifier.value, it) },
                 nodes = declarationsFromCircuitStatements(node.statements),
                 program = program,
+                astNode = node,
             )
 
             val children = scopesFromCircuitStatements(node.statements, functionScope)

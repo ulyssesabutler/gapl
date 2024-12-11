@@ -1,8 +1,16 @@
 package com.uabutler.references
 
+import com.uabutler.ast.EmptyNode
+import com.uabutler.ast.GAPLNode
+import com.uabutler.ast.ProgramNode
+import com.uabutler.ast.functions.FunctionDefinitionNode
+import com.uabutler.ast.functions.circuits.RecordInterfaceConstructorExpressionNode
+import com.uabutler.ast.interfaces.RecordInterfaceDefinitionNode
+
 interface Scope {
 
     val parent: Scope?
+    val astNode: GAPLNode
 
     fun declarations(): Collection<Declaration>
     fun children(): Collection<Scope>
@@ -17,7 +25,10 @@ interface Scope {
 data class ProgramScope(
     val interfaceDeclarations: Collection<InterfaceDeclaration>,
     val functionDeclarations: Collection<FunctionDeclaration>,
+    override val astNode: ProgramNode,
 ): Scope {
+
+    init { astNode.scope = this }
 
     val interfaceScopes: MutableCollection<InterfaceScope> = mutableSetOf()
     val functionScopes: MutableCollection<FunctionScope> = mutableSetOf()
@@ -45,7 +56,10 @@ data class InterfaceScope(
     override val genericParameters: Collection<GenericParameterDeclaration>,
     val ports: Collection<PortDeclaration>,
     val program: ProgramScope,
+    override val astNode: RecordInterfaceDefinitionNode,
 ): GenericScope {
+
+    init { astNode.scope = this }
 
     override val parent = program
     override fun declarations() = genericInterfaces + genericParameters + ports
@@ -75,7 +89,10 @@ data class FunctionScope(
     val outputs: Collection<FunctionIODeclaration>,
     override val nodes: Collection<NodeDeclaration>,
     val program: ProgramScope,
+    override val astNode: FunctionDefinitionNode,
 ): GenericScope, ConnectionScope {
+
+    init { astNode.scope = this }
 
     override fun declarations() = genericInterfaces + genericParameters + inputs + outputs + nodes
 
@@ -88,7 +105,10 @@ data class FunctionScope(
 data class InterfaceConstructorScope(
     override val nodes: Collection<NodeDeclaration>,
     override val parent: Scope,
+    override val astNode: RecordInterfaceConstructorExpressionNode,
 ): ConnectionScope {
+
+    init { astNode.scope = this }
 
     override fun declarations() = nodes
 
@@ -101,6 +121,9 @@ data class IfBodyScope(
     override val nodes: Collection<NodeDeclaration>,
     override val parent: Scope,
 ): ConnectionScope {
+
+    // TODO: We'll have to rework the AST a bit...
+    override val astNode = EmptyNode
 
     override fun declarations() = nodes
 
