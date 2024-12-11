@@ -2,8 +2,9 @@ package com.uabutler.ast.functions.circuits
 
 import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.PersistentNode
+import com.uabutler.ast.ScopeNode
 import com.uabutler.ast.interfaces.InterfaceExpressionNode
-import javax.lang.model.type.DeclaredType
+import com.uabutler.references.Scope
 
 sealed interface CircuitExpressionNode: PersistentNode
 
@@ -38,7 +39,9 @@ data class ReferenceCircuitExpressionNode(
 
 data class RecordInterfaceConstructorExpressionNode(
     val statements: List<CircuitStatementNode>,
-): CircuitNodeExpressionNode
+): CircuitNodeExpressionNode, ScopeNode {
+    override var scope: Scope? = null
+}
 
 data class CircuitExpressionNodeCircuitExpression(
     val expression: CircuitExpressionNode,

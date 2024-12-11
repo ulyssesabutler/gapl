@@ -1,9 +1,8 @@
 package com.uabutler.ast.interfaces
 
-import com.uabutler.ast.GenericInterfaceDefinitionNode
-import com.uabutler.ast.GenericParameterDefinitionNode
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.PersistentNode
+import com.uabutler.ast.*
+import com.uabutler.references.InterfaceScope
+import com.uabutler.references.Scope
 
 sealed interface InterfaceDefinitionNode: PersistentNode {
     val identifier: IdentifierNode
@@ -24,4 +23,6 @@ data class RecordInterfaceDefinitionNode(
     override val genericParameters: List<GenericParameterDefinitionNode>,
     val inherits: List<DefinedInterfaceExpressionNode>, // TODO: We should also support identifier expressions
     val ports: List<RecordInterfacePortNode>,
-): InterfaceDefinitionNode
+): InterfaceDefinitionNode, ScopeNode {
+    override var scope: Scope? = null
+}

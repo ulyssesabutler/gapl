@@ -1,10 +1,8 @@
 package com.uabutler.ast.functions
 
-import com.uabutler.ast.GenericInterfaceDefinitionNode
-import com.uabutler.ast.GenericParameterDefinitionNode
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.PersistentNode
+import com.uabutler.ast.*
 import com.uabutler.ast.functions.circuits.CircuitStatementNode
+import com.uabutler.references.Scope
 
 data class FunctionDefinitionNode(
     val identifier: IdentifierNode,
@@ -13,4 +11,6 @@ data class FunctionDefinitionNode(
     val inputFunctionIO: List<FunctionIONode>,
     val outputFunctionIO: List<FunctionIONode>,
     val statements: List<CircuitStatementNode>,
-): PersistentNode
+): PersistentNode, ScopeNode {
+    override var scope: Scope? = null
+}
