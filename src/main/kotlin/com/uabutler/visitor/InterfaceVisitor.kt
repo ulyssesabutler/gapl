@@ -23,46 +23,67 @@ object InterfaceVisitor: GAPLVisitor() {
     }
 
     override fun visitAliasInterfaceDefinition(ctx: GAPLParser.AliasInterfaceDefinitionContext): AliasInterfaceDefinitionNode {
-        return AliasInterfaceDefinitionNode(
+        val current = AliasInterfaceDefinitionNode(
             identifier = TokenVisitor.visitId(ctx.Id()),
             genericInterfaces = UtilityVisitor.visitGenericInterfaceDefinitionList(ctx.genericInterfaceDefinitionList()).interfaces,
             genericParameters = UtilityVisitor.visitGenericParameterDefinitionList(ctx.genericParameterDefinitionList()).parameters,
             aliasedInterface = visitInterfaceExpression(ctx.interfaceExpression()),
         )
+        current.identifier.parent = current
+        current.genericInterfaces.forEach { it.parent = current }
+        current.genericParameters.forEach { it.parent = current }
+        current.aliasedInterface.parent = current
+        return current
     }
 
     override fun visitRecordInterfaceDefinition(ctx: GAPLParser.RecordInterfaceDefinitionContext): RecordInterfaceDefinitionNode {
-        return RecordInterfaceDefinitionNode(
+        val current = RecordInterfaceDefinitionNode(
             identifier = TokenVisitor.visitId(ctx.Id()),
             genericInterfaces = UtilityVisitor.visitGenericInterfaceDefinitionList(ctx.genericInterfaceDefinitionList()).interfaces,
             genericParameters = UtilityVisitor.visitGenericParameterDefinitionList(ctx.genericParameterDefinitionList()).parameters,
             inherits = ctx.inheritList()?.let { visitInheritList(it).inherits } ?: emptyList(),
             ports = visitPortDefinitionList(ctx.portDefinitionList()).ports,
         )
+        current.identifier.parent = current
+        current.genericParameters.forEach { it.parent = current }
+        current.genericParameters.forEach { it.parent = current }
+        current.inherits.forEach { it.parent = current }
+        current.ports.forEach { it.parent = current }
+        return current
     }
 
     override fun visitWireInterfaceExpression(ctx: GAPLParser.WireInterfaceExpressionContext): WireInterfaceExpressionNode {
-        return WireInterfaceExpressionNode
+        return WireInterfaceExpressionNode()
     }
 
     override fun visitDefinedInterfaceExpression(ctx: GAPLParser.DefinedInterfaceExpressionContext): DefinedInterfaceExpressionNode {
         val instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation())
-        return DefinedInterfaceExpressionNode(
+        val current = DefinedInterfaceExpressionNode(
             interfaceIdentifier = instantiation.definitionIdentifier,
             genericInterfaces = instantiation.genericInterfaces,
             genericParameters = instantiation.genericParameters,
         )
+        current.interfaceIdentifier.parent = current
+        current.genericInterfaces.forEach { it.parent = current }
+        current.genericParameters.forEach { it.parent = current }
+        return current
     }
 
     override fun visitVectorInterfaceExpression(ctx: GAPLParser.VectorInterfaceExpressionContext): VectorInterfaceExpressionNode {
-        return VectorInterfaceExpressionNode(
+        val current = VectorInterfaceExpressionNode(
             vectoredInterface = visitInterfaceExpression(ctx.interfaceExpression()),
             boundsSpecifier = VectorBoundsNode(StaticExpressionVisitor.visitStaticExpression(ctx.staticExpression())),
         )
+        current.vectoredInterface.parent = current
+        current.boundsSpecifier.parent = current
+        current.boundsSpecifier.boundSpecifier.parent = current.boundsSpecifier
+        return current
     }
 
     override fun visitIdentifierInterfaceExpression(ctx: GAPLParser.IdentifierInterfaceExpressionContext): IdentifierInterfaceExpressionNode {
-        return IdentifierInterfaceExpressionNode(TokenVisitor.visitId(ctx.Id()))
+        val current = IdentifierInterfaceExpressionNode(TokenVisitor.visitId(ctx.Id()))
+        current.interfaceIdentifier.parent = current
+        return current
     }
 
     override fun visitInheritList(ctx: GAPLParser.InheritListContext): RecordInterfaceInheritListNode {
@@ -81,10 +102,13 @@ object InterfaceVisitor: GAPLVisitor() {
     }
 
     override fun visitPortDefinition(ctx: GAPLParser.PortDefinitionContext): RecordInterfacePortNode {
-        return RecordInterfacePortNode(
+        val current = RecordInterfacePortNode(
             identifier = TokenVisitor.visitId(ctx.Id()),
             type = visitInterfaceExpression(ctx.interfaceExpression()),
         )
+        current.identifier.parent = current
+        current.type.parent = current
+        return current
     }
 
 }

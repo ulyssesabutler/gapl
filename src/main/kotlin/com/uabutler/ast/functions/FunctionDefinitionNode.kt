@@ -11,6 +11,7 @@ data class FunctionDefinitionNode(
     val inputFunctionIO: List<FunctionIONode>,
     val outputFunctionIO: List<FunctionIONode>,
     val statements: List<CircuitStatementNode>,
+    override var parent: PersistentNode? = null,
 ): PersistentNode, ScopeNode {
-    override var scope: Scope? = null
+    override var associatedScope: Scope? = null
 }

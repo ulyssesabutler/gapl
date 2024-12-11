@@ -7,21 +7,79 @@ object StaticExpressionVisitor: GAPLVisitor() {
 
     fun visitStaticExpression(ctx: GAPLParser.StaticExpressionContext): StaticExpressionNode {
         return when (ctx) {
-            is GAPLParser.TrueStaticExpressionContext -> TrueStaticExpressionNode
-            is GAPLParser.FalseStaticExpressionContext -> FalseStaticExpressionNode
-            is GAPLParser.IntLiteralStaticExpressionContext -> IntegerLiteralStaticExpressionNode(TokenVisitor.visitIntegerLiteral(ctx.IntLiteral()))
-            is GAPLParser.IdStaticExpressionContext -> IdentifierStaticExpressionNode(TokenVisitor.visitId(ctx.Id()))
+            is GAPLParser.TrueStaticExpressionContext -> TrueStaticExpressionNode()
+            is GAPLParser.FalseStaticExpressionContext -> FalseStaticExpressionNode()
+            is GAPLParser.IntLiteralStaticExpressionContext -> {
+                val current = IntegerLiteralStaticExpressionNode(TokenVisitor.visitIntegerLiteral(ctx.IntLiteral()))
+                current.integer.parent = current
+                current
+            }
+            is GAPLParser.IdStaticExpressionContext -> {
+                val current = IdentifierStaticExpressionNode(TokenVisitor.visitId(ctx.Id()))
+                current.identifier.parent = current
+                current
+            }
             is GAPLParser.ParanStaticExpressionContext -> visitStaticExpression(ctx.staticExpression())
-            is GAPLParser.AddStaticExpressionContext -> AdditionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.SubtractStaticExpressionContext -> SubtractionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.MultiplyStaticExpressionContext -> MultiplicationStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.DivideStaticExpressionContext -> DivisionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.EqualsStaticExpressionContext -> EqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.NotEqualsStaticExpressionContext -> NotEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.LessThanStaticExpressionContext -> LessThanStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.GreaterThanStaticExpressionContext -> GreaterThanStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.LessThanEqualsStaticExpressionContext -> LessThanEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
-            is GAPLParser.GreaterThanEqualsStaticExpressionContext -> GreaterThanEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+            is GAPLParser.AddStaticExpressionContext -> {
+                val current = AdditionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.SubtractStaticExpressionContext -> {
+                val current = SubtractionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.MultiplyStaticExpressionContext -> {
+                val current = MultiplicationStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.DivideStaticExpressionContext -> {
+                val current = DivisionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.EqualsStaticExpressionContext -> {
+                val current = EqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.NotEqualsStaticExpressionContext -> {
+                val current = NotEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.LessThanStaticExpressionContext -> {
+                val current = LessThanStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.GreaterThanStaticExpressionContext -> {
+                val current = GreaterThanStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.LessThanEqualsStaticExpressionContext -> {
+                val current = LessThanEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
+            is GAPLParser.GreaterThanEqualsStaticExpressionContext -> {
+                val current = GreaterThanEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+                current.lhs.parent = current
+                current.rhs.parent = current
+                current
+            }
             else -> throw Exception("Unknown static expression")
         }
     }

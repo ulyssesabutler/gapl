@@ -28,7 +28,7 @@ data class ProgramScope(
     override val astNode: ProgramNode,
 ): Scope {
 
-    init { astNode.scope = this }
+    init { astNode.associatedScope = this }
 
     val interfaceScopes: MutableCollection<InterfaceScope> = mutableSetOf()
     val functionScopes: MutableCollection<FunctionScope> = mutableSetOf()
@@ -59,7 +59,7 @@ data class InterfaceScope(
     override val astNode: RecordInterfaceDefinitionNode,
 ): GenericScope {
 
-    init { astNode.scope = this }
+    init { astNode.associatedScope = this }
 
     override val parent = program
     override fun declarations() = genericInterfaces + genericParameters + ports
@@ -92,7 +92,7 @@ data class FunctionScope(
     override val astNode: FunctionDefinitionNode,
 ): GenericScope, ConnectionScope {
 
-    init { astNode.scope = this }
+    init { astNode.associatedScope = this }
 
     override fun declarations() = genericInterfaces + genericParameters + inputs + outputs + nodes
 
@@ -108,7 +108,7 @@ data class InterfaceConstructorScope(
     override val astNode: RecordInterfaceConstructorExpressionNode,
 ): ConnectionScope {
 
-    init { astNode.scope = this }
+    init { astNode.associatedScope = this }
 
     override fun declarations() = nodes
 

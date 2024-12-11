@@ -14,7 +14,8 @@ data class ProgramNode(
     val interfaces: List<InterfaceDefinitionNode>,
     val functions: List<FunctionDefinitionNode>,
 ): PersistentNode, ScopeNode {
-    override var scope: Scope? = null
+    override var parent: PersistentNode? = null
+    override var associatedScope: Scope? = null
 
     companion object {
         fun fromParser(parser: Parser): ProgramNode {

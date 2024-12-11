@@ -19,22 +19,28 @@ object CircuitStatementVisitor: GAPLVisitor() {
     }
 
     override fun visitNonConditionalCircuitStatement(ctx: GAPLParser.NonConditionalCircuitStatementContext): NonConditionalCircuitStatementNode {
-        return NonConditionalCircuitStatementNode(
-            CircuitExpressionVisitor.visitCircuitExpression(ctx.circuitExpression())
+        val current = NonConditionalCircuitStatementNode(
+            statement = CircuitExpressionVisitor.visitCircuitExpression(ctx.circuitExpression())
         )
+        current.statement.parent = current
+        return current
     }
 
     override fun visitConditionalCircuit(ctx: GAPLParser.ConditionalCircuitContext): ConditionalCircuitStatementNode {
-        return ConditionalCircuitStatementNode(
+        val current = ConditionalCircuitStatementNode(
             predicate = StaticExpressionVisitor.visitStaticExpression(ctx.predicate!!),
             ifBody = visitConditionalCircuitBody(ctx.ifBody!!).statements,
             elseBody = ctx.elseBody?.let { visitConditionalCircuitBody(it).statements } ?: emptyList(),
         )
+        current.predicate.parent = current
+        current.ifBody.forEach { it.parent = current }
+        current.elseBody.forEach { it.parent = current }
+        return current
     }
 
     override fun visitConditionalCircuitBody(ctx: GAPLParser.ConditionalCircuitBodyContext): ConditionalCircuitBodyNode {
         return ConditionalCircuitBodyNode(
-            ctx.circuitStatement().map { visitCircuitStatement(it) }
+            statements = ctx.circuitStatement().map { visitCircuitStatement(it) }
         )
     }
 

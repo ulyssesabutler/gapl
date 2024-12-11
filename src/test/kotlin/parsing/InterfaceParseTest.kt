@@ -1,3 +1,5 @@
+package parsing
+
 import com.uabutler.Parser
 import com.uabutler.ast.*
 import com.uabutler.ast.interfaces.*
@@ -28,7 +30,7 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = emptyList(),
                 genericParameters = emptyList(),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -55,7 +57,7 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = listOf(GenericInterfaceDefinitionNode(IdentifierNode("T"))),
                 genericParameters = emptyList(),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -68,7 +70,7 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = listOf(GenericInterfaceDefinitionNode(IdentifierNode("T")), GenericInterfaceDefinitionNode(IdentifierNode("U"))),
                 genericParameters = emptyList(),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -81,7 +83,7 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = listOf(GenericInterfaceDefinitionNode(IdentifierNode("T")), GenericInterfaceDefinitionNode(IdentifierNode("U"))),
                 genericParameters = emptyList(),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -96,7 +98,7 @@ class InterfaceParseTest {
                 genericParameters = listOf(
                     GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer"))
                 ),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -112,7 +114,7 @@ class InterfaceParseTest {
                     GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer")),
                     GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierNode("integer")),
                 ),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -128,7 +130,7 @@ class InterfaceParseTest {
                     GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer")),
                     GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierNode("integer")),
                 ),
-                aliasedInterface = WireInterfaceExpressionNode,
+                aliasedInterface = WireInterfaceExpressionNode(),
             )
         )
     }
@@ -159,7 +161,7 @@ class InterfaceParseTest {
                 genericInterfaces = emptyList(),
                 genericParameters = emptyList(),
                 aliasedInterface = VectorInterfaceExpressionNode(
-                    vectoredInterface = WireInterfaceExpressionNode,
+                    vectoredInterface = WireInterfaceExpressionNode(),
                     boundsSpecifier = VectorBoundsNode(IntegerLiteralStaticExpressionNode(IntegerLiteralNode(10)))
                 ),
             )
@@ -248,7 +250,7 @@ class InterfaceParseTest {
                 ports = listOf(
                     RecordInterfacePortNode(
                         identifier = IdentifierNode("a"),
-                        type = WireInterfaceExpressionNode,
+                        type = WireInterfaceExpressionNode(),
                     ),
                 ),
             )
@@ -267,11 +269,11 @@ class InterfaceParseTest {
                 ports = listOf(
                     RecordInterfacePortNode(
                         identifier = IdentifierNode("a"),
-                        type = WireInterfaceExpressionNode,
+                        type = WireInterfaceExpressionNode(),
                     ),
                     RecordInterfacePortNode(
                         identifier = IdentifierNode("b"),
-                        type = WireInterfaceExpressionNode,
+                        type = WireInterfaceExpressionNode(),
                     ),
                 ),
             )
