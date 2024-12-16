@@ -21,7 +21,6 @@ interface Scope {
 
 }
 
-
 data class ProgramScope(
     val interfaceDeclarations: Collection<InterfaceDeclaration>,
     val functionDeclarations: Collection<FunctionDeclaration>,

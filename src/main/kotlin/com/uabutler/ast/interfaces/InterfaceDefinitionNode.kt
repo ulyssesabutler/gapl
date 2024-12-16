@@ -28,4 +28,5 @@ data class RecordInterfaceDefinitionNode(
 ): InterfaceDefinitionNode, ScopeNode {
     override var parent: PersistentNode? = null
     override var associatedScope: Scope? = null
+    fun interfaceScope() = associatedScope?.let { if (it is InterfaceScope) it else null }
 }

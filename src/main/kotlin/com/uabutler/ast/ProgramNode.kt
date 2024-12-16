@@ -16,6 +16,7 @@ data class ProgramNode(
 ): PersistentNode, ScopeNode {
     override var parent: PersistentNode? = null
     override var associatedScope: Scope? = null
+    fun programScope() = associatedScope?.let { if (it is ProgramScope) it else null }
 
     companion object {
         fun fromParser(parser: Parser): ProgramNode {

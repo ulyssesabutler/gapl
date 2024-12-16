@@ -133,7 +133,7 @@ functionType: (Sequential | Combinational)?;
 
 functionIOList:
       Null #emptyFunctionIOList
-    | functionIO+ #nonEmptyFunctionIOList;
+    | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList;
 
 functionIO: functionIOType Id Colon interfaceExpression;
 
