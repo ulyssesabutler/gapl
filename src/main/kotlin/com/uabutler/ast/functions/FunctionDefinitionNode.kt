@@ -2,6 +2,7 @@ package com.uabutler.ast.functions
 
 import com.uabutler.ast.*
 import com.uabutler.ast.functions.circuits.CircuitStatementNode
+import com.uabutler.references.FunctionScope
 import com.uabutler.references.Scope
 
 data class FunctionDefinitionNode(
@@ -11,7 +12,8 @@ data class FunctionDefinitionNode(
     val inputFunctionIO: List<FunctionIONode>,
     val outputFunctionIO: List<FunctionIONode>,
     val statements: List<CircuitStatementNode>,
-    override var parent: PersistentNode? = null,
 ): PersistentNode, ScopeNode {
+    override var parent: PersistentNode? = null
     override var associatedScope: Scope? = null
+    fun functionScope() = associatedScope?.let { if (it is FunctionScope) it else null }
 }

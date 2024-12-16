@@ -4,6 +4,7 @@ import com.uabutler.ast.IdentifierNode
 import com.uabutler.ast.PersistentNode
 import com.uabutler.ast.ScopeNode
 import com.uabutler.ast.interfaces.InterfaceExpressionNode
+import com.uabutler.references.InterfaceConstructorScope
 import com.uabutler.references.Scope
 
 sealed interface CircuitExpressionNode: PersistentNode
@@ -54,6 +55,7 @@ data class RecordInterfaceConstructorExpressionNode(
 ): CircuitNodeExpressionNode, ScopeNode {
     override var parent: PersistentNode? = null
     override var associatedScope: Scope? = null
+    fun interfaceConstructorScope() = associatedScope?.let { if (it is InterfaceConstructorScope) it else null }
 }
 
 data class CircuitExpressionNodeCircuitExpression(
