@@ -9,6 +9,8 @@ class Module(
     private val astNode: FunctionDefinitionNode,
 ) {
 
+    val identifier = astNode.identifier.value
+
     override fun toString(): String {
         return "Module(" +
                 "inputNodes=$inputNodes, " +

@@ -5,6 +5,7 @@ import com.uabutler.module.*
 import com.uabutler.references.IdentifierMap
 import com.uabutler.references.Scope
 import com.uabutler.references.ScopeValidator
+import com.uabutler.verilog.VerilogWriter
 import kotlin.system.exitProcess
 
 fun compile(args: Array<String>) {
@@ -55,6 +56,14 @@ fun test() {
     val parser = Parser.fromString(program)
     val ast = ProgramNode.fromParser(parser)
     val moduleBuilder = ModuleBuilder.fromAST(ast)
+
+    moduleBuilder.concreteModules.map {
+        VerilogWriter.verilogStringFromModule(it)
+    }.forEach {
+        println("PRINTING MODULE")
+        println(it)
+    }
+    /*
     moduleBuilder.concreteModules.forEach {
         println("MODULE:")
         println(it)
@@ -99,6 +108,7 @@ fun test() {
             }
         }
     }
+     */
 
 }
 
