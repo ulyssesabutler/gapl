@@ -14,6 +14,7 @@ data class ModuleNode(
     val mode: ModuleNodeInternalMode = ModuleNodeInternalMode.AstModule,
     val astNode: PersistentNode? = null,
     val nativeFunction: NativeFunction? = null,
+    val functionDefinition: FunctionDefinitionNode? = null,
 
     // TODO: Internal connections, is it a function, or a pass through? Maybe an operation?
 ) {
@@ -51,7 +52,7 @@ data class ModuleNode(
                 return PredefinedFunction.moduleNodeFromPredefinedFunction(identifier, expressionNode.interfaceIdentifier.value)
             }
 
-            // Next, look for user-defined functions
+            // Next, look for user-defined functions or interface
             val definition = expressionNode.getScope()!!.getDeclaration(expressionNode.interfaceIdentifier.value)
             when (definition) {
                 is FunctionDeclaration -> {
@@ -60,6 +61,8 @@ data class ModuleNode(
                         input = function.input,
                         output = function.output,
                         astNode = astNode,
+                        mode = ModuleNodeInternalMode.DefinedFunction,
+                        functionDefinition = definition.astNode
                     )
                 }
                 is InterfaceDeclaration -> {
@@ -67,6 +70,7 @@ data class ModuleNode(
                         input = listOf(ModuleNodeInterface.fromInterfaceDefinitionNode("${identifier}_input", definition.astNode, null)),
                         output = listOf(ModuleNodeInterface.fromInterfaceDefinitionNode("${identifier}_output", definition.astNode, null)),
                         astNode = astNode,
+                        mode = ModuleNodeInternalMode.DefinedInterface,
                     )
                     newNode.input.forEach { it.parentNode = newNode }
                     newNode.output.forEach { it.parentNode = newNode }
