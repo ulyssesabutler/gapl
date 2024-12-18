@@ -65,7 +65,14 @@ fun test() {
         }
     """.trimIndent()
 
-    val programAdd = """
+    val programAddNamed = """
+        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
+        {
+            i1, i2 => addition: add() => o;
+        }
+    """.trimIndent()
+
+    val programAddAnon = """
         function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
         {
             i1, i2 => add() => o;
