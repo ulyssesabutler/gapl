@@ -21,7 +21,7 @@ fun compile(args: Array<String>) {
 }
 
 fun test() {
-    val program = """
+    val programInterfaces = """
         interface sub_payload()
         {
             first: wire[8];
@@ -53,14 +53,39 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(program)
+    val programMyAdd = """
+        function my_add() a1: wire[32], a2: wire[32] => o1: wire[32]
+        {
+            a1 => o1;
+        }
+        
+        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
+        {
+            i1, i2 => my_add() => o;
+        }
+    """.trimIndent()
+
+    val programAdd = """
+        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
+        {
+            i1, i2 => add() => o;
+        }
+    """.trimIndent()
+
+    val programRegister = """
+        function test_register() i: wire[32] => o: wire[32]
+        {
+            i => register() => o;
+        }
+    """.trimIndent()
+
+    val parser = Parser.fromString(programRegister)
     val ast = ProgramNode.fromParser(parser)
     val moduleBuilder = ModuleBuilder.fromAST(ast)
 
     moduleBuilder.concreteModules.map {
         VerilogWriter.verilogStringFromModule(it)
     }.forEach {
-        println("PRINTING MODULE")
         println(it)
     }
     /*

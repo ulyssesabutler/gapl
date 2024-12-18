@@ -9,7 +9,12 @@ import com.uabutler.references.InterfaceDeclaration
 data class ModuleNode(
     val input: List<ModuleNodeInterface>,
     val output: List<ModuleNodeInterface>,
+
+    // Ugh, this is also wrong.
+    val mode: ModuleNodeInternalMode = ModuleNodeInternalMode.AstModule,
     val astNode: PersistentNode? = null,
+    val nativeFunction: NativeFunction? = null,
+
     // TODO: Internal connections, is it a function, or a pass through? Maybe an operation?
 ) {
     // TODO: For now, we're just assuming every function and interface definition is concrete
@@ -41,6 +46,12 @@ data class ModuleNode(
             expressionNode: DefinedInterfaceExpressionNode,
             astNode: PersistentNode? = null,
         ): ModuleNode {
+            // Pre-defined: First, look for predefined functions
+            if (PredefinedFunction.isNativeFunction(expressionNode.interfaceIdentifier.value)) {
+                return PredefinedFunction.moduleNodeFromPredefinedFunction(identifier, expressionNode.interfaceIdentifier.value)
+            }
+
+            // Next, look for user-defined functions
             val definition = expressionNode.getScope()!!.getDeclaration(expressionNode.interfaceIdentifier.value)
             when (definition) {
                 is FunctionDeclaration -> {
@@ -61,7 +72,7 @@ data class ModuleNode(
                     newNode.output.forEach { it.parentNode = newNode }
                     return newNode
                 }
-                else -> throw Exception("Unexpected definition of instantiation")
+                else -> throw Exception("Unexpected definition of instantiation${definition?.let { ", ${definition::class.simpleName}" }}")
             }
         }
 
@@ -71,8 +82,8 @@ data class ModuleNode(
             astNode: PersistentNode? = null,
         ): ModuleNode {
             val newNode = ModuleNode(
-                input = functionDefinitionNode.inputFunctionIO.map { ModuleNodeInterface.fromInterfaceExpressionNode("${identifier}_input", it.interfaceType, null) },
-                output = functionDefinitionNode.outputFunctionIO.map { ModuleNodeInterface.fromInterfaceExpressionNode("${identifier}_output", it.interfaceType, null) },
+                input = functionDefinitionNode.inputFunctionIO.map { ModuleNodeInterface.fromInterfaceExpressionNode("${identifier}_${it.identifier.value}_input", it.interfaceType, null) },
+                output = functionDefinitionNode.outputFunctionIO.map { ModuleNodeInterface.fromInterfaceExpressionNode("${identifier}_${it.identifier.value}_output", it.interfaceType, null) },
                 astNode = astNode,
             )
 
