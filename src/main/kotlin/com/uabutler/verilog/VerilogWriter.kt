@@ -1,5 +1,6 @@
 package com.uabutler.verilog
 
+import com.uabutler.ast.functions.FunctionDefinitionNode
 import com.uabutler.module.*
 
 object VerilogWriter {
@@ -110,6 +111,49 @@ object VerilogWriter {
         }
     }
 
+    private fun getIntraNodeModuleInstantiation(identifier: String, moduleNode: ModuleNode, functionDefinition: FunctionDefinitionNode) = buildList<String> {
+        val functionInputIdentifiers = functionDefinition.inputFunctionIO
+            .map { ModuleNodeInterface.fromInterfaceExpressionNode("${it.identifier.value}_output", it.interfaceType, null) }
+            .map { ModuleNodeTranslatableInterface.fromModuleNodeInterface(it.identifier, it) }
+            .flatMap { it.subInterfaces.keys }
+        val functionOutputIdentifiers = functionDefinition.outputFunctionIO
+            .map { ModuleNodeInterface.fromInterfaceExpressionNode("${it.identifier.value}_input", it.interfaceType, null) }
+            .map { ModuleNodeTranslatableInterface.fromModuleNodeInterface(it.identifier, it) }
+            .flatMap { it.subInterfaces.keys }
+        val nodeInputIdentifiers = moduleNode.input
+            .map { ModuleNodeTranslatableInterface.fromModuleNodeInterface(it.identifier, it) }
+            .flatMap { it.subInterfaces.keys }
+        val nodeOutputIdentifiers = moduleNode.output
+            .map { ModuleNodeTranslatableInterface.fromModuleNodeInterface(it.identifier, it) }
+            .flatMap { it.subInterfaces.keys }
+
+        val moduleIdentifier = functionDefinition.identifier.value
+        val instantiationIdentifier = "${moduleIdentifier}_$identifier"
+
+        add("// Creating instantiation of \"$moduleIdentifier\" for \"$identifier\" (intra-node connection, module)")
+        add("$moduleIdentifier $instantiationIdentifier")
+        add("(")
+
+        functionInputIdentifiers.forEachIndexed { index, functionInputIdentifier ->
+            val nodeInputIdentifier = nodeInputIdentifiers[index]
+            add("  .$functionInputIdentifier($nodeInputIdentifier),")
+        }
+
+        add("")
+
+        functionOutputIdentifiers.dropLast(1).forEachIndexed { index, functionOutputIdentifier ->
+            val nodeOutputIdentifier = nodeOutputIdentifiers[index]
+            add("  .$functionOutputIdentifier($nodeOutputIdentifier),")
+        }
+
+        functionOutputIdentifiers.last().let { functionOutputIdentifier ->
+            val nodeOutputIdentifier = nodeOutputIdentifiers.last()
+            add("  .$functionOutputIdentifier($nodeOutputIdentifier)")
+        }
+
+        add(");")
+    }
+
     private fun getIntraNodeConnections(module: Module) = buildList {
         (module.bodyNodes + module.anonymousNodes).forEach { node ->
             when (node.value.mode) {
@@ -119,6 +163,11 @@ object VerilogWriter {
                         else -> throw Exception("Unknown native function, ${node.value.nativeFunction}")
                     }
                 }
+                ModuleNodeInternalMode.DefinedFunction -> {
+                    val definition = node.value.functionDefinition!!
+                    addAll(getIntraNodeModuleInstantiation(node.key, node.value, definition))
+                }
+                ModuleNodeInternalMode.DefinedInterface -> addAll(getIntraNodePassThrough(node.value))
                 else -> addAll(getIntraNodePassThrough(node.value))
             }
         }
