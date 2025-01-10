@@ -102,8 +102,12 @@ object VerilogWriter {
 
                 add("reg [$size:0] $outputRegisterIdentifier;")
                 add("assign $outputIdentifier = $outputRegisterIdentifier;")
-                add("always @(posedge clk) begin")
-                add("  $outputRegisterIdentifier <= $inputIdentifier;")
+                add("always @(posedge clock) begin")
+                add("  if (reset) begin")
+                add("    $outputRegisterIdentifier <= 0;")
+                add("  end else begin")
+                add("    $outputRegisterIdentifier <= $inputIdentifier;")
+                add("  end")
                 add("end")
 
             }
@@ -133,6 +137,10 @@ object VerilogWriter {
         add("// Creating instantiation of \"$moduleIdentifier\" for \"$identifier\" (intra-node connection, module)")
         add("$moduleIdentifier $instantiationIdentifier")
         add("(")
+
+        add("  .clock(clock),")
+        add("  .reset(reset),")
+        add("")
 
         functionInputIdentifiers.forEachIndexed { index, functionInputIdentifier ->
             val nodeInputIdentifier = nodeInputIdentifiers[index]
@@ -176,6 +184,10 @@ object VerilogWriter {
     fun verilogStringFromModule(module: Module) = buildString {
         appendLine("module ${module.identifier}")
         appendLine("(")
+
+        appendLine("  input clock,")
+        appendLine("  input reset,")
+        appendLine()
 
         inputsFromModule(module).forEach { node -> appendLine("  $node,") }
         appendLine()
