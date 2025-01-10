@@ -53,6 +53,25 @@ fun test() {
         }
     """.trimIndent()
 
+    val programMultipleInterfaces = """
+        
+        interface payload()
+        {
+            data: wire[32];
+            metadata: wire[16];
+        }
+        
+        function sub() s1: payload(), s2: payload() => so: payload()
+        {
+            s1 => so;
+        }
+        
+        function test() t1: payload(), t2: payload() => to: payload() 
+        {
+            t1, t2 => sub() => to;
+        }
+    """.trimIndent()
+
     val programMyAdd = """
         function my_add() a1: wire[32], a2: wire[32] => o1: wire[32]
         {
@@ -86,7 +105,7 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(programRegister)
+    val parser = Parser.fromString(programMultipleInterfaces)
     val ast = ProgramNode.fromParser(parser)
     val moduleBuilder = ModuleBuilder.fromAST(ast)
 

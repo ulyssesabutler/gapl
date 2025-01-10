@@ -120,27 +120,27 @@ class Module(
             val exteriorInputInterfaces = interiorNodes
                 .flatMap { it.input }
                 .map {
-                    val exteriorInputInterface = it.duplicate()
+                    val exteriorInputInterface = it.duplicate(identifier = it.identifier + "_exterior_front")
                     it.setInput(exteriorInputInterface)
                     exteriorInputInterface
                 }
 
             val inputNode = createAnonymousNode(
-                input = exteriorInputInterfaces.map { it.duplicate() },
-                output = exteriorInputInterfaces,
+                input = exteriorInputInterfaces.map { it.duplicate() }.onEach { it.identifier += "_input" },
+                output = exteriorInputInterfaces.onEach { it.identifier += "_output" },
             )
 
             val exteriorOutputInterfaces = interiorNodes
                 .flatMap { it.output }
                 .map {
-                    val exteriorOutputInterface = it.duplicate()
+                    val exteriorOutputInterface = it.duplicate(identifier = it.identifier + "_exterior_back")
                     exteriorOutputInterface.setInput(it)
                     exteriorOutputInterface
                 }
 
             val outputNode = createAnonymousNode(
-                input = exteriorOutputInterfaces,
-                output = exteriorOutputInterfaces.map { it.duplicate() },
+                input = exteriorOutputInterfaces.onEach { it.identifier += "_input" },
+                output = exteriorOutputInterfaces.map { it.duplicate() }.onEach { it.identifier += "_output" },
             )
 
             return CircuitNodeGroupInterface(

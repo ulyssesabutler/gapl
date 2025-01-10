@@ -47,20 +47,21 @@ object VerilogWriter {
         }
     }
 
-    private fun getInterNodeInputConnections(module: ModuleNode) = buildList {
-        module.input.forEach { nodeInterface ->
+    private fun getInterNodeInputConnections(moduleNode: ModuleNode) = buildList {
+        moduleNode.input.forEach { nodeInterface ->
             add("// Assigning input of \"${nodeInterface.identifier}\" (inter-node connection)")
+            if (nodeInterface.getInput().isNotEmpty()) {
+                val input = nodeInterface.getInput().first()
+                val inputWires = ModuleNodeTranslatableInterface.fromModuleNodeInterface(input.identifier, input).subInterfaces.toList()
+                val outputWires = ModuleNodeTranslatableInterface.fromModuleNodeInterface(nodeInterface.identifier, nodeInterface).subInterfaces.toList()
+                outputWires.forEachIndexed { index, pair ->
+                    val inputIdentifier = inputWires[index].first
+                    val outputIdentifier = pair.first
 
-            val input = nodeInterface.getInput().first()
-            val inputWires = ModuleNodeTranslatableInterface.fromModuleNodeInterface(input.identifier, input).subInterfaces.toList()
-            val outputWires = ModuleNodeTranslatableInterface.fromModuleNodeInterface(nodeInterface.identifier, nodeInterface).subInterfaces.toList()
-            outputWires.forEachIndexed { index, pair ->
-                val inputIdentifier = inputWires[index].first
-                val outputIdentifier = pair.first
-
-                add("assign $outputIdentifier = $inputIdentifier;")
+                    add("assign $outputIdentifier = $inputIdentifier;")
+                }
+                add("")
             }
-            add("")
         }
     }
 
