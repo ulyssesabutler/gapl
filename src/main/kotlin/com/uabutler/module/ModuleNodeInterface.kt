@@ -6,7 +6,7 @@ import com.uabutler.util.StaticExpressionEvaluator
 fun ModuleNodeInterface?.objectString() = this?.let { it::class.simpleName + "@" + System.identityHashCode(it) } ?: "null"
 
 sealed class ModuleNodeInterface {
-    abstract val identifier: String
+    abstract var identifier: String
 
     abstract fun hasInput(): Boolean
     abstract fun getInput(): Collection<ModuleNodeInterface>
@@ -79,7 +79,7 @@ sealed class ModuleNodeInterface {
 }
 
 data class ModuleNodeWireInterface(
-    override val identifier: String,
+    override var identifier: String,
 ): ModuleNodeInterface() {
     override var parentNode: ModuleNode? = null
     var inputNode: ModuleNodeWireInterface? = null
@@ -104,7 +104,7 @@ data class ModuleNodeWireInterface(
 sealed class ModuleNodeComplexInterface: ModuleNodeInterface()
 
 data class ModuleNodeVectorInterface(
-    override val identifier: String,
+    override var identifier: String,
     val subInterfaces: List<ModuleNodeInterface>,
 ): ModuleNodeComplexInterface() {
     override var parentNode: ModuleNode? = null
@@ -158,7 +158,7 @@ data class ModuleNodeVectorInterface(
 }
 
 data class ModuleNodeRecordInterface(
-    override val identifier: String,
+    override var identifier: String,
     val subInterfaces: Map<String, ModuleNodeInterface>,
 ): ModuleNodeComplexInterface() {
     override var parentNode: ModuleNode? = null
