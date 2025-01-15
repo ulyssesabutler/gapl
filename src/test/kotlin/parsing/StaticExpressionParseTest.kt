@@ -1,10 +1,11 @@
 package parsing
 
-import com.uabutler.Parser
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.IntegerLiteralNode
+import com.uabutler.v1.Parser
+import com.uabutler.v1.ast.IdentifierNode
+import com.uabutler.v1.ast.IntegerLiteralNode
 import com.uabutler.ast.staticexpressions.*
-import com.uabutler.visitor.StaticExpressionVisitor
+import com.uabutler.v1.ast.staticexpressions.*
+import com.uabutler.v1.visitor.StaticExpressionVisitor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

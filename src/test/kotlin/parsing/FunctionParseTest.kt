@@ -1,14 +1,14 @@
 package parsing
 
-import com.uabutler.Parser
-import com.uabutler.ast.GenericInterfaceDefinitionNode
-import com.uabutler.ast.GenericParameterDefinitionNode
-import com.uabutler.ast.IdentifierNode
-import com.uabutler.ast.functions.DefaultFunctionIOTypeNode
-import com.uabutler.ast.functions.FunctionDefinitionNode
-import com.uabutler.ast.functions.FunctionIONode
-import com.uabutler.ast.interfaces.WireInterfaceExpressionNode
-import com.uabutler.visitor.FunctionVisitor
+import com.uabutler.v1.Parser
+import com.uabutler.v1.ast.GenericInterfaceDefinitionNode
+import com.uabutler.v1.ast.GenericParameterDefinitionNode
+import com.uabutler.v1.ast.IdentifierNode
+import com.uabutler.v1.ast.functions.DefaultFunctionIOTypeNode
+import com.uabutler.v1.ast.functions.FunctionDefinitionNode
+import com.uabutler.v1.ast.functions.FunctionIONode
+import com.uabutler.v1.ast.interfaces.WireInterfaceExpressionNode
+import com.uabutler.v1.visitor.FunctionVisitor
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
