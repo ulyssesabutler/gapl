@@ -12,7 +12,7 @@ object VerilogWriter {
                     val identifier = subInterfaceInterface.key
                     val size = subInterfaceInterface.value.size
 
-                    if (size == 1) add("input $identifier") else add("input [$size:0] $identifier")
+                    if (size == 1) add("input $identifier") else add("input [${size - 1}:0] $identifier")
                 }
             }
         }
@@ -26,7 +26,7 @@ object VerilogWriter {
                     val identifier = subInterfaceInterface.key
                     val size = subInterfaceInterface.value.size
 
-                    if (size == 1) add("output $identifier") else add("output [$size:0] $identifier")
+                    if (size == 1) add("output $identifier") else add("output [${size - 1}:0] $identifier")
                 }
             }
         }
@@ -40,7 +40,7 @@ object VerilogWriter {
                     val identifier = subInterfaceInterface.key
                     val size = subInterfaceInterface.value.size
 
-                    if (size == 1) add("wire $identifier;") else add("wire [$size:0] $identifier;")
+                    if (size == 1) add("wire $identifier;") else add("wire [${size - 1}:0] $identifier;")
                 }
                 add("")
             }
@@ -116,6 +116,17 @@ object VerilogWriter {
         }
     }
 
+    private fun getIntraNodeAdd(node: ModuleNode) = buildList {
+        val outputIdentifier = node.output.first().identifier
+        val operand0Identifier = node.input[0].identifier
+        val operand1Identifier = node.input[1].identifier
+
+        add("// Creating addition for \"${outputIdentifier}\" (intra-node connection, addition)")
+        add("assign $outputIdentifier = $operand0Identifier + $operand1Identifier;")
+
+        add("")
+    }
+
     private fun getIntraNodeModuleInstantiation(identifier: String, moduleNode: ModuleNode, functionDefinition: FunctionDefinitionNode) = buildList<String> {
         val functionInputIdentifiers = functionDefinition.inputFunctionIO
             .map { ModuleNodeInterface.fromInterfaceExpressionNode("${it.identifier.value}_output", it.interfaceType, null) }
@@ -169,6 +180,7 @@ object VerilogWriter {
                 ModuleNodeInternalMode.NativeFunction -> {
                     when (node.value.nativeFunction!!) {
                         NativeFunction.Register -> addAll(getIntraNodeRegister(node.value))
+                        NativeFunction.Add -> addAll(getIntraNodeAdd(node.value))
                         else -> throw Exception("Unknown native function, ${node.value.nativeFunction}")
                     }
                 }
