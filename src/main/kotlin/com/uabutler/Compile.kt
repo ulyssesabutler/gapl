@@ -105,7 +105,7 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(programMultipleInterfaces)
+    val parser = Parser.fromString(programAddAnon)
     val ast = ProgramNode.fromParser(parser)
     val moduleBuilder = ModuleBuilder.fromAST(ast)
 
