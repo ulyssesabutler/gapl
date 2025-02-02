@@ -58,6 +58,10 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.named<JavaExec>("run") {
+    jvmArgs = jvmArgs?.plus("-ea") ?: listOf("-ea")
+}
+
 kotlin {
     jvmToolchain(8)
 }

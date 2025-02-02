@@ -174,44 +174,40 @@ class NodeBuilder(val programContext: ProgramContext) {
                 val referencedNode = existingDeclaredNodes[identifier]!!
 
                 // We should be referencing a declared node, which has a single interface
-                assert(referencedNode.inputs.size == 1)
-                val input = referencedNode.inputs.first()
-
-                assert(referencedNode.outputs.size == 1)
-                val output = referencedNode.outputs.first()
-
-                var currentInput = input
-                nodeExpression.singleAccesses.forEach {
-                    when (it) {
-                        is MemberAccessOperationNode -> {
-                            assert(currentInput is NodeInputRecordInterface)
-                            currentInput = (currentInput as NodeInputRecordInterface).ports[it.memberIdentifier.value]!!
-                        }
-                        is SingleArrayAccessOperationNode -> {
-                            val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
-                                staticExpression = it.index,
-                                context = parameterValuesContext,
-                            )
-                            assert(currentInput is NodeInputVectorInterface)
-                            currentInput = (currentInput as NodeInputVectorInterface).vector[index]
+                val input = referencedNode.inputs.firstOrNull()?.let { input ->
+                    nodeExpression.singleAccesses.fold(input) { currentInput, accessNode ->
+                        when (accessNode) {
+                            is MemberAccessOperationNode -> {
+                                assert(currentInput is NodeInputRecordInterface)
+                                (currentInput as NodeInputRecordInterface).ports[accessNode.memberIdentifier.value]!!
+                            }
+                            is SingleArrayAccessOperationNode -> {
+                                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                                    staticExpression = accessNode.index,
+                                    context = parameterValuesContext,
+                                )
+                                assert(currentInput is NodeInputVectorInterface)
+                                (currentInput as NodeInputVectorInterface).vector[index]
+                            }
                         }
                     }
                 }
 
-                var currentOutput = output
-                nodeExpression.singleAccesses.forEach {
-                    when (it) {
-                        is MemberAccessOperationNode -> {
-                            assert(currentOutput is NodeOutputRecordInterface)
-                            currentOutput = (currentOutput as NodeOutputRecordInterface).ports[it.memberIdentifier.value]!!
-                        }
-                        is SingleArrayAccessOperationNode -> {
-                            val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
-                                staticExpression = it.index,
-                                context = parameterValuesContext,
-                            )
-                            assert(currentOutput is NodeOutputVectorInterface)
-                            currentOutput = (currentOutput as NodeOutputVectorInterface).vector[index]
+                val output = referencedNode.outputs.firstOrNull()?.let { output ->
+                    nodeExpression.singleAccesses.fold(output) { currentOutput, accessNode ->
+                        when (accessNode) {
+                            is MemberAccessOperationNode -> {
+                                assert(currentOutput is NodeOutputRecordInterface)
+                                (currentOutput as NodeOutputRecordInterface).ports[accessNode.memberIdentifier.value]!!
+                            }
+                            is SingleArrayAccessOperationNode -> {
+                                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                                    staticExpression = accessNode.index,
+                                    context = parameterValuesContext,
+                                )
+                                assert(currentOutput is NodeOutputVectorInterface)
+                                (currentOutput as NodeOutputVectorInterface).vector[index]
+                            }
                         }
                     }
                 }
@@ -230,17 +226,21 @@ class NodeBuilder(val programContext: ProgramContext) {
                 } ?: WholeInterfaceProjection
 
                 return CircuitExpressionResult(
-                    inputs = listOf(
-                        NodeInputInterfaceProjection(
-                            input = currentInput,
-                            projection = projection,
-                        )
+                    inputs = listOfNotNull(
+                        input?.let {
+                            NodeInputInterfaceProjection(
+                                input = it,
+                                projection = projection,
+                            )
+                        },
                     ),
-                    outputs = listOf(
-                        NodeOutputInterfaceProjection(
-                            output = currentOutput,
-                            projection = projection,
-                        )
+                    outputs = listOfNotNull(
+                        output?.let {
+                            NodeOutputInterfaceProjection(
+                                output = it,
+                                projection = projection,
+                            )
+                        },
                     ),
                 )
             }

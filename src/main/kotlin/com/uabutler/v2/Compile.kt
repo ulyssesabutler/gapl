@@ -38,6 +38,33 @@ fun test() {
         }
     """.trimIndent()
 
+    val interfaces = """
+        interface payload()
+        {
+            data: wire[8];
+            metadata: wire[8];
+        }
+        
+        function test() i: payload() => o: payload()
+        {
+            i => o;
+        }
+    """.trimIndent()
+
+    val interfaceMemberAccess = """
+        interface payload()
+        {
+            data: wire[8];
+            metadata: wire[8];
+        }
+        
+        function test() i: payload() => o: wire[8]
+        {
+            i.data => o;
+        }
+    """.trimIndent()
+
+
     val programInterfaces = """
         interface sub_payload()
         {
@@ -71,7 +98,6 @@ fun test() {
     """.trimIndent()
 
     val programMultipleInterfaces = """
-        
         interface payload()
         {
             data: wire[32];
@@ -123,7 +149,7 @@ fun test() {
     """.trimIndent()
 
     println("Running parser")
-    val parser = Parser.fromString(programDoublePassthrough)
+    val parser = Parser.fromString(interfaceMemberAccess)
     val ast = parser.program()
 
     println("Resulting AST:")
