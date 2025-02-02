@@ -31,6 +31,13 @@ fun test() {
         }
     """.trimIndent()
 
+    val programDoublePassthrough = """
+        function passthrough() i1: wire[32], i2: wire[32] => o1: wire[32], o2: wire[32]
+        {
+            i1, i2 => o1, o2;
+        }
+    """.trimIndent()
+
     val programInterfaces = """
         interface sub_payload()
         {
@@ -116,7 +123,7 @@ fun test() {
     """.trimIndent()
 
     println("Running parser")
-    val parser = Parser.fromString(programSimplePassthrough2)
+    val parser = Parser.fromString(programDoublePassthrough)
     val ast = parser.program()
 
     println("Resulting AST:")

@@ -1,6 +1,5 @@
 package com.uabutler.v2.gaplir.builder
 
-import com.uabutler.util.StringGenerator
 import com.uabutler.v2.ast.node.functions.FunctionIONode
 import com.uabutler.v2.ast.node.functions.circuits.*
 import com.uabutler.v2.gaplir.InterfaceStructure
@@ -96,7 +95,7 @@ class NodeBuilder(val programContext: ProgramContext) {
         nodeExpression: CircuitNodeExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, Int>, // TODO: This could be any value
-        declaredNodes: Map<String, Node>
+        existingDeclaredNodes: Map<String, Node>
     ): CircuitExpressionResult {
         when (nodeExpression) {
             is AnonymousNodeCircuitExpressionNode -> {
@@ -148,7 +147,7 @@ class NodeBuilder(val programContext: ProgramContext) {
                 val identifier = nodeExpression.identifier.value
 
                 // This identifier could either be another declared node, or it could be a generic
-                declaredNodes[identifier]?.let {
+                existingDeclaredNodes[identifier]?.let {
                     return CircuitExpressionResult(
                         inputs = it.inputs.map { NodeInputInterfaceProjection(it) },
                         outputs = it.outputs.map { NodeOutputInterfaceProjection(it) },
@@ -172,7 +171,7 @@ class NodeBuilder(val programContext: ProgramContext) {
 
             is ReferenceCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
-                val referencedNode = declaredNodes[identifier]!!
+                val referencedNode = existingDeclaredNodes[identifier]!!
 
                 // We should be referencing a declared node, which has a single interface
                 assert(referencedNode.inputs.size == 1)
@@ -256,10 +255,10 @@ class NodeBuilder(val programContext: ProgramContext) {
         groupExpression: CircuitGroupExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, Int>, // TODO: This could be any value
-        declaredNodes: Map<String, Node>
+        existingDeclaredNodes: Map<String, Node>
     ): CircuitExpressionResult {
         val results = groupExpression.expressions.map { node ->
-            processCircuitNodeExpressionNode(node, interfaceValuesContext, parameterValuesContext, declaredNodes)
+            processCircuitNodeExpressionNode(node, interfaceValuesContext, parameterValuesContext, existingDeclaredNodes)
         }
 
         return CircuitExpressionResult(
@@ -354,15 +353,17 @@ class NodeBuilder(val programContext: ProgramContext) {
         connectionExpression: CircuitConnectionExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, Int>, // TODO: This could be any value
-        declaredNodes: Map<String, Node>
+        existingDeclaredNodes: Map<String, Node>
     ): GeneratedNodes {
-        val declaredNodes = declaredNodes.toMutableMap()
+        val allDeclaredNodes = existingDeclaredNodes.toMutableMap()
+        val newDeclaredNodes = mutableMapOf<String, Node>()
         val anonymousNodes = mutableListOf<Node>()
 
         // Step 1: Process each group
         val groups = connectionExpression.connectedExpression.asSequence()
-            .map { processCircuitGroupExpressionNode(it, interfaceValuesContext, parameterValuesContext, declaredNodes) }
-            .onEach { declaredNodes += it.generatedNodes.declaredNodes }
+            .map { processCircuitGroupExpressionNode(it, interfaceValuesContext, parameterValuesContext, allDeclaredNodes) }
+            .onEach { newDeclaredNodes += it.generatedNodes.declaredNodes }
+            .onEach { allDeclaredNodes += it.generatedNodes.declaredNodes }
             .onEach { anonymousNodes += it.generatedNodes.anonymousNodes }
             .toList()
 
@@ -375,7 +376,7 @@ class NodeBuilder(val programContext: ProgramContext) {
         }
 
         return GeneratedNodes(
-            declaredNodes = declaredNodes,
+            declaredNodes = newDeclaredNodes,
             anonymousNodes = anonymousNodes,
         )
     }
@@ -435,13 +436,13 @@ class NodeBuilder(val programContext: ProgramContext) {
         }
 
         val ioNodes = inputNodes.associateBy { it.name } + outputNodes.associateBy { it.name }
-        val declaredNodes = ioNodes.toMutableMap()
+        val allDeclaredNodes = ioNodes.toMutableMap()
         val anonymousNodes = mutableListOf<Node>()
 
         // Step 2: Process the expressions to create nodes and connect them
         val results = circuitExpressions.asSequence()
-            .map { processCircuitConnectionExpressionNode(it as CircuitConnectionExpressionNode, interfaceValuesContext, parameterValuesContext, declaredNodes) }
-            .onEach { declaredNodes += it.declaredNodes }
+            .map { processCircuitConnectionExpressionNode(it as CircuitConnectionExpressionNode, interfaceValuesContext, parameterValuesContext, allDeclaredNodes) }
+            .onEach { allDeclaredNodes += it.declaredNodes }
             .onEach { anonymousNodes += it.anonymousNodes }
             .toList()
 

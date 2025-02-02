@@ -99,8 +99,10 @@ class ModuleBuilder(val program: ProgramNode) {
             moduleInvocation = ModuleInvocation(
                 gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
             ),
-            input = instantiation.input,
-            output = instantiation.output,
+            inputStructure = instantiation.input,
+            outputStructure = instantiation.output,
+            inputNodes = inputNodes,
+            outputNodes = outputNodes,
             nodes = nodeBuildResult.nodes,
         )
 
