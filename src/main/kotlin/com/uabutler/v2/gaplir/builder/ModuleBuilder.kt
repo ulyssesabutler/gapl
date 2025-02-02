@@ -21,7 +21,7 @@ class ModuleBuilder(val program: ProgramNode) {
         programContext = programContext,
     )
 
-    private fun buildAllModules() {
+    fun buildAllModules(): List<Module> {
         /* First, add all concrete modules to the set of modules. These are modules that don't have any
          * generic parameters. These modules can be built without any additional information or context. To build
          * any other module, we need to know the actual parameter values.
@@ -55,6 +55,8 @@ class ModuleBuilder(val program: ProgramNode) {
 
             val postLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
         } while (postLoopIncompleteModules.isNotEmpty())
+
+        return moduleInstantiationTracker.getModules()
     }
 
     private fun buildModule(
@@ -62,8 +64,25 @@ class ModuleBuilder(val program: ProgramNode) {
     ): Module {
         val astNode = instantiation.astNode
 
-        val nodeBuildResult = nodeBuilder.buildNodes(
+        // Build input nodes
+        val inputNodes = nodeBuilder.buildInputNodes(
+            astNodes = astNode.inputFunctionIO,
+            interfaceValuesContext = instantiation.genericInterfaceValues,
+            parameterValuesContext = instantiation.genericParameterValues,
+        )
+
+        // Build output nodes
+        val outputNodes = nodeBuilder.buildOutputNodes(
+            astNodes = astNode.outputFunctionIO,
+            interfaceValuesContext = instantiation.genericInterfaceValues,
+            parameterValuesContext = instantiation.genericParameterValues,
+        )
+
+        // Build body nodes
+        val nodeBuildResult = nodeBuilder.buildBodyNodes(
             astStatements = astNode.statements,
+            inputNodes = inputNodes,
+            outputNodes = outputNodes,
             interfaceValuesContext = instantiation.genericInterfaceValues,
             parameterValuesContext = instantiation.genericParameterValues,
         )

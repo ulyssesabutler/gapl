@@ -76,4 +76,6 @@ class ModuleInstantiationTracker(
     fun addBuiltModule(instantiation: ModuleInstantiationData, module: Module) {
         modules[instantiation]!!.module = module
     }
+
+    fun getModules() = modules.values.mapNotNull { it.module }.toList()
 }

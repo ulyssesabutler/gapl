@@ -8,7 +8,6 @@ import com.uabutler.v2.gaplir.VectorInterfaceStructure
 import com.uabutler.v2.gaplir.WireInterfaceStructure
 import com.uabutler.v2.gaplir.builder.definition.AbstractInterfaceDefinition
 import com.uabutler.v2.gaplir.builder.signature.InterfaceSignature
-import com.uabutler.v2.gaplir.builder.signature.ModuleSignature
 
 class ProgramContext(val program: ProgramNode) {
     private val interfaceSignatures = program.interfaces
@@ -18,9 +17,11 @@ class ProgramContext(val program: ProgramNode) {
         .map { AbstractInterfaceDefinition.fromNode(it) }
         .associateBy { it.signature.identifier }
 
+    /* TODO: Do we need this?
     private val moduleSignatures = program.functions
         .map { ModuleSignature.fromNode(it) }
         .associateBy { it.identifier }
+     */
 
     private fun buildDefinedInterface(
         definedInterfaceIdentifier: String,
@@ -74,7 +75,10 @@ class ProgramContext(val program: ProgramNode) {
                     interfaceValuesContext = interfaceValuesContext,
                     parameterValuesContext = parameterValuesContext,
                 ),
-                size = 0, // TODO: We need to evaluate the static expression
+                size = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                    staticExpression = node.boundsSpecifier.boundSpecifier,
+                    context = parameterValuesContext,
+                ),
             )
             is IdentifierInterfaceExpressionNode -> interfaceValuesContext[node.interfaceIdentifier.value]!!
             is DefinedInterfaceExpressionNode -> buildDefinedInterface(

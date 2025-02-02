@@ -1,10 +1,14 @@
 package com.uabutler.v2.gaplir.builder
 
+import com.uabutler.util.StringGenerator
+import com.uabutler.v2.ast.node.functions.FunctionIONode
 import com.uabutler.v2.ast.node.functions.circuits.*
 import com.uabutler.v2.gaplir.InterfaceStructure
 import com.uabutler.v2.gaplir.builder.util.ModuleInstantiationTracker
 import com.uabutler.v2.gaplir.builder.util.ProgramContext
 import com.uabutler.v2.gaplir.builder.util.StaticExpressionEvaluator
+import com.uabutler.v2.gaplir.node.ModuleInputNode
+import com.uabutler.v2.gaplir.node.ModuleOutputNode
 import com.uabutler.v2.gaplir.node.Node
 import com.uabutler.v2.gaplir.node.PassThroughNode
 import com.uabutler.v2.gaplir.node.input.*
@@ -376,8 +380,48 @@ class NodeBuilder(val programContext: ProgramContext) {
         )
     }
 
-    fun buildNodes(
+    fun buildInputNodes(
+        astNodes: List<FunctionIONode>,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+    ): List<ModuleInputNode> {
+        return astNodes.map {
+            val interfaceStructure = programContext.buildInterfaceWithContext(
+                node = it.interfaceType,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+
+            ModuleInputNode(
+                name = it.identifier.value,
+                inputInterfaceStructure = interfaceStructure,
+            )
+        }
+    }
+
+    fun buildOutputNodes(
+        astNodes: List<FunctionIONode>,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+    ): List<ModuleOutputNode> {
+        return astNodes.map {
+            val interfaceStructure = programContext.buildInterfaceWithContext(
+                node = it.interfaceType,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+
+            ModuleOutputNode(
+                name = it.identifier.value,
+                outputInterfaceStructure = interfaceStructure,
+            )
+        }
+    }
+
+    fun buildBodyNodes(
         astStatements: List<CircuitStatementNode>,
+        inputNodes: List<ModuleInputNode>,
+        outputNodes: List<ModuleOutputNode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, Int>, // TODO: This could be any value
     ): NodeBuildResult {
@@ -390,7 +434,8 @@ class NodeBuilder(val programContext: ProgramContext) {
             )
         }
 
-        val declaredNodes = mutableMapOf<String, Node>()
+        val ioNodes = inputNodes.associateBy { it.name } + outputNodes.associateBy { it.name }
+        val declaredNodes = ioNodes.toMutableMap()
         val anonymousNodes = mutableListOf<Node>()
 
         // Step 2: Process the expressions to create nodes and connect them
