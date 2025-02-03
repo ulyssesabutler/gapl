@@ -2,6 +2,7 @@ package com.uabutler.v2
 
 import com.uabutler.util.StringGenerator.listToString
 import com.uabutler.v2.gaplir.builder.ModuleBuilder
+import com.uabutler.v2.verilogir.builder.VerilogBuilder
 import kotlin.system.exitProcess
 
 fun compile(args: Array<String>) {
@@ -148,20 +149,12 @@ fun test() {
         }
     """.trimIndent()
 
-    println("Running parser")
     val parser = Parser.fromString(interfaceMemberAccess)
     val ast = parser.program()
-
-    println("Resulting AST:")
-    println(ast)
-
-    println("Creating module builder")
     val gaplirBuilder = ModuleBuilder(ast)
-
-    println("Building modules")
-    val modules = gaplirBuilder.buildAllModules()
-    println("Node Count: ${modules.first().nodes.size}")
-    println(listToString(modules))
+    val gaplirModules = gaplirBuilder.buildAllModules()
+    val verilogirModules = gaplirModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
+    verilogirModules.forEach { println(it.verilogSerialize()) }
 }
 
 fun main(args: Array<String>) = test()
