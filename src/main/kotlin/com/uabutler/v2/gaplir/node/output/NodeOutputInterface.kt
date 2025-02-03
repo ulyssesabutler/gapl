@@ -10,6 +10,7 @@ import com.uabutler.v2.gaplir.node.Node
 
 sealed class NodeOutputInterface {
     abstract val parent: NodeOutputInterfaceParent
+    abstract val structure: InterfaceStructure
 
     companion object {
         fun fromStructure(parent: NodeOutputInterfaceParent, interfaceStructure: InterfaceStructure): NodeOutputInterface {
@@ -25,12 +26,13 @@ sealed class NodeOutputInterface {
 class NodeOutputWireInterface(
     override val parent: NodeOutputInterfaceParent,
 ): NodeOutputInterface() {
+    override val structure: InterfaceStructure = WireInterfaceStructure
     override fun toString() = "wire@${this.hashCode().toString(16)}"
 }
 
 data class NodeOutputRecordInterface(
     override val parent: NodeOutputInterfaceParent,
-    val structure: RecordInterfaceStructure,
+    override val structure: RecordInterfaceStructure,
 ): NodeOutputInterface() {
     val ports: Map<String, NodeOutputInterface> = structure.ports.mapValues {
         val parent = NodeOutputInterfaceParentRecordInterface(this, it.key)
@@ -45,7 +47,7 @@ data class NodeOutputRecordInterface(
 
 data class NodeOutputVectorInterface(
     override val parent: NodeOutputInterfaceParent,
-    val structure: VectorInterfaceStructure,
+    override val structure: VectorInterfaceStructure,
 ): NodeOutputInterface() {
     val vector: List<NodeOutputInterface> = List(structure.size) {
         val parent = NodeOutputInterfaceParentVectorInterface(this, it)

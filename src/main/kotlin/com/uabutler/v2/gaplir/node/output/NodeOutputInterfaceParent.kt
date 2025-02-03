@@ -9,12 +9,12 @@ sealed class NodeOutputInterfaceParentInterface: NodeOutputInterfaceParent() {
 }
 
 data class NodeOutputInterfaceParentVectorInterface(
-    override val parentInterface: NodeOutputInterface,
+    override val parentInterface: NodeOutputVectorInterface,
     val parentIndex: Int,
 ): NodeOutputInterfaceParentInterface()
 
 data class NodeOutputInterfaceParentRecordInterface(
-    override val parentInterface: NodeOutputInterface,
+    override val parentInterface: NodeOutputRecordInterface,
     val parentMember: String,
 ): NodeOutputInterfaceParentInterface()
 

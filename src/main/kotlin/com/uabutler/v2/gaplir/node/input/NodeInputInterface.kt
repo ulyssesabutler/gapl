@@ -12,6 +12,7 @@ import com.uabutler.v2.gaplir.node.output.NodeOutputVectorInterface
 import com.uabutler.v2.gaplir.node.output.NodeOutputWireInterface
 
 sealed class NodeInputInterface {
+    abstract val structure: InterfaceStructure
 
     companion object {
         fun fromStructure(interfaceStructure: InterfaceStructure): NodeInputInterface {
@@ -28,6 +29,8 @@ sealed class NodeInputInterface {
 class NodeInputWireInterface(
     var input: NodeOutputWireInterface? = null,
 ): NodeInputInterface() {
+    override val structure: InterfaceStructure = WireInterfaceStructure
+
     override fun toString() = genToStringFromValues(
         instanceName = this.javaClass.simpleName,
         hashCode = this.hashCode(),
@@ -36,7 +39,7 @@ class NodeInputWireInterface(
 }
 
 class NodeInputRecordInterface(
-    val structure: RecordInterfaceStructure,
+    override val structure: RecordInterfaceStructure,
 ): NodeInputInterface() {
     var input: NodeOutputRecordInterface? = null
     val ports: Map<String, NodeInputInterface> = structure.ports.mapValues { fromStructure(it.value) }
@@ -71,7 +74,7 @@ data class VectorConnection(
 }
 
 data class NodeInputVectorInterface(
-    val structure: VectorInterfaceStructure,
+    override val structure: VectorInterfaceStructure,
 ): NodeInputInterface() {
     val connections: MutableList<VectorConnection> = mutableListOf()
     val vector: List<NodeInputInterface> = List(structure.size) { fromStructure(structure.vectoredInterface) }
