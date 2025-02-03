@@ -36,7 +36,7 @@ class NodeInputWireInterface(
 }
 
 class NodeInputRecordInterface(
-    structure: RecordInterfaceStructure,
+    val structure: RecordInterfaceStructure,
 ): NodeInputInterface() {
     var input: NodeOutputRecordInterface? = null
     val ports: Map<String, NodeInputInterface> = structure.ports.mapValues { fromStructure(it.value) }
