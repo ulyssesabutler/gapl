@@ -65,6 +65,13 @@ fun test() {
         }
     """.trimIndent()
 
+    val interfaceVectorAccess = """
+        function test() i: wire[8][2] => o: wire[8]
+        {
+            i[0] => o;
+        }
+    """.trimIndent()
+
 
     val programInterfaces = """
         interface sub_payload()
@@ -149,7 +156,7 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(interfaceMemberAccess)
+    val parser = Parser.fromString(interfaceVectorAccess)
     val ast = parser.program()
     val gaplirBuilder = ModuleBuilder(ast)
     val gaplirModules = gaplirBuilder.buildAllModules()

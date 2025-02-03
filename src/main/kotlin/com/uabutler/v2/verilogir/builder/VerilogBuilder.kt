@@ -1,8 +1,8 @@
 package com.uabutler.v2.verilogir.builder
 
 import com.uabutler.v2.gaplir.InterfaceStructure
-import com.uabutler.v2.verilogir.builder.`interface`.VerilogInterface
-import com.uabutler.v2.verilogir.builder.util.ModuleIdentifierGenerator
+import com.uabutler.v2.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.v2.verilogir.builder.identifier.ModuleIdentifierGenerator
 import com.uabutler.v2.verilogir.module.ModuleIO
 import com.uabutler.v2.verilogir.module.ModuleIODirection
 import com.uabutler.v2.verilogir.util.DataType
@@ -28,8 +28,20 @@ object VerilogBuilder {
 
     fun verilogModuleFromGAPLModule(gaplModule: GAPLModule) = VerilogModule(
         name = ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation),
-        inputs = gaplModule.inputStructure.flatMap { moduleIOsFromInterfaceStructure(it.key, it.value, ModuleIODirection.INPUT) },
-        outputs = gaplModule.outputStructure.flatMap { moduleIOsFromInterfaceStructure(it.key, it.value, ModuleIODirection.OUTPUT) },
-        statements = listOf(), // TODO
+        inputs = gaplModule.inputNodes.flatMap {
+            moduleIOsFromInterfaceStructure(
+                name = "${it.name}_output",
+                structure = it.inputInterfaceStructure,
+                direction = ModuleIODirection.INPUT,
+            )
+        },
+        outputs = gaplModule.outputNodes.flatMap {
+            moduleIOsFromInterfaceStructure(
+                name = "${it.name}_input",
+                structure = it.outputInterfaceStructure,
+                direction = ModuleIODirection.OUTPUT,
+            )
+        },
+        statements = StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.nodes + gaplModule.outputNodes),
     )
 }

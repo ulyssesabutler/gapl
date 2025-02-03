@@ -1,4 +1,4 @@
-package com.uabutler.v2.verilogir.builder.`interface`
+package com.uabutler.v2.verilogir.builder.interfaceutil
 
 import com.uabutler.v2.gaplir.InterfaceStructure
 import com.uabutler.v2.gaplir.RecordInterfaceStructure

@@ -4,6 +4,7 @@ import com.uabutler.v2.verilogir.VerilogSerialize
 import com.uabutler.v2.verilogir.module.statement.always.AlwaysStatement
 import com.uabutler.v2.verilogir.module.statement.always.Sensitivity
 import com.uabutler.v2.verilogir.module.statement.expression.Expression
+import com.uabutler.v2.verilogir.module.statement.expression.Reference
 import com.uabutler.v2.verilogir.module.statement.invocation.InvocationPort
 import com.uabutler.v2.verilogir.util.DataType
 import javax.swing.plaf.nimbus.State
@@ -25,12 +26,12 @@ data class Declaration(
 }
 
 data class Assignment(
-    val variableName: String,
+    val destReference: Reference,
     val expression: Expression,
 ): Statement() {
     override fun verilogSerialize() = buildString {
         append("assign ")
-        append(variableName)
+        append(destReference.verilogSerialize())
         append(" = ")
         append(expression.verilogSerialize())
         append(";")

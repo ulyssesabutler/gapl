@@ -1,4 +1,4 @@
-package com.uabutler.v2.verilogir.builder.util
+package com.uabutler.v2.verilogir.builder.identifier
 
 import com.uabutler.v2.gaplir.util.ModuleInvocation
 
