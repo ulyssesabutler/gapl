@@ -1,8 +1,10 @@
 package com.uabutler.v2.gaplir.builder
 
+import com.uabutler.util.Named
 import com.uabutler.v2.ast.node.functions.FunctionIONode
 import com.uabutler.v2.ast.node.functions.circuits.*
 import com.uabutler.v2.gaplir.InterfaceStructure
+import com.uabutler.v2.gaplir.builder.util.AnonymousIdentifierGenerator
 import com.uabutler.v2.gaplir.builder.util.ModuleInstantiationTracker
 import com.uabutler.v2.gaplir.builder.util.ProgramContext
 import com.uabutler.v2.gaplir.builder.util.StaticExpressionEvaluator
@@ -99,6 +101,8 @@ class NodeBuilder(val programContext: ProgramContext) {
     ): CircuitExpressionResult {
         when (nodeExpression) {
             is AnonymousNodeCircuitExpressionNode -> {
+                val identifier = AnonymousIdentifierGenerator.genIdentifier()
+
                 val interfaceStructure = programContext.buildInterfaceWithContext(
                     node = nodeExpression.type,
                     interfaceValuesContext = interfaceValuesContext,
@@ -106,12 +110,12 @@ class NodeBuilder(val programContext: ProgramContext) {
                 )
 
                 val node = PassThroughNode(
-                    interfaceStructures = listOf(interfaceStructure),
+                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
                 )
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
                     generatedNodes = GeneratedNodes(
                         anonymousNodes = listOf(node),
                     ),
@@ -130,13 +134,12 @@ class NodeBuilder(val programContext: ProgramContext) {
                 )
 
                 val node = PassThroughNode(
-                    name = identifier,
-                    interfaceStructures = listOf(interfaceStructure),
+                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
                 )
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
                     ),
@@ -149,20 +152,23 @@ class NodeBuilder(val programContext: ProgramContext) {
                 // This identifier could either be another declared node, or it could be a generic
                 existingDeclaredNodes[identifier]?.let {
                     return CircuitExpressionResult(
-                        inputs = it.inputs.map { NodeInputInterfaceProjection(it) },
-                        outputs = it.outputs.map { NodeOutputInterfaceProjection(it) },
+                        inputs = it.inputs.map { NodeInputInterfaceProjection(it.item) },
+                        outputs = it.outputs.map { NodeOutputInterfaceProjection(it.item) },
                     )
                 }
 
+                // Since it's a generic, treat it as an anonymous node
+                // TODO: These should both reference a single function
+                val generatedIdentifier = AnonymousIdentifierGenerator.genIdentifier()
                 val interfaceStructure = interfaceValuesContext[identifier]!!
 
                 val node = PassThroughNode(
-                    interfaceStructures = listOf(interfaceStructure)
+                    interfaceStructures = listOf(Named(generatedIdentifier, interfaceStructure))
                 )
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
                     generatedNodes = GeneratedNodes(
                         anonymousNodes = listOf(node),
                     ),
@@ -175,7 +181,7 @@ class NodeBuilder(val programContext: ProgramContext) {
 
                 // We should be referencing a declared node, which has a single interface
                 val input = referencedNode.inputs.firstOrNull()?.let { input ->
-                    nodeExpression.singleAccesses.fold(input) { currentInput, accessNode ->
+                    nodeExpression.singleAccesses.fold(input.item) { currentInput, accessNode ->
                         when (accessNode) {
                             is MemberAccessOperationNode -> {
                                 assert(currentInput is NodeInputRecordInterface)
@@ -194,7 +200,7 @@ class NodeBuilder(val programContext: ProgramContext) {
                 }
 
                 val output = referencedNode.outputs.firstOrNull()?.let { output ->
-                    nodeExpression.singleAccesses.fold(output) { currentOutput, accessNode ->
+                    nodeExpression.singleAccesses.fold(output.item) { currentOutput, accessNode ->
                         when (accessNode) {
                             is MemberAccessOperationNode -> {
                                 assert(currentOutput is NodeOutputRecordInterface)
@@ -310,13 +316,13 @@ class NodeBuilder(val programContext: ProgramContext) {
                         input.input.connections.forEach {
                             assert(it.destSlice !is WholeVector)
 
-                            val proj_start = (input.projection as VectorSliceProjection).startIndex
-                            val proj_end = (input.projection as VectorSliceProjection).endIndex
+                            val projStart = (input.projection as VectorSliceProjection).startIndex
+                            val projEnd = input.projection.endIndex
 
-                            val conn_start = (it.destSlice as VectorSlice).startIndex
-                            val conn_end = (it.destSlice as VectorSlice).endIndex
+                            val connStart = (it.destSlice as VectorSlice).startIndex
+                            val connEnd = it.destSlice.endIndex
 
-                            assert(proj_start > conn_end || conn_start > proj_end)
+                            assert(projStart > connEnd || connStart > projEnd)
                         }
                     }
 

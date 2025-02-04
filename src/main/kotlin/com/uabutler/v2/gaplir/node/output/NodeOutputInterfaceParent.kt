@@ -21,4 +21,5 @@ data class NodeOutputInterfaceParentRecordInterface(
 data class NodeOutputInterfaceParentNode(
     var parentNode: Node,
     val parentIndex: Int,
+    val parentName: String,
 ): NodeOutputInterfaceParent()

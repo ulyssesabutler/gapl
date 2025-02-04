@@ -14,10 +14,6 @@ import com.uabutler.v2.gaplir.node.output.NodeOutputWireInterface
 sealed class NodeInputInterface {
 
     companion object {
-        fun fromStructures(node: Node, inputInterfaceStructures: List<InterfaceStructure>): List<NodeInputInterface> {
-            return inputInterfaceStructures.map { fromStructure(it) }
-        }
-
         fun fromStructure(interfaceStructure: InterfaceStructure): NodeInputInterface {
             return when (interfaceStructure) {
                 is WireInterfaceStructure -> NodeInputWireInterface()
