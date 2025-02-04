@@ -12,13 +12,6 @@ sealed class NodeOutputInterface {
     abstract val parent: NodeOutputInterfaceParent
 
     companion object {
-        fun fromStructures(node: Node, outputInterfaceStructures: List<InterfaceStructure>): List<NodeOutputInterface> {
-            return outputInterfaceStructures.mapIndexed { index, interfaceStructure ->
-                val parent = NodeOutputInterfaceParentNode(node, index)
-                fromStructure(parent, interfaceStructure)
-            }
-        }
-
         fun fromStructure(parent: NodeOutputInterfaceParent, interfaceStructure: InterfaceStructure): NodeOutputInterface {
             return when (interfaceStructure) {
                 is WireInterfaceStructure -> NodeOutputWireInterface(parent)
