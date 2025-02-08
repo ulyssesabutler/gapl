@@ -8,7 +8,7 @@ plugins {
 }
 
 application {
-    mainClass.set("com.uabutler.v2.CompileKt")
+    mainClass.set("com.uabutler.CompileKt")
     applicationName = "gapl"
 }
 
