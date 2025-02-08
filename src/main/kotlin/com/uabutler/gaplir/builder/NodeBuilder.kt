@@ -1,0 +1,461 @@
+package com.uabutler.gaplir.builder
+
+import com.uabutler.util.Named
+import com.uabutler.ast.node.functions.FunctionIONode
+import com.uabutler.ast.node.functions.circuits.*
+import com.uabutler.gaplir.InterfaceStructure
+import com.uabutler.gaplir.builder.util.AnonymousIdentifierGenerator
+import com.uabutler.gaplir.builder.util.ModuleInstantiationTracker
+import com.uabutler.gaplir.builder.util.ProgramContext
+import com.uabutler.gaplir.builder.util.StaticExpressionEvaluator
+import com.uabutler.gaplir.node.ModuleInputNode
+import com.uabutler.gaplir.node.ModuleOutputNode
+import com.uabutler.gaplir.node.Node
+import com.uabutler.gaplir.node.PassThroughNode
+import com.uabutler.gaplir.node.input.*
+import com.uabutler.gaplir.node.output.NodeOutputInterface
+import com.uabutler.gaplir.node.output.NodeOutputRecordInterface
+import com.uabutler.gaplir.node.output.NodeOutputVectorInterface
+import com.uabutler.gaplir.node.output.NodeOutputWireInterface
+
+class NodeBuilder(val programContext: ProgramContext) {
+
+    data class NodeBuildResult(
+        val nodes: List<Node>,
+        val moduleInstantiations: List<ModuleInstantiationTracker.ModuleInstantiationData>,
+    )
+
+    companion object {
+        private fun getCircuitExpressionsFromCircuitStatement(
+            circuitStatementNode: CircuitStatementNode,
+            parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        ): List<CircuitExpressionNode> {
+            return when (circuitStatementNode) {
+                is NonConditionalCircuitStatementNode -> listOf(circuitStatementNode.statement)
+                is ConditionalCircuitStatementNode -> {
+                    val predicateValue = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                        staticExpression = circuitStatementNode.predicate,
+                        context = parameterValuesContext,
+                    )
+
+                    if (predicateValue != 0) {
+                        circuitStatementNode.ifBody.flatMap {
+                            getCircuitExpressionsFromCircuitStatement(
+                                circuitStatementNode = it,
+                                parameterValuesContext = parameterValuesContext,
+                            )
+                        }
+                    } else {
+                        circuitStatementNode.elseBody.flatMap {
+                            getCircuitExpressionsFromCircuitStatement(
+                                circuitStatementNode = it,
+                                parameterValuesContext = parameterValuesContext,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        fun <K, V> flattenMap(list: List<Map<K, V>>): Map<K, V> =
+            mutableMapOf<K, V>().apply {
+                for (innerMap in list) putAll(innerMap)
+            }
+    }
+
+    sealed class Projection
+
+    data object WholeInterfaceProjection: Projection()
+
+    data class VectorSliceProjection(
+        val startIndex: Int,
+        val endIndex: Int,
+    ): Projection()
+
+    data class NodeInputInterfaceProjection(
+        val input: NodeInputInterface,
+        val projection: Projection = WholeInterfaceProjection,
+    )
+
+    data class NodeOutputInterfaceProjection(
+        val output: NodeOutputInterface,
+        val projection: Projection = WholeInterfaceProjection,
+    )
+
+    data class GeneratedNodes(
+        val declaredNodes: Map<String, Node> = emptyMap(),
+        val anonymousNodes: Collection<Node> = emptyList(),
+    )
+
+    data class CircuitExpressionResult(
+        val inputs: List<NodeInputInterfaceProjection>,
+        val outputs: List<NodeOutputInterfaceProjection>,
+        val generatedNodes: GeneratedNodes = GeneratedNodes(),
+    )
+
+    fun processCircuitNodeExpressionNode(
+        nodeExpression: CircuitNodeExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        existingDeclaredNodes: Map<String, Node>
+    ): CircuitExpressionResult {
+        when (nodeExpression) {
+            is AnonymousNodeCircuitExpressionNode -> {
+                val identifier = AnonymousIdentifierGenerator.genIdentifier()
+
+                val interfaceStructure = programContext.buildInterfaceWithContext(
+                    node = nodeExpression.type,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
+
+                val node = PassThroughNode(
+                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
+                )
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        anonymousNodes = listOf(node),
+                    ),
+                )
+            }
+
+            is DeclaredNodeCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+                // TODO: I think functions calls will get mapped here, and should be handled
+                // TODO: Add the function call to the module instantiations
+
+                val interfaceStructure = programContext.buildInterfaceWithContext(
+                    node = nodeExpression.type,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
+
+                val node = PassThroughNode(
+                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
+                )
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        declaredNodes = mapOf(identifier to node),
+                    ),
+                )
+            }
+
+            is IdentifierCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+
+                // This identifier could either be another declared node, or it could be a generic
+                existingDeclaredNodes[identifier]?.let {
+                    return CircuitExpressionResult(
+                        inputs = it.inputs.map { NodeInputInterfaceProjection(it.item) },
+                        outputs = it.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    )
+                }
+
+                // Since it's a generic, treat it as an anonymous node
+                // TODO: These should both reference a single function
+                val generatedIdentifier = AnonymousIdentifierGenerator.genIdentifier()
+                val interfaceStructure = interfaceValuesContext[identifier]!!
+
+                val node = PassThroughNode(
+                    interfaceStructures = listOf(Named(generatedIdentifier, interfaceStructure))
+                )
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        anonymousNodes = listOf(node),
+                    ),
+                )
+            }
+
+            is ReferenceCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+                val referencedNode = existingDeclaredNodes[identifier]!!
+
+                // We should be referencing a declared node, which has a single interface
+                val input = referencedNode.inputs.firstOrNull()?.let { input ->
+                    nodeExpression.singleAccesses.fold(input.item) { currentInput, accessNode ->
+                        when (accessNode) {
+                            is MemberAccessOperationNode -> {
+                                assert(currentInput is NodeInputRecordInterface)
+                                (currentInput as NodeInputRecordInterface).ports[accessNode.memberIdentifier.value]!!
+                            }
+                            is SingleArrayAccessOperationNode -> {
+                                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                                    staticExpression = accessNode.index,
+                                    context = parameterValuesContext,
+                                )
+                                assert(currentInput is NodeInputVectorInterface)
+                                (currentInput as NodeInputVectorInterface).vector[index]
+                            }
+                        }
+                    }
+                }
+
+                val output = referencedNode.outputs.firstOrNull()?.let { output ->
+                    nodeExpression.singleAccesses.fold(output.item) { currentOutput, accessNode ->
+                        when (accessNode) {
+                            is MemberAccessOperationNode -> {
+                                assert(currentOutput is NodeOutputRecordInterface)
+                                (currentOutput as NodeOutputRecordInterface).ports[accessNode.memberIdentifier.value]!!
+                            }
+                            is SingleArrayAccessOperationNode -> {
+                                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                                    staticExpression = accessNode.index,
+                                    context = parameterValuesContext,
+                                )
+                                assert(currentOutput is NodeOutputVectorInterface)
+                                (currentOutput as NodeOutputVectorInterface).vector[index]
+                            }
+                        }
+                    }
+                }
+
+                val projection = nodeExpression.multipleAccess?.let {
+                    VectorSliceProjection(
+                        startIndex = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                            staticExpression = it.startIndex,
+                            context = parameterValuesContext,
+                        ),
+                        endIndex = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                            staticExpression = it.endIndex,
+                            context = parameterValuesContext,
+                        ),
+                    )
+                } ?: WholeInterfaceProjection
+
+                return CircuitExpressionResult(
+                    inputs = listOfNotNull(
+                        input?.let {
+                            NodeInputInterfaceProjection(
+                                input = it,
+                                projection = projection,
+                            )
+                        },
+                    ),
+                    outputs = listOfNotNull(
+                        output?.let {
+                            NodeOutputInterfaceProjection(
+                                output = it,
+                                projection = projection,
+                            )
+                        },
+                    ),
+                )
+            }
+
+            is RecordInterfaceConstructorExpressionNode -> TODO()
+
+            is CircuitExpressionNodeCircuitExpression -> TODO()
+        }
+    }
+
+    fun processCircuitGroupExpressionNode(
+        groupExpression: CircuitGroupExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        existingDeclaredNodes: Map<String, Node>
+    ): CircuitExpressionResult {
+        val results = groupExpression.expressions.map { node ->
+            processCircuitNodeExpressionNode(node, interfaceValuesContext, parameterValuesContext, existingDeclaredNodes)
+        }
+
+        return CircuitExpressionResult(
+            inputs = results.flatMap { it.inputs },
+            outputs = results.flatMap { it.outputs },
+            generatedNodes = GeneratedNodes(
+                declaredNodes = flattenMap(results.map { it.generatedNodes.declaredNodes }),
+                anonymousNodes = results.flatMap { it.generatedNodes.anonymousNodes },
+            ),
+        )
+    }
+
+    fun createConnections(
+        outputOfCurrent: List<NodeOutputInterfaceProjection>,
+        inputOfNext: List<NodeInputInterfaceProjection>,
+    ) {
+        assert(outputOfCurrent.size == inputOfNext.size)
+        outputOfCurrent.zip(inputOfNext).forEach { (output, input) ->
+            when (input.input) {
+                is NodeInputWireInterface -> {
+                    // Only whole projections supported
+                    assert(input.projection is WholeInterfaceProjection && output.projection is WholeInterfaceProjection)
+                    // We're not assigning to this twice
+                    assert(input.input.input == null)
+                    // Make sure structures match
+                    assert(output.output is NodeOutputWireInterface)
+
+                    // The actual setting
+                    input.input.input = output.output as NodeOutputWireInterface
+                }
+
+                is NodeInputRecordInterface -> {
+                    // Only whole projections supported
+                    assert(input.projection is WholeInterfaceProjection && output.projection is WholeInterfaceProjection)
+                    // We're not assigning to this twice
+                    assert(input.input.input == null)
+                    // TODO: Make sure the structures match
+
+                    // The actual settings
+                    input.input.input = output.output as NodeOutputRecordInterface
+                }
+
+                is NodeInputVectorInterface -> {
+                    // Make sure nothing is being assigned to twice
+                    // Specifically, make sure the input projection doesn't overlap with any of the existing connections
+                    if (input.projection is WholeInterfaceProjection) {
+                        assert(input.input.connections.isEmpty())
+                    } else {
+                        input.input.connections.forEach {
+                            assert(it.destSlice !is WholeVector)
+
+                            val projStart = (input.projection as VectorSliceProjection).startIndex
+                            val projEnd = input.projection.endIndex
+
+                            val connStart = (it.destSlice as VectorSlice).startIndex
+                            val connEnd = it.destSlice.endIndex
+
+                            assert(projStart > connEnd || connStart > projEnd)
+                        }
+                    }
+
+                    // TODO: Make sure the structures match
+
+                    // Compute source slice
+                    val sourceSlice = if (output.projection is VectorSliceProjection) {
+                        VectorSlice(output.projection.startIndex, output.projection.endIndex)
+                    } else {
+                        WholeVector
+                    }
+
+                    // Compute dest slice
+                    val destSlice = if (input.projection is VectorSliceProjection) {
+                        VectorSlice(input.projection.startIndex, input.projection.endIndex)
+                    } else {
+                        WholeVector
+                    }
+
+                    // Create connection
+                    val newConnection = VectorConnection(
+                        sourceVector = output.output as NodeOutputVectorInterface,
+                        sourceSlice = sourceSlice,
+                        destSlice = destSlice,
+                    )
+
+                    input.input.connections.add(newConnection)
+                }
+            }
+        }
+    }
+
+    fun processCircuitConnectionExpressionNode(
+        connectionExpression: CircuitConnectionExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        existingDeclaredNodes: Map<String, Node>
+    ): GeneratedNodes {
+        val allDeclaredNodes = existingDeclaredNodes.toMutableMap()
+        val newDeclaredNodes = mutableMapOf<String, Node>()
+        val anonymousNodes = mutableListOf<Node>()
+
+        // Step 1: Process each group
+        val groups = connectionExpression.connectedExpression.asSequence()
+            .map { processCircuitGroupExpressionNode(it, interfaceValuesContext, parameterValuesContext, allDeclaredNodes) }
+            .onEach { newDeclaredNodes += it.generatedNodes.declaredNodes }
+            .onEach { allDeclaredNodes += it.generatedNodes.declaredNodes }
+            .onEach { anonymousNodes += it.generatedNodes.anonymousNodes }
+            .toList()
+
+        // Step 2: Form the connections between groups
+        groups.zipWithNext().forEach {
+            createConnections(
+                outputOfCurrent = it.first.outputs,
+                inputOfNext = it.second.inputs,
+            )
+        }
+
+        return GeneratedNodes(
+            declaredNodes = newDeclaredNodes,
+            anonymousNodes = anonymousNodes,
+        )
+    }
+
+    fun buildInputNodes(
+        astNodes: List<FunctionIONode>,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+    ): List<ModuleInputNode> {
+        return astNodes.map {
+            val interfaceStructure = programContext.buildInterfaceWithContext(
+                node = it.interfaceType,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+
+            ModuleInputNode(
+                name = it.identifier.value,
+                inputInterfaceStructure = interfaceStructure,
+            )
+        }
+    }
+
+    fun buildOutputNodes(
+        astNodes: List<FunctionIONode>,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+    ): List<ModuleOutputNode> {
+        return astNodes.map {
+            val interfaceStructure = programContext.buildInterfaceWithContext(
+                node = it.interfaceType,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+
+            ModuleOutputNode(
+                name = it.identifier.value,
+                outputInterfaceStructure = interfaceStructure,
+            )
+        }
+    }
+
+    fun buildBodyNodes(
+        astStatements: List<CircuitStatementNode>,
+        inputNodes: List<ModuleInputNode>,
+        outputNodes: List<ModuleOutputNode>,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+    ): NodeBuildResult {
+
+        // Step 1: Let's simplify this a bit by evaluating all the conditionals
+        val circuitExpressions = astStatements.flatMap {
+            getCircuitExpressionsFromCircuitStatement(
+                circuitStatementNode = it,
+                parameterValuesContext = parameterValuesContext,
+            )
+        }
+
+        val ioNodes = inputNodes.associateBy { it.name } + outputNodes.associateBy { it.name }
+        val allDeclaredNodes = ioNodes.toMutableMap()
+        val anonymousNodes = mutableListOf<Node>()
+
+        // Step 2: Process the expressions to create nodes and connect them
+        val results = circuitExpressions.asSequence()
+            .map { processCircuitConnectionExpressionNode(it as CircuitConnectionExpressionNode, interfaceValuesContext, parameterValuesContext, allDeclaredNodes) }
+            .onEach { allDeclaredNodes += it.declaredNodes }
+            .onEach { anonymousNodes += it.anonymousNodes }
+            .toList()
+
+        return NodeBuildResult(
+            nodes = results.flatMap { it.declaredNodes.values } + results.flatMap { it.anonymousNodes },
+            moduleInstantiations = emptyList() // TODO: Once we handle function calls
+        )
+    }
+
+}
