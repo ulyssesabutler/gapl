@@ -100,27 +100,6 @@ class NodeBuilder(val programContext: ProgramContext) {
         existingDeclaredNodes: Map<String, Node>
     ): CircuitExpressionResult {
         when (nodeExpression) {
-            is AnonymousNodeCircuitExpressionNode -> {
-                val identifier = AnonymousIdentifierGenerator.genIdentifier()
-
-                val interfaceStructure = programContext.buildInterfaceWithContext(
-                    node = nodeExpression.type,
-                    interfaceValuesContext = interfaceValuesContext,
-                    parameterValuesContext = parameterValuesContext,
-                )
-
-                val node = PassThroughNode(
-                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
-                )
-
-                return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
-                    generatedNodes = GeneratedNodes(
-                        anonymousNodes = listOf(node),
-                    ),
-                )
-            }
 
             is DeclaredNodeCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
@@ -142,35 +121,6 @@ class NodeBuilder(val programContext: ProgramContext) {
                     outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
-                    ),
-                )
-            }
-
-            is IdentifierCircuitExpressionNode -> {
-                val identifier = nodeExpression.identifier.value
-
-                // This identifier could either be another declared node, or it could be a generic
-                existingDeclaredNodes[identifier]?.let {
-                    return CircuitExpressionResult(
-                        inputs = it.inputs.map { NodeInputInterfaceProjection(it.item) },
-                        outputs = it.outputs.map { NodeOutputInterfaceProjection(it.item) },
-                    )
-                }
-
-                // Since it's a generic, treat it as an anonymous node
-                // TODO: These should both reference a single function
-                val generatedIdentifier = AnonymousIdentifierGenerator.genIdentifier()
-                val interfaceStructure = interfaceValuesContext[identifier]!!
-
-                val node = PassThroughNode(
-                    interfaceStructures = listOf(Named(generatedIdentifier, interfaceStructure))
-                )
-
-                return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
-                    generatedNodes = GeneratedNodes(
-                        anonymousNodes = listOf(node),
                     ),
                 )
             }

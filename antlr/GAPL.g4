@@ -11,6 +11,7 @@ Wire: 'wire';
 Function: 'function';
 Combinational: 'combinational';
 Sequential: 'sequential';
+Declare: 'declare';
 If: 'if';
 Else: 'else';
 Null: 'null';
@@ -158,9 +159,7 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 circuitNodeExpression:
-      Id #identifierCircuitExpression
-    | interfaceExpression #anonymousNodeCircuitExpression
-    | Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+      Declare Id Colon interfaceExpression #declaredInterfaceCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
     | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression

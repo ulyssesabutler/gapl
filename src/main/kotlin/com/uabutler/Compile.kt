@@ -26,7 +26,7 @@ fun test() {
     val programSimplePassthrough2 = """
         function passthrough() i: wire[32] => o: wire[32]
         {
-            i => wire[32] => wire[32] => t: wire[32];
+            i => declare t1: wire[32] => declare t2: wire[32] => declare t: wire[32];
             t => o;
         }
     """.trimIndent()
@@ -155,7 +155,7 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(programSimplePassthrough)
+    val parser = Parser.fromString(programSimplePassthrough2)
     val ast = parser.program()
     val gaplirBuilder = ModuleBuilder(ast)
     val gaplirModules = gaplirBuilder.buildAllModules()
