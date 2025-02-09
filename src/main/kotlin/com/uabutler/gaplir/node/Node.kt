@@ -3,6 +3,7 @@ package com.uabutler.gaplir.node
 import com.uabutler.util.Named
 import com.uabutler.util.StringGenerator.genToStringFromProperties
 import com.uabutler.gaplir.InterfaceStructure
+import com.uabutler.gaplir.builder.util.PredefinedFunction
 import com.uabutler.gaplir.node.input.NodeInputInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
@@ -76,5 +77,13 @@ class ModuleInvocationNode(
         ModuleInvocationNode::functionOutputInterfaces,
     )
 }
+
+class PredefinedFunctionInvocationNode(
+    val invocationName: String,
+    val predefinedFunction: PredefinedFunction,
+): Node(
+    inputInterfaceStructures = predefinedFunction.inputs.map { Named("${invocationName}_${it.key}", it.value) },
+    outputInterfaceStructures = predefinedFunction.outputs.map { Named("${invocationName}_${it.key}", it.value) },
+)
 
 // TODO: Create nodes for built-in functions, register, priority queues, etc.
