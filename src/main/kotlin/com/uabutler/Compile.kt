@@ -64,10 +64,29 @@ fun test() {
         }
     """.trimIndent()
 
-    val interfaceVectorAccess = """
-        function test() i: wire[8][2] => o: wire[8]
+    val interfaceMemberAccesses = """
+        interface data()
         {
-            i[0] => o;
+            first: wire[8];
+            second: wire[8];
+        }
+        
+        interface payload()
+        {
+            data: data();
+            metadata: wire[8];
+        }
+        
+        function test() i: payload() => o: wire[8]
+        {
+            i.data.second => o;
+        }
+    """.trimIndent()
+
+    val interfaceVectorAccess = """
+        function test() i: wire[8][6][4][2] => o: wire[8]
+        {
+            i[1][3][5] => o;
         }
     """.trimIndent()
 
@@ -155,7 +174,7 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(programSimplePassthrough2)
+    val parser = Parser.fromString(interfaceVectorAccess)
     val ast = parser.program()
     val gaplirBuilder = ModuleBuilder(ast)
     val gaplirModules = gaplirBuilder.buildAllModules()
