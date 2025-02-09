@@ -180,18 +180,31 @@ fun test() {
     val programAddAnon = """
         function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
         {
-            i1, i2 => add() => o;
+            i1, i2 => function add() => o;
+        }
+    """.trimIndent()
+
+    val test = """
+        interface payload()
+        {
+            data: wire[32][8];
+            metadata: wire[32];
+        }
+        
+        function combine() i: payload() => o: wire[32]
+        {
+            i.data[1], i.metadata => function add() => o;
         }
     """.trimIndent()
 
     val programRegister = """
         function test_register() i: wire[32] => o: wire[32]
         {
-            i => register() => o;
+            i => function register() => o;
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(function)
+    val parser = Parser.fromString(test)
     val ast = parser.program()
     val gaplirBuilder = ModuleBuilder(ast)
     val gaplirModules = gaplirBuilder.buildAllModules()

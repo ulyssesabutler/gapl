@@ -1,15 +1,14 @@
 package com.uabutler.verilogir.builder
 
-import com.uabutler.gaplir.node.ModuleInvocationNode
-import com.uabutler.gaplir.node.ModuleOutputNode
-import com.uabutler.gaplir.node.Node
-import com.uabutler.gaplir.node.PassThroughNode
+import com.uabutler.gaplir.builder.util.AdditionFunction
+import com.uabutler.gaplir.node.*
 import com.uabutler.gaplir.node.input.*
 import com.uabutler.gaplir.node.output.NodeOutputInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentRecordInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentVectorInterface
 import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.verilogir.builder.node.BinaryOperationConnector
 import com.uabutler.verilogir.builder.node.ModuleInvocationConnector
 import com.uabutler.verilogir.builder.node.PassThroughNodeConnector
 import com.uabutler.verilogir.module.statement.Assignment
@@ -51,6 +50,12 @@ object StatementBuilder {
         return when (node) {
             is PassThroughNode -> PassThroughNodeConnector.connect(node)
             is ModuleInvocationNode -> ModuleInvocationConnector.connect(node)
+            is PredefinedFunctionInvocationNode -> when (node.predefinedFunction) {
+                is AdditionFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                // TODO: Predefined functions
+                // TODO: Subtract
+                // TODO: Multiply
+            }
             else -> emptyList()
         }
     }
