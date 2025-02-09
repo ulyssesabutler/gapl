@@ -19,6 +19,7 @@ class ModuleBuilder(val program: ProgramNode) {
 
     private val nodeBuilder = NodeBuilder(
         programContext = programContext,
+        moduleInstantiationTracker = moduleInstantiationTracker,
     )
 
     fun buildAllModules(): List<Module> {
@@ -32,8 +33,8 @@ class ModuleBuilder(val program: ProgramNode) {
                 moduleInstantiationTracker.visitModule(
                     ModuleInstantiationTracker.ModuleInstantiationData(
                         functionIdentifier = it.identifier.value,
-                        genericInterfaceValues = emptyList(),
-                        genericParameterValues = emptyList(),
+                        genericInterfaceValues = emptyList(), // TODO
+                        genericParameterValues = emptyList(), // TODO
                     )
                 )
             }

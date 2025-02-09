@@ -1,5 +1,6 @@
 package com.uabutler.verilogir.builder
 
+import com.uabutler.gaplir.node.ModuleInvocationNode
 import com.uabutler.gaplir.node.ModuleOutputNode
 import com.uabutler.gaplir.node.Node
 import com.uabutler.gaplir.node.PassThroughNode
@@ -9,6 +10,7 @@ import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentRecordInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentVectorInterface
 import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.verilogir.builder.node.ModuleInvocationConnector
 import com.uabutler.verilogir.builder.node.PassThroughNodeConnector
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
@@ -48,6 +50,7 @@ object StatementBuilder {
     private fun intranodeConnections(node: Node): List<Statement> {
         return when (node) {
             is PassThroughNode -> PassThroughNodeConnector.connect(node)
+            is ModuleInvocationNode -> ModuleInvocationConnector.connect(node)
             else -> emptyList()
         }
     }

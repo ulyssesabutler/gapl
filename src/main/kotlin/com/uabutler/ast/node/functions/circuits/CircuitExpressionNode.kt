@@ -1,6 +1,7 @@
 package com.uabutler.ast.node.functions.circuits
 
 import com.uabutler.ast.node.IdentifierNode
+import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.PersistentNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 
@@ -16,9 +17,18 @@ data class CircuitGroupExpressionNode(
 
 sealed interface CircuitNodeExpressionNode: PersistentNode
 
-data class DeclaredNodeCircuitExpressionNode(
+data class DeclaredInterfaceCircuitExpressionNode(
     val identifier: IdentifierNode,
     val type: InterfaceExpressionNode,
+): CircuitNodeExpressionNode
+
+data class DeclaredFunctionCircuitExpressionNode(
+    val identifier: IdentifierNode,
+    val instantiation: InstantiationNode,
+): CircuitNodeExpressionNode
+
+data class AnonymousFunctionCircuitExpressionNode(
+    val instantiation: InstantiationNode,
 ): CircuitNodeExpressionNode
 
 data class ReferenceCircuitExpressionNode(
