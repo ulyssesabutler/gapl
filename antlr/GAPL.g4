@@ -160,6 +160,8 @@ circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Com
 
 circuitNodeExpression:
       Declare Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+    | Declare Id Colon Function instantiation #declaredFunctionCircuitExpression
+    | Function instantiation #anonymousFunctionCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
     | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression

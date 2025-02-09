@@ -8,17 +8,18 @@ import com.uabutler.gaplir.builder.util.AnonymousIdentifierGenerator
 import com.uabutler.gaplir.builder.util.ModuleInstantiationTracker
 import com.uabutler.gaplir.builder.util.ProgramContext
 import com.uabutler.gaplir.builder.util.StaticExpressionEvaluator
-import com.uabutler.gaplir.node.ModuleInputNode
-import com.uabutler.gaplir.node.ModuleOutputNode
-import com.uabutler.gaplir.node.Node
-import com.uabutler.gaplir.node.PassThroughNode
+import com.uabutler.gaplir.node.*
 import com.uabutler.gaplir.node.input.*
 import com.uabutler.gaplir.node.output.NodeOutputInterface
 import com.uabutler.gaplir.node.output.NodeOutputRecordInterface
 import com.uabutler.gaplir.node.output.NodeOutputVectorInterface
 import com.uabutler.gaplir.node.output.NodeOutputWireInterface
+import com.uabutler.gaplir.util.ModuleInvocation
 
-class NodeBuilder(val programContext: ProgramContext) {
+class NodeBuilder(
+    val programContext: ProgramContext,
+    val moduleInstantiationTracker: ModuleInstantiationTracker
+) {
 
     data class NodeBuildResult(
         val nodes: List<Node>,
@@ -101,10 +102,8 @@ class NodeBuilder(val programContext: ProgramContext) {
     ): CircuitExpressionResult {
         when (nodeExpression) {
 
-            is DeclaredNodeCircuitExpressionNode -> {
+            is DeclaredInterfaceCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
-                // TODO: I think functions calls will get mapped here, and should be handled
-                // TODO: Add the function call to the module instantiations
 
                 val interfaceStructure = programContext.buildInterfaceWithContext(
                     node = nodeExpression.type,
@@ -122,6 +121,64 @@ class NodeBuilder(val programContext: ProgramContext) {
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
                     ),
+                )
+            }
+
+            is DeclaredFunctionCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+
+                val instantiation = moduleInstantiationTracker.visitModule(
+                    ModuleInstantiationTracker.ModuleInstantiationData(
+                        functionIdentifier = nodeExpression.instantiation.definitionIdentifier.value,
+                        genericInterfaceValues = emptyList(), // TODO
+                        genericParameterValues = emptyList(), // TODO
+                    )
+                )
+
+                val node = ModuleInvocationNode(
+                    invokedModuleName = identifier,
+                    moduleInvocation = ModuleInvocation(
+                        gaplFunctionName = nodeExpression.instantiation.definitionIdentifier.value,
+                    ),
+                    functionInputInterfaces = instantiation.input.map { Named(it.key, it.value) },
+                    functionOutputInterfaces = instantiation.output.map { Named(it.key, it.value) },
+                )
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        declaredNodes = mapOf(identifier to node),
+                    )
+                )
+            }
+
+            is AnonymousFunctionCircuitExpressionNode -> {
+                val identifier = AnonymousIdentifierGenerator.genIdentifier()
+
+                val instantiation = moduleInstantiationTracker.visitModule(
+                    ModuleInstantiationTracker.ModuleInstantiationData(
+                        functionIdentifier = nodeExpression.instantiation.definitionIdentifier.value,
+                        genericInterfaceValues = emptyList(), // TODO
+                        genericParameterValues = emptyList(), // TODO
+                    )
+                )
+
+                val node = ModuleInvocationNode(
+                    invokedModuleName = identifier,
+                    moduleInvocation = ModuleInvocation(
+                        gaplFunctionName = nodeExpression.instantiation.definitionIdentifier.value,
+                    ),
+                    functionInputInterfaces = instantiation.input.map { Named(it.key, it.value) },
+                    functionOutputInterfaces = instantiation.output.map { Named(it.key, it.value) },
+                )
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        anonymousNodes = listOf(node)
+                    )
                 )
             }
 

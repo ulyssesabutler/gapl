@@ -57,16 +57,23 @@ class PassThroughNode(
 }
 
 class ModuleInvocationNode(
+    val invokedModuleName: String,
+
     val moduleInvocation: ModuleInvocation,
 
     val functionInputInterfaces: List<Named<InterfaceStructure>>,
     val functionOutputInterfaces: List<Named<InterfaceStructure>>,
-): Node(functionInputInterfaces, functionOutputInterfaces) {
+): Node(
+    inputInterfaceStructures = functionInputInterfaces.map { Named("${invokedModuleName}_${it.name}", it.item) },
+    outputInterfaceStructures = functionOutputInterfaces.map { Named("${invokedModuleName}_${it.name}", it.item) },
+) {
     override fun toString() = genToStringFromProperties(
         instance = this,
         ModuleInvocationNode::moduleInvocation,
         ModuleInvocationNode::inputs,
         ModuleInvocationNode::outputs,
+        ModuleInvocationNode::functionInputInterfaces,
+        ModuleInvocationNode::functionOutputInterfaces,
     )
 }
 

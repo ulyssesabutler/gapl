@@ -24,6 +24,8 @@ object CircuitExpressionVisitor: GAPLVisitor() {
     fun visitCircuitNodeExpression(ctx: GAPLParser.CircuitNodeExpressionContext): CircuitNodeExpressionNode {
         return when (ctx) {
             is GAPLParser.DeclaredInterfaceCircuitExpressionContext -> visitDeclaredInterfaceCircuitExpression(ctx)
+            is GAPLParser.DeclaredFunctionCircuitExpressionContext -> visitDeclaredFunctionCircuitExpression(ctx)
+            is GAPLParser.AnonymousFunctionCircuitExpressionContext -> visitAnonymousFunctionCircuitExpression(ctx)
             is GAPLParser.ReferenceCircuitExpressionContext -> visitReferenceCircuitExpression(ctx)
             is GAPLParser.ParanCircuitExpressionContext -> visitParanCircuitExpression(ctx)
             is GAPLParser.RecordInterfaceConstructorCircuitExpressionContext -> visitRecordInterfaceConstructorCircuitExpression(ctx)
@@ -31,10 +33,23 @@ object CircuitExpressionVisitor: GAPLVisitor() {
         }
     }
 
-    override fun visitDeclaredInterfaceCircuitExpression(ctx: GAPLParser.DeclaredInterfaceCircuitExpressionContext): DeclaredNodeCircuitExpressionNode {
-         return DeclaredNodeCircuitExpressionNode(
+    override fun visitDeclaredInterfaceCircuitExpression(ctx: GAPLParser.DeclaredInterfaceCircuitExpressionContext): DeclaredInterfaceCircuitExpressionNode {
+         return DeclaredInterfaceCircuitExpressionNode(
             identifier = TokenVisitor.visitId(ctx.Id()),
             type = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
+        )
+    }
+
+    override fun visitDeclaredFunctionCircuitExpression(ctx: GAPLParser.DeclaredFunctionCircuitExpressionContext): DeclaredFunctionCircuitExpressionNode {
+        return DeclaredFunctionCircuitExpressionNode(
+            identifier = TokenVisitor.visitId(ctx.Id()),
+            instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
+        )
+    }
+
+    override fun visitAnonymousFunctionCircuitExpression(ctx: GAPLParser.AnonymousFunctionCircuitExpressionContext): AnonymousFunctionCircuitExpressionNode {
+        return AnonymousFunctionCircuitExpressionNode(
+            instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
         )
     }
 
