@@ -90,10 +90,10 @@ object StatementBuilder {
             val destIndex = connection.connection.currentInputLocation.index
 
             src.zip(dest).map { (src, dest) ->
-                var destStartIndexOffset = destIndex * destSize
-                var destEndIndexOffset = destIndex * destSize
-                var srcStartIndexOffset = srcIndex * srcSize
-                var srcEndIndexOffset = srcIndex * srcSize
+                var destStartIndexOffset = destIndex * dest.width
+                var destEndIndexOffset = destIndex * dest.width
+                var srcStartIndexOffset = srcIndex * src.width
+                var srcEndIndexOffset = srcIndex * src.width
 
                 connection.connection.vectorConnection?.let {
                     if (it.destSlice is VectorSlice) {
