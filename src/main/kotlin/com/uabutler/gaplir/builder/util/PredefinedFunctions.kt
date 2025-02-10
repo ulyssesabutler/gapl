@@ -14,6 +14,10 @@ sealed class PredefinedFunction(
         fun searchPredefinedFunctions(instantiationData: ModuleInstantiationTracker.ModuleInstantiationData): PredefinedFunction? {
             return when (instantiationData.functionIdentifier) {
                 "add" -> AdditionFunction(wire32bit(), wire32bit(), wire32bit())
+                "subtract" -> SubtractionFunction(wire32bit(), wire32bit(), wire32bit())
+                "multiply" -> MultiplicationFunction(wire32bit(), wire32bit(), wire32bit())
+                "left_shift" -> LeftShiftFunction(wire32bit(), wire32bit(), wire32bit())
+                "right_shift" -> RightShiftFunction(wire32bit(), wire32bit(), wire32bit())
                 else -> null
             }
         }
@@ -30,6 +34,30 @@ sealed class BinaryOperationFunction(
 )
 
 data class AdditionFunction(
+    override val lhs: VectorInterfaceStructure,
+    override val rhs: VectorInterfaceStructure,
+    override val result: VectorInterfaceStructure,
+): BinaryOperationFunction(lhs, rhs, result)
+
+data class SubtractionFunction(
+    override val lhs: VectorInterfaceStructure,
+    override val rhs: VectorInterfaceStructure,
+    override val result: VectorInterfaceStructure,
+): BinaryOperationFunction(lhs, rhs, result)
+
+data class MultiplicationFunction(
+    override val lhs: VectorInterfaceStructure,
+    override val rhs: VectorInterfaceStructure,
+    override val result: VectorInterfaceStructure,
+): BinaryOperationFunction(lhs, rhs, result)
+
+data class RightShiftFunction(
+    override val lhs: VectorInterfaceStructure,
+    override val rhs: VectorInterfaceStructure,
+    override val result: VectorInterfaceStructure,
+): BinaryOperationFunction(lhs, rhs, result)
+
+data class LeftShiftFunction(
     override val lhs: VectorInterfaceStructure,
     override val rhs: VectorInterfaceStructure,
     override val result: VectorInterfaceStructure,

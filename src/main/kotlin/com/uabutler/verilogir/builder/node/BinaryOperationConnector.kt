@@ -1,7 +1,6 @@
 package com.uabutler.verilogir.builder.node
 
-import com.uabutler.gaplir.builder.util.AdditionFunction
-import com.uabutler.gaplir.builder.util.BinaryOperationFunction
+import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.PredefinedFunctionInvocationNode
 import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
 import com.uabutler.verilogir.module.statement.Assignment
@@ -15,6 +14,10 @@ object BinaryOperationConnector {
     private fun getOperation(function: BinaryOperationFunction): BinaryOperator {
         return when (function) {
             is AdditionFunction -> BinaryOperator.ADD
+            is SubtractionFunction -> BinaryOperator.SUBTRACT
+            is MultiplicationFunction -> BinaryOperator.MULTIPLY
+            is RightShiftFunction -> BinaryOperator.RIGHT_SHIFT
+            is LeftShiftFunction -> BinaryOperator.LEFT_SHIFT
         }
     }
 

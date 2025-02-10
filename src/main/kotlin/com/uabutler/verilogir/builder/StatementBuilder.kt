@@ -1,6 +1,6 @@
 package com.uabutler.verilogir.builder
 
-import com.uabutler.gaplir.builder.util.AdditionFunction
+import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.*
 import com.uabutler.gaplir.node.input.*
 import com.uabutler.gaplir.node.output.NodeOutputInterface
@@ -52,9 +52,10 @@ object StatementBuilder {
             is ModuleInvocationNode -> ModuleInvocationConnector.connect(node)
             is PredefinedFunctionInvocationNode -> when (node.predefinedFunction) {
                 is AdditionFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
-                // TODO: Predefined functions
-                // TODO: Subtract
-                // TODO: Multiply
+                is LeftShiftFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is MultiplicationFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is RightShiftFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is SubtractionFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
             }
             else -> emptyList()
         }
