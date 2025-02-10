@@ -193,7 +193,9 @@ fun test() {
         
         function combine() i: payload() => o: wire[32]
         {
-            i.data[1], i.metadata => function right_shift() => o;
+            i.data[1], i.metadata => function right_shift() => declare t: wire[32];
+            
+            t => function register() => o;
         }
     """.trimIndent()
 

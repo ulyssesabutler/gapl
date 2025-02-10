@@ -64,6 +64,6 @@ data class Always(
         val statements = statements.joinToString("\n") { it.verilogSerialize() }
         appendLine(statements.prependIndent())
 
-        appendLine("end")
+        append("end")
     }
 }

@@ -11,6 +11,7 @@ import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
 import com.uabutler.verilogir.builder.node.BinaryOperationConnector
 import com.uabutler.verilogir.builder.node.ModuleInvocationConnector
 import com.uabutler.verilogir.builder.node.PassThroughNodeConnector
+import com.uabutler.verilogir.builder.node.RegisterConnector
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
 import com.uabutler.verilogir.module.statement.Statement
@@ -56,6 +57,7 @@ object StatementBuilder {
                 is MultiplicationFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is RightShiftFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is SubtractionFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is RegisterFunction -> RegisterConnector.connect(node, node.predefinedFunction)
             }
             else -> emptyList()
         }
