@@ -31,7 +31,7 @@ data class IfStatement(
 ): AlwaysStatement() {
     override fun verilogSerialize() = buildString {
         appendLine("if (${ifBranch.condition.verilogSerialize()}) begin")
-        val ifStatements = buildString { ifBranch.then.forEach { appendLine(it.verilogSerialize()) } }
+        val ifStatements = ifBranch.then.joinToString("\n") { it.verilogSerialize() }
         appendLine(ifStatements.prependIndent())
 
         val elseIfBranches = elseIfBranches.forEach { elseIfBranch ->
@@ -39,12 +39,11 @@ data class IfStatement(
             val statements = buildString { elseIfBranch.then.forEach { appendLine(it.verilogSerialize()) } }
             appendLine(statements.prependIndent())
         }
-        appendLine(elseIfBranches)
 
         appendLine("end else begin")
-        val elseStatements = buildString { elseStatements.forEach { appendLine(it.verilogSerialize()) } }
+        val elseStatements = elseStatements.joinToString("\n") { it.verilogSerialize() }
         appendLine(elseStatements.prependIndent())
 
-        appendLine("end")
+        append("end")
     }
 }

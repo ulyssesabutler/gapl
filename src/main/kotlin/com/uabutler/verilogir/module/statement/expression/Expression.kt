@@ -18,6 +18,12 @@ data class Reference(
     }
 }
 
+data class IntLiteral(
+    val value: Int,
+): Expression() {
+    override fun verilogSerialize() = value.toString()
+}
+
 data class BinaryOperation(
     val lhs: Expression,
     val rhs: Expression,

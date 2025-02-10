@@ -18,6 +18,7 @@ sealed class PredefinedFunction(
                 "multiply" -> MultiplicationFunction(wire32bit(), wire32bit(), wire32bit())
                 "left_shift" -> LeftShiftFunction(wire32bit(), wire32bit(), wire32bit())
                 "right_shift" -> RightShiftFunction(wire32bit(), wire32bit(), wire32bit())
+                "register" -> RegisterFunction(wire32bit())
                 else -> null
             }
         }
@@ -34,31 +35,38 @@ sealed class BinaryOperationFunction(
 )
 
 data class AdditionFunction(
-    override val lhs: VectorInterfaceStructure,
-    override val rhs: VectorInterfaceStructure,
-    override val result: VectorInterfaceStructure,
+    override val lhs: InterfaceStructure,
+    override val rhs: InterfaceStructure,
+    override val result: InterfaceStructure,
 ): BinaryOperationFunction(lhs, rhs, result)
 
 data class SubtractionFunction(
-    override val lhs: VectorInterfaceStructure,
-    override val rhs: VectorInterfaceStructure,
-    override val result: VectorInterfaceStructure,
+    override val lhs: InterfaceStructure,
+    override val rhs: InterfaceStructure,
+    override val result: InterfaceStructure,
 ): BinaryOperationFunction(lhs, rhs, result)
 
 data class MultiplicationFunction(
-    override val lhs: VectorInterfaceStructure,
-    override val rhs: VectorInterfaceStructure,
-    override val result: VectorInterfaceStructure,
+    override val lhs: InterfaceStructure,
+    override val rhs: InterfaceStructure,
+    override val result: InterfaceStructure,
 ): BinaryOperationFunction(lhs, rhs, result)
 
 data class RightShiftFunction(
-    override val lhs: VectorInterfaceStructure,
-    override val rhs: VectorInterfaceStructure,
-    override val result: VectorInterfaceStructure,
+    override val lhs: InterfaceStructure,
+    override val rhs: InterfaceStructure,
+    override val result: InterfaceStructure,
 ): BinaryOperationFunction(lhs, rhs, result)
 
 data class LeftShiftFunction(
-    override val lhs: VectorInterfaceStructure,
-    override val rhs: VectorInterfaceStructure,
-    override val result: VectorInterfaceStructure,
+    override val lhs: InterfaceStructure,
+    override val rhs: InterfaceStructure,
+    override val result: InterfaceStructure,
 ): BinaryOperationFunction(lhs, rhs, result)
+
+data class RegisterFunction(
+    val storageStructure: InterfaceStructure,
+): PredefinedFunction(
+    inputs = mapOf("next" to storageStructure),
+    outputs = mapOf("current" to storageStructure),
+)
