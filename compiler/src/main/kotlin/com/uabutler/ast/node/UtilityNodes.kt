@@ -1,5 +1,6 @@
 package com.uabutler.ast.node
 
+import com.uabutler.ast.node.functions.AbstractFunctionIONode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 
@@ -17,7 +18,7 @@ data class GenericInterfaceDefinitionNode(
 
 data class GenericParameterDefinitionNode(
     val identifier: IdentifierNode,
-    val typeIdentifier: IdentifierNode,
+    val type: GenericParameterTypeNode,
 ): PersistentNode
 
 data class GenericInterfaceDefinitionListNode(val interfaces: List<GenericInterfaceDefinitionNode>): TemporaryNode
@@ -27,12 +28,29 @@ data class GenericInterfaceValueNode(
     val value: InterfaceExpressionNode,
 ): PersistentNode
 
-data class GenericParameterValueNode(
+sealed interface GenericParameterValueNode: PersistentNode
+
+data class StaticExpressionGenericParameterValueNode(
     val value: StaticExpressionNode,
-): PersistentNode
+): GenericParameterValueNode
+
+data class FunctionInstantiationGenericParameterValueNode(
+    val instantiation: InstantiationNode,
+): GenericParameterValueNode
 
 data class GenericInterfaceValueListNode(val interfaces: List<GenericInterfaceValueNode>): TemporaryNode
 data class GenericParameterValueListNode(val parameters: List<GenericParameterValueNode>): TemporaryNode
+
+sealed interface GenericParameterTypeNode: PersistentNode
+
+data class IdentifierGenericParameterTypeNode(
+    val identifier: IdentifierNode,
+): GenericParameterTypeNode
+
+data class FunctionGenericParameterTypeNode(
+    val inputFunctionIO: List<AbstractFunctionIONode>,
+    val outputFunctionIO: List<AbstractFunctionIONode>,
+): GenericParameterTypeNode
 
 data class VectorBoundsNode(
     val boundSpecifier: StaticExpressionNode,

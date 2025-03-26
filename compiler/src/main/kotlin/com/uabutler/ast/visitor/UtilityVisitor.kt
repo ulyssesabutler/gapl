@@ -1,6 +1,13 @@
 package com.uabutler.ast.visitor
 
 import com.uabutler.ast.node.*
+import com.uabutler.ast.node.functions.EmptyAbstractFunctionIOListNode
+import com.uabutler.ast.node.functions.EmptyFunctionIOListNode
+import com.uabutler.ast.node.functions.NonEmptyAbstractFunctionIOListNode
+import com.uabutler.ast.node.functions.NonEmptyFunctionIOListNode
+import com.uabutler.ast.visitor.FunctionVisitor.visitAbstractFunctionIOList
+import com.uabutler.ast.visitor.FunctionVisitor.visitFunctionIOList
+import com.uabutler.ast.visitor.StaticExpressionVisitor.visitStaticExpression
 import com.uabutler.parsers.generated.GAPLParser
 
 object UtilityVisitor: GAPLVisitor() {
@@ -20,7 +27,38 @@ object UtilityVisitor: GAPLVisitor() {
     override fun visitGenericParameterDefinition(ctx: GAPLParser.GenericParameterDefinitionContext): GenericParameterDefinitionNode {
         return GenericParameterDefinitionNode(
             identifier = TokenVisitor.visitId(ctx.identifier),
-            typeIdentifier = TokenVisitor.visitId(ctx.typeIdentifier),
+            type = visitGenericParameter(ctx.genericParameterType())
+        )
+    }
+
+    fun visitGenericParameter(ctx: GAPLParser.GenericParameterTypeContext): GenericParameterTypeNode {
+        return when (ctx) {
+            is GAPLParser.IdGenericParameterTypeContext -> visitIdGenericParameterType(ctx)
+            is GAPLParser.FunctionGenericParameterTypeContext -> visitFunctionGenericParameterType(ctx)
+            else -> throw Exception("Unexpected parameter type")
+        }
+    }
+
+    override fun visitIdGenericParameterType(ctx: GAPLParser.IdGenericParameterTypeContext): IdentifierGenericParameterTypeNode {
+        return IdentifierGenericParameterTypeNode(
+            identifier = TokenVisitor.visitId(ctx.Id()),
+        )
+    }
+
+    override fun visitFunctionGenericParameterType(ctx: GAPLParser.FunctionGenericParameterTypeContext): FunctionGenericParameterTypeNode {
+        val input = when(val listNode = visitAbstractFunctionIOList(ctx.input!!)) {
+            is EmptyAbstractFunctionIOListNode -> emptyList()
+            is NonEmptyAbstractFunctionIOListNode -> listNode.functionIO
+        }
+
+        val output = when(val listNode = visitAbstractFunctionIOList(ctx.output!!)) {
+            is EmptyAbstractFunctionIOListNode -> emptyList()
+            is NonEmptyAbstractFunctionIOListNode -> listNode.functionIO
+        }
+
+        return FunctionGenericParameterTypeNode(
+            inputFunctionIO = input,
+            outputFunctionIO = output,
         )
     }
 
@@ -40,7 +78,27 @@ object UtilityVisitor: GAPLVisitor() {
 
     override fun visitGenericParameterValueList(ctx: GAPLParser.GenericParameterValueListContext): GenericParameterValueListNode {
         return GenericParameterValueListNode(
-            ctx.staticExpression().map { GenericParameterValueNode(StaticExpressionVisitor.visitStaticExpression(it)) }
+            ctx.genericParameterValue().map { visitGenericParameterValue(it) }
+        )
+    }
+
+    fun visitGenericParameterValue(ctx: GAPLParser.GenericParameterValueContext): GenericParameterValueNode {
+        return when (ctx) {
+            is GAPLParser.StaticExpressionGenericParameterValueContext -> visitStaticExpressionGenericParameterValue(ctx)
+            is GAPLParser.FunctionInstantiationGenericParameterValueContext -> visitFunctionInstantiationGenericParameterValue(ctx)
+            else -> throw Exception("Unexpected generic parameter value")
+        }
+    }
+
+    override fun visitStaticExpressionGenericParameterValue(ctx: GAPLParser.StaticExpressionGenericParameterValueContext): StaticExpressionGenericParameterValueNode {
+        return StaticExpressionGenericParameterValueNode(
+            value = StaticExpressionVisitor.visitStaticExpression(ctx.staticExpression())
+        )
+    }
+
+    override fun visitFunctionInstantiationGenericParameterValue(ctx: GAPLParser.FunctionInstantiationGenericParameterValueContext): FunctionInstantiationGenericParameterValueNode {
+        return FunctionInstantiationGenericParameterValueNode(
+            instantiation = visitInstantiation(ctx.instantiation())
         )
     }
 
