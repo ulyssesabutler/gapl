@@ -1,209 +1,76 @@
 package com.uabutler
 
+import java.io.File
 import kotlin.system.exitProcess
 
-fun cli(args: Array<String>) {
-    if (args.size != 1) {
-        println("Usage: gapl FILENAME")
-        exitProcess(1)
-    }
-
-    val fileName = args[0]
-    println("Compiling file: $fileName")
+fun parseArgs(args: Array<String>): Map<String, List<String>> {
+    // https://stackoverflow.com/questions/53946908/functional-style-main-function-argument-parsing-for-kotlin
+    return args.fold(Pair(emptyMap<String, List<String>>(), "")) { (map, lastKey), elem ->
+        if (elem.startsWith("-"))  Pair(map + (elem to emptyList()), elem)
+        else Pair(map + (lastKey to map.getOrDefault(lastKey, emptyList()) + elem), lastKey)
+    }.first
 }
 
-fun test() {
-    val programSimplePassthrough = """
-        function passthrough() i: wire[32] => o: wire[32]
-        {
-            i => o;
-        }
-    """.trimIndent()
+fun compile(inputFiles: List<String>, outputFile: String) {
+    val gapl = inputFiles.joinToString("\n") { File(it).readText() }
+    val verilog = Compiler.compile(gapl)
 
-    val programSimplePassthrough2 = """
-        function passthrough() i: wire[32] => o: wire[32]
-        {
-            i => declare t1: wire[32] => declare t2: wire[32] => declare t: wire[32];
-            t => o;
-        }
-    """.trimIndent()
+    File(outputFile).writeText(verilog)
+}
 
-    val programDoublePassthrough = """
-        function passthrough() i1: wire[32], i2: wire[32] => o1: wire[32], o2: wire[32]
-        {
-            i1, i2 => o1, o2;
-        }
-    """.trimIndent()
+fun test(inputDirectory: String) {
+    File(inputDirectory).listFiles()?.forEach { file ->
+        val name = file.name
 
-    val interfaces = """
-        interface payload()
-        {
-            data: wire[8];
-            metadata: wire[8];
-        }
-        
-        function test() i: payload() => o: payload()
-        {
-            i => o;
-        }
-    """.trimIndent()
+        val gapl = file.readText()
 
-    val function = """
-        function test1() i: wire[8] => o: wire[8]
-        {
-            i => o;
-        }
-        
-        function test2() i: wire[8] => o: wire[8]
-        {
-            i => function test1() => o;
-        }
-    """.trimIndent()
+        print("\u001b[31m")
+        println("############################")
+        print("#### TEST: ")
+        print("\u001b[0m")
 
-    val interfaceMemberAccess = """
-        interface payload()
-        {
-            data: wire[8];
-            metadata: wire[8];
-        }
-        
-        function test() i: payload() => o: wire[8]
-        {
-            i.data => o;
-        }
-    """.trimIndent()
+        print("\u001b[35m")
+        println(name)
+        print("\u001b[0m")
 
-    val interfaceMemberAccesses = """
-        interface data()
-        {
-            first: wire[8];
-            second: wire[8];
-        }
-        
-        interface payload()
-        {
-            data: data();
-            metadata: wire[8];
-        }
-        
-        function test1() i: payload() => o: wire[8]
-        {
-            i.data.first => o;
-        }
-        
-        function test2() i: payload() => o: wire[8]
-        {
-            i.data.second => o;
-        }
-    """.trimIndent()
+        print("\u001b[32m")
+        println("## GAPL ##\n")
+        print("\u001b[0m")
 
-    val interfaceVectorAccess = """
-        function test() i: wire[8][6][4][2] => o: wire[8]
-        {
-            i[1][3][5] => o;
-        }
-    """.trimIndent()
+        print("\u001b[36m")
+        println(gapl)
+        print("\u001b[0m")
 
+        val verilog = Compiler.compile(gapl)
 
-    val programInterfaces = """
-        interface sub_payload()
-        {
-            first: wire[8];
-            second: wire[8];
-        }
-        
-        interface payload()
-        {
-            a: sub_payload();
-            b: sub_payload();
-        }
-        
-        interface data_stream()
-        {
-            data: payload()[8];
-            metadata: wire[16];
-        }
-        
-        function sub() i: data_stream() => o: data_stream()
-        {
-            i => o;
-        }
-        
-        function test() i: data_stream() => o: data_stream() 
-        {
-            t: data_stream();
-            i => sub() => t;
-            t => o;
-        }
-    """.trimIndent()
+        print("\u001b[32m")
+        println("\n## VERILOG ##\n")
+        print("\u001b[0m")
 
-    val programMultipleInterfaces = """
-        interface payload()
-        {
-            data: wire[32];
-            metadata: wire[16];
-        }
-        
-        function sub() s1: payload(), s2: payload() => so: payload()
-        {
-            s1 => so;
-        }
-        
-        function test() t1: payload(), t2: payload() => to: payload() 
-        {
-            t1, t2 => sub() => to;
-        }
-    """.trimIndent()
+        print("\u001b[34m")
+        println(verilog)
+        print("\u001b[0m")
+    }
+}
 
-    val programMyAdd = """
-        function my_add() a1: wire[32], a2: wire[32] => o1: wire[32]
-        {
-            a1 => o1;
-        }
-        
-        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
-        {
-            i1, i2 => my_add() => o;
-        }
-    """.trimIndent()
+fun cli(args: Array<String>) {
+    val parsedArgs = parseArgs(args)
 
-    val programAddNamed = """
-        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
-        {
-            i1, i2 => addition: add() => o;
-        }
-    """.trimIndent()
+    if (parsedArgs.containsKey("-i") && parsedArgs.containsKey("-o")) {
+        val inputFiles = parsedArgs["-i"]!!
+        val outputFile = parsedArgs["-o"]!!.first()
 
-    val programAddAnon = """
-        function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
-        {
-            i1, i2 => function add() => o;
-        }
-    """.trimIndent()
+        compile(inputFiles, outputFile)
+    } else if (parsedArgs.containsKey("--test")) {
+        val input = parsedArgs["--test"]!!.first()
 
-    val test = """
-        interface payload()
-        {
-            data: wire[32][8];
-            metadata: wire[32];
-        }
-        
-        function combine() i: payload() => o: wire[32]
-        {
-            i.data[1], i.metadata => function right_shift() => declare t: wire[32];
-            
-            t => function register() => o;
-        }
-    """.trimIndent()
-
-    val programRegister = """
-        function test_register() i: wire[32] => o: wire[32]
-        {
-            i => function register() => o;
-        }
-    """.trimIndent()
-
-    println(Compiler.compile(test))
+        test(input)
+    } else {
+        println("Usage:")
+        println("  gapl -i INPUT_FILENAME[...] -o OUTPUT_FILENAME")
+        println("  gapl --test INPUT_DIRECTORY")
+        exitProcess(1)
+    }
 }
 
 fun main(args : Array<String>) = cli(args)
