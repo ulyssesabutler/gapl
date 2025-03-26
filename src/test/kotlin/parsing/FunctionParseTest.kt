@@ -1,25 +1,20 @@
 package parsing
 
-import com.uabutler.v1.Parser
-import com.uabutler.v1.ast.GenericInterfaceDefinitionNode
-import com.uabutler.v1.ast.GenericParameterDefinitionNode
-import com.uabutler.v1.ast.IdentifierNode
-import com.uabutler.v1.ast.functions.DefaultFunctionIOTypeNode
-import com.uabutler.v1.ast.functions.FunctionDefinitionNode
-import com.uabutler.v1.ast.functions.FunctionIONode
-import com.uabutler.v1.ast.interfaces.WireInterfaceExpressionNode
-import com.uabutler.v1.visitor.FunctionVisitor
+import com.uabutler.Parser
+import com.uabutler.ast.node.GenericInterfaceDefinitionNode
+import com.uabutler.ast.node.GenericParameterDefinitionNode
+import com.uabutler.ast.node.IdentifierNode
+import com.uabutler.ast.node.functions.DefaultFunctionIOTypeNode
+import com.uabutler.ast.node.functions.FunctionDefinitionNode
+import com.uabutler.ast.node.functions.FunctionIONode
+import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 class FunctionParseTest {
 
     private fun parseFunctionDefinition(input: String): FunctionDefinitionNode {
-        return FunctionVisitor
-            .visitFunctionDefinition(
-                Parser.fromString(input)
-                    .functionDefinition()
-            )
+        return Parser.fromString(input).functionDefinition()
     }
 
     private fun testFunctionDefinition(input: String, expected: FunctionDefinitionNode) {

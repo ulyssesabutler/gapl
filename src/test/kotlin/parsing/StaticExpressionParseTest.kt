@@ -1,20 +1,16 @@
 package parsing
 
-import com.uabutler.v1.Parser
-import com.uabutler.v1.ast.IdentifierNode
-import com.uabutler.v1.ast.IntegerLiteralNode
-import com.uabutler.ast.staticexpressions.*
-import com.uabutler.v1.ast.staticexpressions.*
-import com.uabutler.v1.visitor.StaticExpressionVisitor
+import com.uabutler.Parser
+import com.uabutler.ast.node.IdentifierNode
+import com.uabutler.ast.node.IntegerLiteralNode
+import com.uabutler.ast.node.staticexpressions.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class StaticExpressionParseTest {
 
     private fun parseStaticExpression(input: String): StaticExpressionNode {
-        val parser = Parser.fromString(input)
-        val staticExpression = parser.staticExpression()
-        return StaticExpressionVisitor.visitStaticExpression(staticExpression)
+        return Parser.fromString(input).staticExpression()
     }
 
     private fun testStaticExpression(input: String, expected: StaticExpressionNode) {
