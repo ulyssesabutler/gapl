@@ -78,7 +78,12 @@ genericInterfaceDefinitionList: (AngleL (Id Comma)* Id? AngleR)?;
 
 genericParameterDefinitionList: ParanL (genericParameterDefinition Comma)* genericParameterDefinition? ParanR | ParanL ParanR;
 
-genericParameterDefinition: Parameter identifier=Id Colon typeIdentifier=Id;
+genericParameterDefinition: Parameter identifier=Id Colon type=genericParameterType;
+
+genericParameterType:
+      Id #idGenericParameterType
+    | Function input=functionIOList Connector output=functionIOList #functionGenericParameterType
+;
 
 genericInterfaceValueList: (interfaceExpression Comma)* interfaceExpression?;
 
@@ -132,11 +137,17 @@ functionDefinition:
 
 functionType: (Sequential | Combinational)?;
 
+abstractFunctionIOList:
+      Null #emptyAbstractFunctionIOList
+    | functionIO (Comma functionIO)* Comma? #nonEmptyAbstractFunctionIOList;
+
 functionIOList:
       Null #emptyFunctionIOList
-    | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList;
+    | abstractFunctionIO (Comma abstractFunctionIO)* Comma? #nonEmptyFunctionIOList;
 
 functionIO: functionIOType Id Colon interfaceExpression;
+
+abstractFunctionIO: functionIOType interfaceExpression;
 
 functionIOType: (Sequential | Combinational)?;
 
