@@ -1,13 +1,10 @@
 package com.uabutler
 
-import com.uabutler.gaplir.builder.ModuleBuilder
-import com.uabutler.verilogir.builder.VerilogBuilder
 import kotlin.system.exitProcess
 
-fun compile(args: Array<String>) {
+fun cli(args: Array<String>) {
     if (args.size != 1) {
-        println("Usage: gapl [filename]")
-        println("Received: [${args.joinToString(",")}]")
+        println("Usage: gapl FILENAME")
         exitProcess(1)
     }
 
@@ -206,12 +203,8 @@ fun test() {
         }
     """.trimIndent()
 
-    val parser = Parser.fromString(test)
-    val ast = parser.program()
-    val gaplirBuilder = ModuleBuilder(ast)
-    val gaplirModules = gaplirBuilder.buildAllModules()
-    val verilogirModules = gaplirModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
-    verilogirModules.forEach { println(it.verilogSerialize()) }
+    println(Compiler.compile(test))
 }
 
-fun main(args: Array<String>) = test()
+fun main(args : Array<String>) = cli(args)
+// fun main(args : Array<String>) = test()

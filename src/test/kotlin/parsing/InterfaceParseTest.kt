@@ -1,23 +1,16 @@
 package parsing
 
-import com.uabutler.v1.Parser
-import com.uabutler.ast.*
-import com.uabutler.ast.interfaces.*
-import com.uabutler.v1.ast.*
-import com.uabutler.v1.ast.interfaces.*
-import com.uabutler.v1.ast.staticexpressions.IntegerLiteralStaticExpressionNode
-import com.uabutler.v1.visitor.InterfaceVisitor
+import com.uabutler.Parser
+import com.uabutler.ast.node.*
+import com.uabutler.ast.node.interfaces.*
+import com.uabutler.ast.node.staticexpressions.IntegerLiteralStaticExpressionNode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class InterfaceParseTest {
 
     private fun parseInterfaceDefinition(input: String): InterfaceDefinitionNode {
-        return InterfaceVisitor
-            .visitInterfaceDefinition(
-                Parser.fromString(input)
-                    .interfaceDefinition()
-            )
+        return Parser.fromString(input).interfaceDefinition()
     }
 
     private fun testInterfaceDefinition(input: String, expected: InterfaceDefinitionNode) {
