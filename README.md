@@ -11,7 +11,7 @@ These subproject are, in order
   - Source: Kotlin
   - Generates: GAPL → Verilog compiler
 - GAPL Example Source Code
-  - Directory: `gapl-src`
+  - Directory: `gapl-example`
   - Source: GAPL code
   - Generates: Verilog code to process data
 - Basys 3 Test Harness
