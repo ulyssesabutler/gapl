@@ -1,21 +1,54 @@
 # Gate Array Programming Language [WIP]
 
-## Testing
+This project is seperated into multiple different subproject, each of which depend on the last.
+These subproject are, in order
+- Lexer / Parser
+  - Directory: `antlr`
+  - Source: .g4 files
+  - Generates: ANTLR visitors, listeners, and parsers in Kotlin
+- Compiler
+  - Directory: `compiler`
+  - Source: Kotlin
+  - Generates: GAPL → Verilog compiler
+- GAPL Example Source Code
+  - Directory: `gapl-src`
+  - Source: GAPL code
+  - Generates: Verilog code to process data
+- Basys 3 Test Harness
+  - Directory: `basys`
+  - Source: Verilog code to send data to the module produced from the last step
+  - Generates: A bitstream to flash to the Basys 3
 
-Tests for this project can be found in the `src/test` directory.
-To run them, using gradle
+The compiler is the primary artifact of this project.
+The lexer/parser just builds dependencies for the compiler, and the gapl example and Basys 3 test harness are just used to test that compiler.
 
-```text
-./gradlew test
+This project is managed through gradle.
+Specifically, all the build steps can be run through the gradle wrapper script, `./gradlew`
+
+Gradle allows you to run tasks from each subproject individually.
+For example, if you just want to run the source generation script of the lexer/parser subproject, you can run
+```bash
+./gradlew :antlr:generateKotlinGrammarSource
 ```
 
-## Building
+If you want to run the full pipeline, this can be accomplished using
+```bash
+./gradlew build
+```
 
-This project is managed using the Gradle build system.
-To build this project so you can use the command line application, you can use the included gradle wrapper script.
+And, as usual, you can remove the build artifacts using
+```bash
+./gradlew clean
+```
+
+Below are a few specific, helpful commands.
+
+## Build Compiler
+
+If you just want to build the executable gapl compiler (which, is the main output of this project)
 
 ```text
-./gradlew install
+./gradlew :compiler:install
 ```
 
 This task will create an installable distribution of this application in the `build/install` directory.
@@ -26,7 +59,7 @@ Since this is a JVM application, that installation will consist of a set of JAR 
 Once you've built the application, you can invoke the execution script.
 
 ```text
- ./build/install/gapl/bin/gapl [ARGUMENTS]
+ ./compiler/build/install/gapl/bin/gapl [ARGUMENTS]
 ```
 
 There are currently two modes.
@@ -34,7 +67,7 @@ A "test" mode, and a "compile" mode.
 To compile a list of files (into a single verilog file), use
 
 ```text
- ./build/install/gapl/bin/gapl -i INPUT_FILE [...] -o OUTPUT_FILE
+ ./compiler/build/install/gapl/bin/gapl -i INPUT_FILE [...] -o OUTPUT_FILE
 ```
 
 In test mode, you provide a directory that contains many gapl files.
@@ -43,7 +76,7 @@ It will compile the gapl code in the file, then print that code and the compiled
 
 For instance, you can use the provided `examples` directory.
 ```text
- ./build/install/gapl/bin/gapl --test examples
+ ./compiler/build/install/gapl/bin/gapl --test examples
 ```
 
 Which will print out

@@ -9,6 +9,8 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/antlr" />
+            <option value="$PROJECT_DIR$/compiler" />
           </set>
         </option>
       </GradleProjectSettings>
