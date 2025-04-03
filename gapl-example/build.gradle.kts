@@ -9,7 +9,7 @@ tasks.register("generateVerilog") {
     val gaplFiles = fileTree("src") {
         include("**/*.gapl")
     }
-    val verilogOutputDir = layout.buildDirectory.dir("compiledVerilog")
+    val verilogOutputDir = layout.buildDirectory.dir("verilog")
 
     inputs.files(gaplFiles)
     outputs.dir(verilogOutputDir)
