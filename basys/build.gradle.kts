@@ -3,7 +3,9 @@ plugins {
     kotlin("jvm") version "2.0.21"
 }
 
-//val vivadoSettings = project.findProperty("vivadoSettings") ?: error("vivadoSettings not defined")
+kotlin {
+    jvmToolchain(8)
+}
 
 // TODO: We should modify this so we can run any test bench
 val tbModule = "tb_uart_controller"
@@ -12,14 +14,56 @@ val xsimDir = "xsim.dir"
 val waveformDb = layout.buildDirectory.file("waveform.wdb")
 
 val handCodedVerilogSource = fileTree("rtl") { include("**/*.v") }
-val testBenchVerilogSource= fileTree("tb") { include("**/*.v") }
-val generatedVerilogSource= project(":gapl-example").layout.buildDirectory.dir("verilog")
+val testBenchVerilogSource = fileTree("tb") { include("**/*.v") }
+val generatedVerilogSource = project(":gapl-example").layout.buildDirectory.dir("verilog")
+
+val runName = findProperty("runName")?.toString() ?: "run1"
+
+val synthesisName = "synthesis_$runName"
+val implementation1Name = "impl_s1_opt_design_$runName"
+val implementation2Name = "impl_s2_power_opt_design_$runName"
+val implementation3Name = "impl_s3_place_design_$runName"
+val implementation4Name = "impl_s4_phys_opt_design_$runName"
+val implementation5Name = "impl_s5_route_design_$runName"
+val bitstreamName = "bitstream_$runName"
 
 val verilogCompilerCommon = listOf(
     "xvlog", "-sv", "-v", "0",
     "--work", "work",
     "--incr", "--relax"
 )
+
+tasks.register<VivadoTask>("setupProject") {
+    vivadoCommand.set(
+        listOf("vivado", "-mode", "tcl", "-source", "scripts/setup_project.tcl")
+    )
+}
+
+tasks.register<Delete>("cleanVivadoRun") {
+    delete(".gen", ".srcs")
+}
+
+tasks.register<VivadoTask>("runVivado") {
+    dependsOn("setupProject")
+    dependsOn("cleanVivadoRun")
+
+    vivadoCommand.set(
+        listOf(
+            "vivado", "-mode", "batch", "-nojournal", "-notrace",
+            "-stack 2000", "-source", "./scripts/main.tcl", "-tclargs",
+            synthesisName,
+            implementation1Name,
+            implementation2Name,
+            implementation3Name,
+            implementation4Name,
+            implementation5Name,
+            bitstreamName,
+        )
+    )
+
+    inputs.dir("scripts")
+    // TODO: Outputs
+}
 
 tasks.register<VivadoTask>("compileVerilog") {
     dependsOn(":gapl-example:generateVerilog")
@@ -101,19 +145,18 @@ tasks.register<VivadoTask>("simulate") {
 }
 
 tasks.named("build") {
-    dependsOn("simulate")
+    dependsOn("runVivado")
 }
 
-tasks.register("cleanVivado") {
-    doLast {
-        val vivadoTrash = projectDir.listFiles { file ->
-            file.name.matches(Regex("""(xvlog|xelab|xsim|vivado|webtalk).*?\.(pb|log|jou|xml|str|tmp|wdb)"""))
-        } ?: emptyArray()
+tasks.register<Delete>("cleanVivado") {
+    dependsOn("cleanVivadoRun")
 
-        delete(".Xil")
-        delete(xsimDir)
-        vivadoTrash.forEach { delete(it) }
-    }
+    val bitstream = "$bitstreamName.bit"
+
+    delete(
+        ".Xil", "bin", "clockInfo.txt", xsimDir, bitstream,
+        fileTree(".") { include("*.pb", "*.log", "*.jou") }
+    )
 }
 
 tasks.named("clean") {

@@ -7,5 +7,5 @@ repositories {
 }
 
 kotlin {
-    jvmToolchain(8) // Or 17 if that's better on your system
+    jvmToolchain(8)
 }
