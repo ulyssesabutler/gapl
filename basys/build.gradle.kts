@@ -7,8 +7,8 @@ kotlin {
     jvmToolchain(8)
 }
 
-// TODO: We should modify this so we can run any test bench
-val tbModule = "tb_uart_controller"
+// Change the test bench module with -PtestBenchModule=<moduleName>
+val testBenchModule = project.findProperty("testBenchModule")?.toString() ?: throw GradleException("You must provide -PtestBenchModule=<moduleName>")
 
 val xsimDir = "xsim.dir"
 val waveformDb = layout.buildDirectory.file("waveform.wdb")
@@ -113,8 +113,8 @@ tasks.register<VivadoTask>("elaborate") {
 
     vivadoCommand.set(
         listOf(
-            "xelab", tbModule,
-            "-s", "${tbModule}_behav",
+            "xelab", testBenchModule,
+            "-s", "${testBenchModule}_behav",
             "--incr", "--debug", "typical", "--relax", "--mt", "8",
             "-L", "work",
             "-log", elaborateLogFile,
@@ -133,7 +133,7 @@ tasks.register<VivadoTask>("simulate") {
 
     vivadoCommand.set(
         listOf(
-            "xsim", "${tbModule}_behav",
+            "xsim", "${testBenchModule}_behav",
             "-gui", "-ieeewarnings",
             "-log", simulateLogFile,
             "-wdb", wdbOutFile
