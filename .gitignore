@@ -51,3 +51,7 @@ bin/
 *.bit
 .Xil
 clockInfo.txt
+xsim.dir
+vivado*.str
+vivado*.debug
+vivado*.zip
