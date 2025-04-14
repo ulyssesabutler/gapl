@@ -16,8 +16,8 @@ object GenericValueMatcher {
 
     fun getParameterValues(
         genericParameterDefinitionNodes: List<GenericParameterDefinitionNode>,
-        genericParameterValues: List<Int>, // TODO: This could be any value
-    ): Map<String, Int> {
+        genericParameterValues: List<ParameterValue<*>>,
+    ): Map<String, ParameterValue<*>> {
         return genericParameterDefinitionNodes
             .mapIndexed { index, it -> it.identifier.value to genericParameterValues[index] }
             .associate { it }

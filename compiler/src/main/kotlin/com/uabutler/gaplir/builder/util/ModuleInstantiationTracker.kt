@@ -9,10 +9,18 @@ class ModuleInstantiationTracker(
     private val programContext: ProgramContext,
 ) {
 
+    /* This is a data class that stores all of the data needed to instantiate any module. That is, it contains enough
+     * information to find the definition (using the identifier), and it contains the values for each parameter.
+     *
+     * Each unique set of module instantiation data will correspond to one verilog module. That said, depending on how
+     * much resource sharing is possible, it might correspond to multiple verilog instantiations.
+     *
+     * We might need to modify this if we want to support something like function overloading in the future.
+     */
     data class ModuleInstantiationData(
         val functionIdentifier: String,
         val genericInterfaceValues: List<InterfaceStructure>,
-        val genericParameterValues: List<Int>, // TODO: This could be any value
+        val genericParameterValues: List<ParameterValue<*>>,
     )
 
     /* This stores the values that were used to instantiate a module, along with the input and output structures of
@@ -30,7 +38,7 @@ class ModuleInstantiationTracker(
         val astNode: FunctionDefinitionNode,
 
         val genericInterfaceValues: Map<String, InterfaceStructure>,
-        val genericParameterValues: Map<String, Int>, // TODO: This could be any value
+        val genericParameterValues: Map<String, ParameterValue<*>>, // TODO: This could be any value
 
         var module: Module?,
     )

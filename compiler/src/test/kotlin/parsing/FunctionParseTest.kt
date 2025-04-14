@@ -1,9 +1,7 @@
 package parsing
 
 import com.uabutler.Parser
-import com.uabutler.ast.node.GenericInterfaceDefinitionNode
-import com.uabutler.ast.node.GenericParameterDefinitionNode
-import com.uabutler.ast.node.IdentifierNode
+import com.uabutler.ast.node.*
 import com.uabutler.ast.node.functions.DefaultFunctionIOTypeNode
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.FunctionIONode
@@ -87,7 +85,7 @@ class FunctionParseTest {
                 genericParameters = listOf(
                     GenericParameterDefinitionNode(
                         identifier = IdentifierNode("size"),
-                        typeIdentifier = IdentifierNode("integer"),
+                        type = IdentifierGenericParameterTypeNode(IdentifierNode("integer")),
                     )
                 ),
                 inputFunctionIO = listOf(

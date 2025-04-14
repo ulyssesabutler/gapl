@@ -33,8 +33,8 @@ class ModuleBuilder(val program: ProgramNode) {
                 moduleInstantiationTracker.visitModule(
                     ModuleInstantiationTracker.ModuleInstantiationData(
                         functionIdentifier = it.identifier.value,
-                        genericInterfaceValues = emptyList(), // TODO
-                        genericParameterValues = emptyList(), // TODO
+                        genericInterfaceValues = emptyList(),
+                        genericParameterValues = emptyList(),
                     )
                 )
             }
