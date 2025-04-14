@@ -1,5 +1,6 @@
 package com.uabutler.ast.visitor
 
+import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.parsers.generated.GAPLParser
 
@@ -25,7 +26,9 @@ object CircuitExpressionVisitor: GAPLVisitor() {
         return when (ctx) {
             is GAPLParser.DeclaredInterfaceCircuitExpressionContext -> visitDeclaredInterfaceCircuitExpression(ctx)
             is GAPLParser.DeclaredFunctionCircuitExpressionContext -> visitDeclaredFunctionCircuitExpression(ctx)
+            is GAPLParser.DeclaredGenericFunctionCircuitExpressionContext -> visitDeclaredGenericFunctionCircuitExpression(ctx)
             is GAPLParser.AnonymousFunctionCircuitExpressionContext -> visitAnonymousFunctionCircuitExpression(ctx)
+            is GAPLParser.AnonymousGenericFunctionCircuitExpressionContext -> visitAnonymousGenericFunctionCircuitExpression(ctx)
             is GAPLParser.ReferenceCircuitExpressionContext -> visitReferenceCircuitExpression(ctx)
             is GAPLParser.ParanCircuitExpressionContext -> visitParanCircuitExpression(ctx)
             is GAPLParser.RecordInterfaceConstructorCircuitExpressionContext -> visitRecordInterfaceConstructorCircuitExpression(ctx)
@@ -35,21 +38,34 @@ object CircuitExpressionVisitor: GAPLVisitor() {
 
     override fun visitDeclaredInterfaceCircuitExpression(ctx: GAPLParser.DeclaredInterfaceCircuitExpressionContext): DeclaredInterfaceCircuitExpressionNode {
          return DeclaredInterfaceCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.Id()),
+            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
             type = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
         )
     }
 
     override fun visitDeclaredFunctionCircuitExpression(ctx: GAPLParser.DeclaredFunctionCircuitExpressionContext): DeclaredFunctionCircuitExpressionNode {
         return DeclaredFunctionCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.Id()),
+            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
             instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
+        )
+    }
+
+    override fun visitDeclaredGenericFunctionCircuitExpression(ctx: GAPLParser.DeclaredGenericFunctionCircuitExpressionContext): DeclaredGenericFunctionCircuitExpressionNode {
+        return DeclaredGenericFunctionCircuitExpressionNode(
+            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
+            functionIdentifier = TokenVisitor.visitId(ctx.functionIdentifier),
         )
     }
 
     override fun visitAnonymousFunctionCircuitExpression(ctx: GAPLParser.AnonymousFunctionCircuitExpressionContext): AnonymousFunctionCircuitExpressionNode {
         return AnonymousFunctionCircuitExpressionNode(
             instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
+        )
+    }
+
+    override fun visitAnonymousGenericFunctionCircuitExpression(ctx: GAPLParser.AnonymousGenericFunctionCircuitExpressionContext): AnonymousGenericFunctionCircuitExpressionNode {
+        return AnonymousGenericFunctionCircuitExpressionNode(
+            functionIdentifier = TokenVisitor.visitId(ctx.functionIdentifier),
         )
     }
 

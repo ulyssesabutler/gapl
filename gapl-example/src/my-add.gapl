@@ -1,9 +1,14 @@
-function my_add() a1: wire[32], a2: wire[32] => o1: wire[32]
+function map(parameter operation: function wire[32] => wire[32]) i: wire[32] => o: wire[32]
 {
-    a1 => o1;
+    i => function operation => o;
 }
 
-function add_test() i1: wire[32], i2: wire[32] => o: wire[32]
+function double() i: wire[32] => o: wire[32]
 {
-    i1, i2 => function my_add() => o;
+    i, i => function add() => o;
+}
+
+function main() i: wire[32] => o: wire[32]
+{
+    i => function map(function double()) => o;
 }

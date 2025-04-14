@@ -168,6 +168,27 @@ class NodeBuilder(
                 )
             }
 
+            is DeclaredGenericFunctionCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
+
+                val node = createNodeFromFunctionInvocation(identifier, instantiationData)
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        declaredNodes = mapOf(identifier to node),
+                    )
+                )
+            }
+
             is AnonymousFunctionCircuitExpressionNode -> {
                 val identifier = AnonymousIdentifierGenerator.genIdentifier()
 
@@ -176,6 +197,28 @@ class NodeBuilder(
                     interfaceValuesContext = interfaceValuesContext,
                     parameterValuesContext = parameterValuesContext,
                 )
+
+                val node = createNodeFromFunctionInvocation(identifier, instantiationData)
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        anonymousNodes = listOf(node)
+                    )
+                )
+            }
+
+            is AnonymousGenericFunctionCircuitExpressionNode -> {
+                val identifier = AnonymousIdentifierGenerator.genIdentifier()
+
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
 
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 

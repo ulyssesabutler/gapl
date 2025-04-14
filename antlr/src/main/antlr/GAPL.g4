@@ -175,10 +175,14 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
+// TODO: We should break this up a bit. Perhaps, split declared off into its own rule. Ditto with function keyword
+// TODO: Add a static expression
 circuitNodeExpression:
-      Declare Id Colon interfaceExpression #declaredInterfaceCircuitExpression
-    | Declare Id Colon Function instantiation #declaredFunctionCircuitExpression
+      Declare nodeIdentifier=Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+    | Declare nodeIdentifier=Id Colon Function instantiation #declaredFunctionCircuitExpression
+    | Declare nodeIdentifier=Id Colon Function functionIdentifier=Id #declaredGenericFunctionCircuitExpression
     | Function instantiation #anonymousFunctionCircuitExpression
+    | Function functionIdentifier=Id #anonymousGenericFunctionCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
     | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression
