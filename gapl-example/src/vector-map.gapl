@@ -1,0 +1,25 @@
+interface data() wire[4]
+
+function vector_map<I, O>(
+    parameter size: integer,
+    parameter operation: function I => O,
+) i: I[size] => o: O[size]
+{
+    if (size > 0) {
+        i[size - 1] => function operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => function vector_map<I, O>(size - 1, function operation) => o[0:size - 2];
+        }
+    }
+}
+
+function double() i: data() => o: data()
+{
+    i, i => function add() => o;
+}
+
+function main() i: data()[5] => o: data()[5]
+{
+    i => function vector_map<data(), data()>(5, function double()) => o;
+}

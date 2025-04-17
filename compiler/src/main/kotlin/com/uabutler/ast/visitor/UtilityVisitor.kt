@@ -2,12 +2,8 @@ package com.uabutler.ast.visitor
 
 import com.uabutler.ast.node.*
 import com.uabutler.ast.node.functions.EmptyAbstractFunctionIOListNode
-import com.uabutler.ast.node.functions.EmptyFunctionIOListNode
 import com.uabutler.ast.node.functions.NonEmptyAbstractFunctionIOListNode
-import com.uabutler.ast.node.functions.NonEmptyFunctionIOListNode
 import com.uabutler.ast.visitor.FunctionVisitor.visitAbstractFunctionIOList
-import com.uabutler.ast.visitor.FunctionVisitor.visitFunctionIOList
-import com.uabutler.ast.visitor.StaticExpressionVisitor.visitStaticExpression
 import com.uabutler.parsers.generated.GAPLParser
 
 object UtilityVisitor: GAPLVisitor() {
@@ -86,6 +82,7 @@ object UtilityVisitor: GAPLVisitor() {
         return when (ctx) {
             is GAPLParser.StaticExpressionGenericParameterValueContext -> visitStaticExpressionGenericParameterValue(ctx)
             is GAPLParser.FunctionInstantiationGenericParameterValueContext -> visitFunctionInstantiationGenericParameterValue(ctx)
+            is GAPLParser.FunctionReferenceGenericParamterValueContext -> visitFunctionReferenceGenericParamterValue(ctx)
             else -> throw Exception("Unexpected generic parameter value")
         }
     }
@@ -99,6 +96,12 @@ object UtilityVisitor: GAPLVisitor() {
     override fun visitFunctionInstantiationGenericParameterValue(ctx: GAPLParser.FunctionInstantiationGenericParameterValueContext): FunctionInstantiationGenericParameterValueNode {
         return FunctionInstantiationGenericParameterValueNode(
             instantiation = visitInstantiation(ctx.instantiation())
+        )
+    }
+
+    override fun visitFunctionReferenceGenericParamterValue(ctx: GAPLParser.FunctionReferenceGenericParamterValueContext): FunctionReferenceGenericParameterValueNode {
+        return FunctionReferenceGenericParameterValueNode(
+            functionIdentifier = TokenVisitor.visitId(ctx.Id()),
         )
     }
 

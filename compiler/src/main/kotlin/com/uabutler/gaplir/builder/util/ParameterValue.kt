@@ -1,6 +1,7 @@
 package com.uabutler.gaplir.builder.util
 
 import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
+import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
 import com.uabutler.gaplir.InterfaceStructure
@@ -36,6 +37,10 @@ sealed interface ParameterValue<T> {
                             parameterValuesContext = parameterValuesContext,
                         )
                     )
+                }
+
+                is FunctionReferenceGenericParameterValueNode -> {
+                    parameterValuesContext[node.functionIdentifier.value]!!
                 }
             }
         }

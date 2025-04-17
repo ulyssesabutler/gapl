@@ -38,6 +38,10 @@ data class FunctionInstantiationGenericParameterValueNode(
     val instantiation: InstantiationNode,
 ): GenericParameterValueNode
 
+data class FunctionReferenceGenericParameterValueNode(
+    val functionIdentifier: IdentifierNode,
+): GenericParameterValueNode
+
 data class GenericInterfaceValueListNode(val interfaces: List<GenericInterfaceValueNode>): TemporaryNode
 data class GenericParameterValueListNode(val parameters: List<GenericParameterValueNode>): TemporaryNode
 

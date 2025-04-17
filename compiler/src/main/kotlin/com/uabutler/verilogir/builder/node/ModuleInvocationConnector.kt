@@ -1,6 +1,7 @@
 package com.uabutler.verilogir.builder.node
 
 import com.uabutler.gaplir.node.ModuleInvocationNode
+import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator.genIdentifierFromInvocation
 import com.uabutler.verilogir.module.statement.Invocation
 import com.uabutler.verilogir.module.statement.Statement
 import com.uabutler.verilogir.module.statement.invocation.InvocationPort
@@ -17,7 +18,7 @@ object ModuleInvocationConnector {
 
         val invocation = Invocation(
             invocationName = node.invokedModuleName,
-            moduleName = node.moduleInvocation.gaplFunctionName,
+            moduleName = genIdentifierFromInvocation(node.moduleInvocation),
             ports = ports.map { InvocationPort(modulePortName = it.first, variablePortName = it.second) }
         )
         return listOf(invocation)

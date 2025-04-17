@@ -111,6 +111,8 @@ class NodeBuilder(
                 invokedModuleName = invocationName,
                 moduleInvocation = ModuleInvocation(
                     gaplFunctionName = instantiationData.functionIdentifier,
+                    interfaces = instantiationData.genericInterfaceValues,
+                    parameters = instantiationData.genericParameterValues,
                 ),
                 functionInputInterfaces = instantiation.input.map { Named(it.key, it.value) },
                 functionOutputInterfaces = instantiation.output.map { Named(it.key, it.value) },

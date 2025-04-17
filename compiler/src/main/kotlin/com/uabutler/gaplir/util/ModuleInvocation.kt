@@ -1,6 +1,11 @@
 package com.uabutler.gaplir.util
 
+import com.uabutler.gaplir.InterfaceStructure
+import com.uabutler.gaplir.builder.util.ParameterValue
+
+// TODO: Is there any reason to keep this seperate from the ModuleInstantiationData?
 data class ModuleInvocation(
     val gaplFunctionName: String,
-    // TODO: We need to add generic interfaces and parameters
+    val interfaces: List<InterfaceStructure>,
+    val parameters: List<ParameterValue<*>>,
 )

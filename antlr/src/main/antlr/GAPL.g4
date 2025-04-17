@@ -93,6 +93,7 @@ genericParameterValueList: (genericParameterValue Comma)* genericParameterValue?
 genericParameterValue:
       staticExpression #staticExpressionGenericParameterValue
     | Function instantiation #functionInstantiationGenericParameterValue
+    | Function functionIdentifier=Id #functionReferenceGenericParamterValue
 ;
 
 instantiation: Id (AngleL genericInterfaceValueList AngleR)? ParanL genericParameterValueList ParanR;
