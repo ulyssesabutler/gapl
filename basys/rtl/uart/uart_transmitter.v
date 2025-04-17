@@ -78,7 +78,7 @@ module uart_transmitter
         if (transmission_running) begin
             // Since the baud rate is considerably slower than the clock speed of the FPGA
             // While transmitting, we need to hold the transmitted value for a number of clock cycles dictated by the clock divider.
-            if (clock_divider_cycle_count < CLOCK_DIVIDER_SIZE) begin
+            if (clock_divider_cycle_count < CLOCK_DIVIDER_SIZE - 1) begin
                 // Waiting for the current bit to be transmitted
                 clock_divider_cycle_count_next = clock_divider_cycle_count + 1;
             end else begin

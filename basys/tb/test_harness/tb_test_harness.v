@@ -108,7 +108,23 @@ module tb_test_harness;
         end
     endtask
 
-    logic [7:0] my_input_string [0:4] = '{8'h48, 8'h65, 8'h6C, 8'h6C, 8'h0}; // For "Hell", for example.
+    logic [7:0] my_input_string [0:14] = '{
+        8'h48,
+        8'h65,
+        8'h6C,
+        8'h6C,
+        8'h6C,
+        8'h6C,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h6F,
+        8'h00
+    };
 
     // Main
     initial begin
@@ -120,7 +136,7 @@ module tb_test_harness;
 
         reset = 0;
 
-        send_string(my_input_string, 5);
+        send_string(my_input_string, 15);
 
         #(BAUD_PERIOD * 5);
 
