@@ -14,12 +14,12 @@ function vector_map<I, O>(
     }
 }
 
-function double() i: data() => o: data()
+function vector_map_double() i: data() => o: data()
 {
     i, i => function add() => o;
 }
 
-function main() i: data()[5] => o: data()[5]
+function vector_map_main() i: data()[5] => o: data()[5]
 {
-    i => function vector_map<data(), data()>(5, function double()) => o;
+    i => function vector_map<data(), data()>(5, function vector_map_double()) => o;
 }

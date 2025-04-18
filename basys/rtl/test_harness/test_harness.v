@@ -172,6 +172,7 @@ module test_harness
     // Processor
 
     // Example
+    /*
     assign clock_cycles_ready = 1;
 
     assign processor_in_ready = debugger_ready;
@@ -190,9 +191,9 @@ module test_harness
         .out_valid(processor_out_valid),
         .out_last(processor_out_last)
     );
+    */
 
     // GAPL
-    /*
     wire [31:0] processor_input;
     wire [31:0] processor_output;
 
@@ -208,6 +209,5 @@ module test_harness
 
     assign processor_input = {24'h0, processor_in_data};
     assign processor_out_data = processor_output[7:0];
-    */
 
 endmodule

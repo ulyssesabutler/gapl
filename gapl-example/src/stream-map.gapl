@@ -5,12 +5,12 @@ function stream_map<I, O>(parameter operation: function I => O) i: I => o: O
     i => function operation => o;
 }
 
-function double() i: data() => o: data()
+function stream_map_double() i: data() => o: data()
 {
     i, i => function add() => o;
 }
 
-function main() i: data() => o: data()
+function stream_map_main() i: data() => o: data()
 {
-    i => function stream_map<data(), data()>(function double()) => o;
+    i => function stream_map<data(), data()>(function stream_map_double()) => o;
 }

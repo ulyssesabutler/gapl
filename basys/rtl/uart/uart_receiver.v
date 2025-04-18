@@ -32,7 +32,7 @@ module uart_receiver
     localparam PACKET_DATA_SIZE        = 8;
     localparam PACKET_DATA_START_INDEX = 1;
 
-    localparam PACKET_SIZE             = 9;
+    localparam PACKET_SIZE             = 10; // Start bit, data, and a buffer bit
     localparam PACKET_BITS             = $clog2(PACKET_SIZE + 1);
 
     reg  [PACKET_SIZE - 1:0] packet;
