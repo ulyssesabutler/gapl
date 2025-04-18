@@ -6,6 +6,7 @@ set current_datetime [clock format [clock seconds] -format "%Y-%m-%d_%H:%M:%S"]
 
 # project working dir
 set prj_dir             [pwd]
+set gen_dir             "$prj_dir/../gapl-example/build/verilog"
 set prj_name            [file tail $prj_dir]
 
 # FPGA and board part numbers:
@@ -65,6 +66,7 @@ set name_rpt_bit        "bitstream"
 # ----- PATHS for RTL, TB, constraints, binaries, reports, DCPs, logs
 set dir_rtl_vhdl        "${prj_dir}/rtl"
 set dir_rtl_veri        "${prj_dir}/rtl"
+set dir_rtl_gapl        "${prj_dir}/rtl"
 set dir_ip_srcs         "${prj_dir}/ip"
 set dir_constraint      "${prj_dir}/constraints"
 set dir_bin             "bin"

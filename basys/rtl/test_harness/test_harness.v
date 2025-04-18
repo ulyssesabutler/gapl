@@ -11,7 +11,10 @@ module test_harness
     input  wire       reset,
 
     input  wire       uart_receive,
-    output wire       uart_transmit
+    output wire       uart_transmit,
+
+    input  wire       display_next_debug_value_button,
+    output wire [7:0] debug_leds
 );
 
     // UART
@@ -150,11 +153,29 @@ module test_harness
         .clock_cycles_ready(clock_cycles_ready)
     );
 
-    assign clock_cycles_ready = 1;
+    // Debugger
+    wire debugger_ready;
 
-    assign processor_in_ready = 1;
+    led_debugger debugger
+    (
+        .clock(clock),
+        .reset(reset),
+
+        .data_in(processor_in_data),
+        .valid_in(processor_in_valid),
+        .ready_in(debugger_ready),
+
+        .button_display_next_value(display_next_debug_value_button),
+        .leds(debug_leds)
+    );
 
     // Processor
+
+    // Example
+    assign clock_cycles_ready = 1;
+
+    assign processor_in_ready = debugger_ready;
+
     add_3 processor
     (
         .clock(clock),
@@ -169,5 +190,24 @@ module test_harness
         .out_valid(processor_out_valid),
         .out_last(processor_out_last)
     );
+
+    // GAPL
+    /*
+    wire [31:0] processor_input;
+    wire [31:0] processor_output;
+
+    stream_map_main processor
+    (
+        .i_output(processor_input),
+        .o_input(processor_output)
+    );
+
+    assign processor_out_valid = processor_in_valid;
+    assign processor_out_last = processor_in_last;
+    assign processor_in_ready = processor_out_ready;
+
+    assign processor_input = {24'h0, processor_in_data};
+    assign processor_out_data = processor_output[7:0];
+    */
 
 endmodule

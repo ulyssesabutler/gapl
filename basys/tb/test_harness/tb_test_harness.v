@@ -15,6 +15,9 @@ module tb_test_harness;
     reg         receive_uart;
     wire        transmit_uart;
 
+    wire        display_next_debug_value_button = 0;
+    wire [7:0]  leds = 0;
+
     // Clock generation
     always begin
         clock = 0;
@@ -39,7 +42,10 @@ module tb_test_harness;
         .reset(reset),
 
         .uart_receive(receive_uart),
-        .uart_transmit(transmit_uart)
+        .uart_transmit(transmit_uart),
+
+        .display_next_debug_value_button(display_next_debug_value_button),
+        .debug_leds(leds)
     );
 
     // Send a single byte from the host (that is, over the receiver wire)

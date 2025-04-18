@@ -8,7 +8,10 @@ module main
     input  wire       button_center,
 
     input  wire       uart_receive,
-    output wire       uart_transmit
+    output wire       uart_transmit,
+
+    input  wire       button_right,
+    output wire [7:0] leds
 );
 
     wire reset;
@@ -27,7 +30,10 @@ module main
         .reset(reset),
 
         .uart_receive(uart_receive),
-        .uart_transmit(uart_transmit)
+        .uart_transmit(uart_transmit),
+
+        .display_next_debug_value_button(button_right),
+        .debug_leds(leds)
     );
 
 endmodule

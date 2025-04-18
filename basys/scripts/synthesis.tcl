@@ -23,6 +23,7 @@ set veri_files [concat \
     [glob -directory "$dir_rtl_veri/packet" -types f *.v] \
     [glob -directory "$dir_rtl_veri/processor" -types f *.v] \
     [glob -directory "$dir_rtl_veri/test_harness" -types f *.v] \
+    [glob -directory "$gen_dir" -types f *.v] \
 ]
 read_verilog -library xil_defaultlib -verbose $veri_files
 
