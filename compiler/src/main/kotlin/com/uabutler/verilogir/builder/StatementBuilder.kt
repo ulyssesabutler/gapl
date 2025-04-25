@@ -1,5 +1,6 @@
 package com.uabutler.verilogir.builder
 
+import com.uabutler.gaplir.VectorInterfaceStructure
 import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.*
 import com.uabutler.gaplir.node.input.*
@@ -68,72 +69,179 @@ object StatementBuilder {
     }
 
     private fun getAssignments(node: Node): List<Assignment> {
-        return node.inputs.flatMap {
-            getConnectionsFromNodeInputInterface(
-                currentName = "${it.name}_input",
-                currentIndex = 0,
-                currentSize = 1,
-                nodeInputInterface = it.item,
-            )
-        }.map {
-            ConnectionWithOutput(
-                connection = it,
-                currentOutputLocation = getNodeOutputInterfaceLocation(
-                    currentName = null,
-                    currentSize = 1,
-                    currentIndex = 0,
-                    nodeOutputInterface = it.output,
-                )
-            )
-        }.flatMap { connection ->
-            val src = VerilogInterface.fromGAPLInterfaceStructure(
-                name = connection.currentOutputLocation.name,
-                gaplInterfaceStructure = connection.connection.output.structure,
-            )
-            val srcSize = connection.currentOutputLocation.size
-            val srcIndex = connection.currentOutputLocation.index
+        return node.inputs
+            .flatMap { getNodeInputInterfaceConnections(it.item) }
+            .flatMap { generateAssignmentsForConnection(it) }
+    }
 
-            val dest = VerilogInterface.fromGAPLInterfaceStructure(
-                name = connection.connection.currentInputLocation.name,
-                gaplInterfaceStructure = connection.connection.output.structure,
-            )
-            val destSize = connection.connection.currentInputLocation.size
-            val destIndex = connection.connection.currentInputLocation.index
+    sealed class AbstractConnection(
+        open val nodeInputInterface: NodeInputInterface,
+        open val nodeOutputInterface: NodeOutputInterface,
+    )
 
-            src.zip(dest).map { (src, dest) ->
-                var destStartIndexOffset = destIndex * dest.width
-                var destEndIndexOffset = destIndex * dest.width
-                var srcStartIndexOffset = srcIndex * src.width
-                var srcEndIndexOffset = srcIndex * src.width
+    data class Connection(
+        override val nodeInputInterface: NodeInputInterface,
+        override val nodeOutputInterface: NodeOutputInterface,
+    ): AbstractConnection(nodeInputInterface, nodeOutputInterface)
 
-                connection.connection.vectorConnection?.let {
-                    if (it.destSlice is VectorSlice) {
-                        destStartIndexOffset += it.destSlice.startIndex
-                        destEndIndexOffset += it.destSlice.endIndex
-                    } else {
-                        destStartIndexOffset += dest.width - 1
+    data class VectorConnection(
+        override val nodeInputInterface: NodeInputInterface,
+        override val nodeOutputInterface: NodeOutputInterface,
+        val vectorConnection: com.uabutler.gaplir.node.input.VectorConnection,
+    ): AbstractConnection(nodeInputInterface, nodeOutputInterface)
+
+    private fun getNodeInputInterfaceConnections(nodeInputInterface: NodeInputInterface): List<AbstractConnection> {
+        return when (nodeInputInterface) {
+
+            is NodeInputWireInterface -> {
+                listOfNotNull(
+                    nodeInputInterface.input?.let {
+                        Connection(
+                            nodeInputInterface = nodeInputInterface,
+                            nodeOutputInterface = it,
+                        )
                     }
+                )
+            }
 
-                    if (it.sourceSlice is VectorSlice) {
-                        srcStartIndexOffset += it.sourceSlice.startIndex
-                        srcEndIndexOffset += it.sourceSlice.endIndex
-                    } else {
-                        srcStartIndexOffset += src.width - 1
+            is NodeInputRecordInterface -> {
+                val topLevel = listOfNotNull(
+                    nodeInputInterface.input?.let {
+                        Connection(
+                            nodeInputInterface = nodeInputInterface,
+                            nodeOutputInterface = it,
+                        )
+                    }
+                )
+
+                val lowerLevels = nodeInputInterface.ports.flatMap { getNodeInputInterfaceConnections(it.value) }
+
+                topLevel + lowerLevels
+            }
+
+            is NodeInputVectorInterface -> {
+                val topLevel = nodeInputInterface.connections.map {
+                    VectorConnection(
+                        nodeInputInterface = nodeInputInterface,
+                        nodeOutputInterface = it.sourceVector,
+                        vectorConnection = it,
+                    )
+                }
+
+                val lowerLevels = nodeInputInterface.vector.flatMap { getNodeInputInterfaceConnections(it) }
+
+                topLevel + lowerLevels
+            }
+
+        }
+    }
+
+    private fun generateAssignmentsForConnection(connection: AbstractConnection): List<Assignment> {
+        val sinkLocation = getNodeInputInterfaceLocation(connection.nodeInputInterface)
+        val sourceLocation = getNodeOutputInterfaceLocation(connection.nodeOutputInterface)
+
+        return when(connection) {
+            is Connection -> {
+                val sinkWires = VerilogInterface.fromGAPLInterfaceStructure(
+                    name = sinkLocation.name,
+                    gaplInterfaceStructure = connection.nodeInputInterface.structure,
+                )
+                val sourceWires = VerilogInterface.fromGAPLInterfaceStructure(
+                    name = sourceLocation.name,
+                    gaplInterfaceStructure = connection.nodeOutputInterface.structure,
+                )
+
+                sinkWires.zip(sourceWires).map { (sink, source) ->
+                    Assignment(
+                        destReference = Reference(
+                            variableName = sink.name,
+                            startIndex = (sinkLocation.index + 1) * sink.width - 1,
+                            endIndex = sinkLocation.index * sink.width,
+                        ),
+                        expression = Reference(
+                            variableName = source.name,
+                            startIndex = (sourceLocation.index + 1) * source.width - 1,
+                            endIndex = sourceLocation.index * source.width,
+                        )
+                    )
+                }
+            }
+
+            is VectorConnection -> {
+                val vectorConnection = connection.vectorConnection
+
+                val destinationReferences = when (vectorConnection.destSlice) {
+                    is WholeVector -> {
+                        VerilogInterface.fromGAPLInterfaceStructure(
+                            name = sinkLocation.name,
+                            gaplInterfaceStructure = connection.nodeInputInterface.structure,
+                        ).map { sink ->
+                            Reference(
+                                variableName = sink.name,
+                                startIndex = (sinkLocation.index + 1) * sink.width - 1,
+                                endIndex = sinkLocation.index * sink.width,
+                            )
+                        }
+                    }
+                    is VectorSlice -> {
+                        val sliceStartIndex = vectorConnection.destSlice.startIndex
+                        val sliceEndIndex = vectorConnection.destSlice.endIndex
+
+                        val vectoredStructure = (connection.nodeInputInterface.structure as VectorInterfaceStructure).vectoredInterface
+                        val vectoredSize = (connection.nodeInputInterface.structure as VectorInterfaceStructure).size
+
+                        VerilogInterface.fromGAPLInterfaceStructure(
+                            name = sinkLocation.name,
+                            gaplInterfaceStructure = vectoredStructure,
+                        ).map { sink ->
+                            Reference(
+                                variableName = sink.name,
+                                startIndex = (sinkLocation.index * vectoredSize + sliceEndIndex + 1) * sink.width - 1,
+                                endIndex = (sinkLocation.index * vectoredSize + sliceStartIndex) * sink.width,
+                            )
+                        }
                     }
                 }
 
-                Assignment(
-                    destReference = Reference(
-                        variableName = dest.name,
-                        startIndex = destStartIndexOffset, // TODO: Is this right?
-                        endIndex = destEndIndexOffset,
-                    ),
-                    expression = Reference(
-                        variableName = src.name,
-                        startIndex = srcStartIndexOffset, // TODO: Is this right?
-                        endIndex = srcEndIndexOffset,
+                val sourceReferences = when (vectorConnection.sourceSlice) {
+                    is WholeVector -> {
+                        VerilogInterface.fromGAPLInterfaceStructure(
+                            name = sourceLocation.name,
+                            gaplInterfaceStructure = connection.nodeOutputInterface.structure,
+                        ).map { source ->
+                            Reference(
+                                variableName = source.name,
+                                startIndex = (sourceLocation.index + 1) * source.width - 1,
+                                endIndex = sourceLocation.index * source.width,
+                            )
+                        }
+                    }
+                    is VectorSlice -> {
+                        val sliceStartIndex = vectorConnection.sourceSlice.startIndex
+                        val sliceEndIndex = vectorConnection.sourceSlice.endIndex
+
+                        val vectoredStructure = (connection.nodeOutputInterface.structure as VectorInterfaceStructure).vectoredInterface
+                        val vectoredSize = (connection.nodeOutputInterface.structure as VectorInterfaceStructure).size
+
+                        VerilogInterface.fromGAPLInterfaceStructure(
+                            name = sourceLocation.name,
+                            gaplInterfaceStructure = vectoredStructure,
+                        ).map { source ->
+                            Reference(
+                                variableName = source.name,
+                                startIndex = (sourceLocation.index * vectoredSize + sliceEndIndex + 1) * source.width - 1,
+                                endIndex = (sourceLocation.index * vectoredSize + sliceStartIndex) * source.width,
+                            )
+                        }
+                    }
+                }
+
+                destinationReferences.zip(sourceReferences).map { (destination, source) ->
+                    Assignment(
+                        destReference = destination,
+                        expression = source,
                     )
-                )
+                }
             }
         }
     }
@@ -144,20 +252,45 @@ object StatementBuilder {
         val size: Int,
     )
 
-    data class Connection(
-        val currentInputLocation: Location,
-        val input: NodeInputInterface,
-        val output: NodeOutputInterface,
-        val vectorConnection: VectorConnection? = null,
-    )
+    private fun getNodeInputInterfaceLocation(
+        nodeInputInterface: NodeInputInterface,
+        currentName: String? = null,
+        currentIndex: Int = 0,
+        currentSize: Int = 1,
+    ): Location {
+        return when (val parent = nodeInputInterface.parent) {
+            is NodeInputInterfaceParentRecordInterface -> {
+                getNodeInputInterfaceLocation(
+                    currentName = listOfNotNull(parent.parentMember, currentName).joinToString("_"),
+                    currentIndex = currentIndex,
+                    currentSize = currentSize,
+                    nodeInputInterface = parent.parentInterface
+                )
+            }
+            is NodeInputInterfaceParentVectorInterface -> {
+                getNodeInputInterfaceLocation(
+                    currentName = currentName,
+                    currentIndex = parent.parentIndex * currentSize + currentIndex,
+                    currentSize = parent.parentInterface.vector.size * currentSize,
+                    nodeInputInterface = parent.parentInterface
+                )
+            }
+            is NodeInputInterfaceParentNode -> {
+                Location(
+                    name = listOfNotNull(parent.parentName, "input", currentName).joinToString("_"),
+                    index = currentIndex,
+                    size = currentSize,
+                )
+            }
+        }
+    }
 
-    data class ConnectionWithOutput(
-        val connection: Connection,
-        val currentOutputLocation: Location,
-    )
-
-
-    private fun getNodeOutputInterfaceLocation(currentName: String?, currentIndex: Int, currentSize: Int, nodeOutputInterface: NodeOutputInterface): Location {
+    private fun getNodeOutputInterfaceLocation(
+        nodeOutputInterface: NodeOutputInterface,
+        currentName: String? = null,
+        currentIndex: Int = 0,
+        currentSize: Int = 1,
+    ): Location {
         return when (val parent = nodeOutputInterface.parent) {
             is NodeOutputInterfaceParentRecordInterface -> {
                 getNodeOutputInterfaceLocation(
@@ -185,107 +318,4 @@ object StatementBuilder {
         }
     }
 
-    private fun getConnectionsFromNodeInputInterface(currentName: String, currentIndex: Int, currentSize: Int, nodeInputInterface: NodeInputInterface): List<Connection> {
-        return when (nodeInputInterface) {
-            is NodeInputWireInterface -> {
-                // Otherwise, this interface has no input, which we're considering an error in GAPL
-                assert(nodeInputInterface.input != null)
-                listOf(
-                    Connection(
-                        currentInputLocation = Location(
-                            name = currentName,
-                            index = currentIndex,
-                            size = currentSize,
-                        ),
-                        input = nodeInputInterface,
-                        output = nodeInputInterface.input!!,
-                    )
-                )
-            }
-            is NodeInputRecordInterface -> {
-                if (nodeInputInterface.input != null) {
-                    listOf(
-                        Connection(
-                            currentInputLocation = Location(
-                                name = currentName,
-                                index = currentIndex,
-                                size = currentSize,
-                            ),
-                            input = nodeInputInterface,
-                            output = nodeInputInterface.input!!,
-                        )
-                    )
-                } else {
-                    nodeInputInterface.ports.flatMap {
-                        getConnectionsFromNodeInputInterface(
-                            currentName = "${currentName}_${it.key}",
-                            currentIndex = currentIndex,
-                            currentSize = currentSize,
-                            nodeInputInterface = it.value,
-                        )
-                    }
-                }
-            }
-            is NodeInputVectorInterface -> {
-                val isConnected = BooleanArray(nodeInputInterface.structure.size) { false }
-
-                val currentLevelConnections = nodeInputInterface.connections.map { connection ->
-                    if (connection.sourceSlice is WholeVector) {
-                        // Otherwise, connection overlap
-                        assert(isConnected.all { !it })
-                        // Mark the whole thing as connected now
-                        isConnected.forEachIndexed { index, _ -> isConnected[index] = true }
-
-                        Connection(
-                            currentInputLocation = Location(
-                                name = currentName,
-                                index = currentIndex,
-                                size = currentSize,
-                            ),
-                            input = nodeInputInterface,
-                            output = connection.sourceVector,
-                            vectorConnection = connection,
-                        )
-                    } else {
-                        val start = (connection.sourceSlice as VectorSlice).startIndex
-                        val end = connection.sourceSlice.endIndex
-
-                        // Validation
-                        for (i in start..end) {
-                            // Check for overlap
-                            assert(!isConnected[i])
-                            // Then set
-                            isConnected[i] = true
-                        }
-
-                        Connection(
-                            currentInputLocation = Location(
-                                name = currentName,
-                                index = currentIndex,
-                                size = currentSize,
-                            ),
-                            input = nodeInputInterface,
-                            output = connection.sourceVector,
-                            vectorConnection = connection,
-                        )
-                    }
-                }
-
-                val lowerLevelConnections = isConnected.mapIndexed { index, connection ->
-                    if (!connection) {
-                        getConnectionsFromNodeInputInterface(
-                            currentName = currentName,
-                            currentIndex = currentIndex * nodeInputInterface.structure.size + index,
-                            currentSize = currentSize * nodeInputInterface.structure.size,
-                            nodeInputInterface = nodeInputInterface.vector[index],
-                        )
-                    } else {
-                        null
-                    }
-                }.filterNotNull().flatten()
-
-                currentLevelConnections + lowerLevelConnections
-            }
-        }
-    }
 }

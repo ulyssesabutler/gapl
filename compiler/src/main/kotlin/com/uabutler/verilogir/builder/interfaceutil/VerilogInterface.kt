@@ -13,7 +13,7 @@ class VerilogInterface(
     companion object {
         fun fromGAPLInterfaceStructure(
             name: String,
-            gaplInterfaceStructure: InterfaceStructure
+            gaplInterfaceStructure: InterfaceStructure,
         ): List<Wire> {
             return when (gaplInterfaceStructure) {
                 is WireInterfaceStructure -> {
@@ -37,7 +37,5 @@ class VerilogInterface(
         val name: String,
         val width: Int,
     )
-
-    val wires: List<Wire> = fromGAPLInterfaceStructure(name, gaplInterfaceStructure)
 
 }
