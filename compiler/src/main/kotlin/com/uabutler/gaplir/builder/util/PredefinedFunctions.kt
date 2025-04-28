@@ -20,13 +20,15 @@ sealed class PredefinedFunction(
                 if (it is IntegerParameterValue) it.value else null
             }
 
+            val interfaceStructure = instantiationData.genericInterfaceValues.firstOrNull()
+
             return when (instantiationData.functionIdentifier) {
                 "add" -> AdditionFunction(size!!)
                 "subtract" -> SubtractionFunction(size!!)
                 "multiply" -> MultiplicationFunction(size!!)
                 "left_shift" -> LeftShiftFunction(size!!)
                 "right_shift" -> RightShiftFunction(size!!)
-                "register" -> RegisterFunction(size!!)
+                "register" -> RegisterFunction(interfaceStructure!!)
                 "literal" -> LiteralFunction(size!!, value!!)
                 else -> null
             }
@@ -65,8 +67,7 @@ data class LeftShiftFunction(
 ): BinaryOperationFunction(size)
 
 data class RegisterFunction(
-    val size: Int,
-    val storageStructure: InterfaceStructure = wire(size),
+    val storageStructure: InterfaceStructure
 ): PredefinedFunction(
     inputs = mapOf("next" to storageStructure),
     outputs = mapOf("current" to storageStructure),

@@ -1,3 +1,14 @@
-function register_test() i: wire[32] => o: wire[32] {
-    i => function register(32) => o;
+function register_test0() i: wire[32] => o: wire[32] {
+    i => function register<wire[32]>() => o;
+}
+
+interface byte() wire[8]
+
+interface packet() {
+    header: byte()[20];
+    body: byte()[100];
+}
+
+function register_test1() i: packet() => o: packet() {
+    i => function register<packet()>() => o;
 }
