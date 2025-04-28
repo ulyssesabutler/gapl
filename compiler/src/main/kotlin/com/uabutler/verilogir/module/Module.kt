@@ -15,8 +15,24 @@ data class Module(
         appendLine("module $name")
         appendLine("(")
 
+        val clock = ModuleIO(
+            name = "clock",
+            direction = ModuleIODirection.INPUT,
+            type = DataType.WIRE,
+            startIndex = null,
+            endIndex = null,
+        )
+
+        val reset = ModuleIO(
+            name = "reset",
+            direction = ModuleIODirection.INPUT,
+            type = DataType.WIRE,
+            startIndex = null,
+            endIndex = null,
+        )
+
         // Module Ports
-        val io = (inputs + outputs).joinToString(",\n") { it.verilogSerialize() }
+        val io = (listOf(clock, reset) + inputs + outputs).joinToString(",\n") { it.verilogSerialize() }
         appendLine(io.prependIndent())
 
         appendLine(");")
@@ -38,14 +54,18 @@ data class ModuleIO(
     val name: String,
     val direction: ModuleIODirection,
     val type: DataType,
-    val startIndex: Int,
-    val endIndex: Int,
+    val startIndex: Int?,
+    val endIndex: Int?,
 ): VerilogSerialize {
     override fun verilogSerialize() = buildString {
         append(direction.verilog)
         append(" ")
         append(type.verilog)
-        append(" [$startIndex:$endIndex] ")
+        if (startIndex != null && endIndex != null) {
+            append(" [$startIndex:$endIndex] ")
+        } else {
+            append(" ")
+        }
         append(name)
     }
 }

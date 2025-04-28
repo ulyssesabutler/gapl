@@ -53,8 +53,8 @@ object RegisterConnector {
                     ifBranch = IfBranch(
                         condition = Reference(
                             variableName = "reset",
-                            startIndex = 0, // TODO: we should have the option to not provide indicies
-                            endIndex = 0,
+                            startIndex = null,
+                            endIndex = null,
                         ),
                         then = registers.map { register ->
                             NonBlockingAssignment(

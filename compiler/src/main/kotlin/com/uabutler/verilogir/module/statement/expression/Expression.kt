@@ -9,12 +9,14 @@ sealed class Expression: VerilogSerialize
 
 data class Reference(
     val variableName: String,
-    val startIndex: Int,
-    val endIndex: Int,
+    val startIndex: Int?,
+    val endIndex: Int?,
 ): Expression() {
     override fun verilogSerialize() = buildString {
         append(variableName)
-        append("[$startIndex:$endIndex]")
+        if (startIndex != null && endIndex != null) {
+            append("[$startIndex:$endIndex]")
+        }
     }
 }
 

@@ -9,10 +9,7 @@ import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentRecordInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentVectorInterface
 import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
-import com.uabutler.verilogir.builder.node.BinaryOperationConnector
-import com.uabutler.verilogir.builder.node.ModuleInvocationConnector
-import com.uabutler.verilogir.builder.node.PassThroughNodeConnector
-import com.uabutler.verilogir.builder.node.RegisterConnector
+import com.uabutler.verilogir.builder.node.*
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
 import com.uabutler.verilogir.module.statement.Statement
@@ -59,6 +56,7 @@ object StatementBuilder {
                 is RightShiftFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is SubtractionFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is RegisterFunction -> RegisterConnector.connect(node, node.predefinedFunction)
+                is LiteralFunction -> LiteralConnector.connect(node, node.predefinedFunction)
             }
             else -> emptyList()
         }

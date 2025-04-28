@@ -47,7 +47,17 @@ data class Invocation(
         appendLine("$moduleName $invocationName")
         appendLine("(")
 
-        val ports = ports.joinToString(",\n") { it.verilogSerialize() }
+        val clock = InvocationPort(
+            modulePortName = "clock",
+            variablePortName = "clock",
+        )
+
+        val reset = InvocationPort(
+            modulePortName = "reset",
+            variablePortName = "reset",
+        )
+
+        val ports = (listOf(clock, reset) + ports).joinToString(",\n") { it.verilogSerialize() }
         appendLine(ports.prependIndent())
 
         appendLine(");")
@@ -59,7 +69,7 @@ data class Always(
     val statements: List<AlwaysStatement>,
 ): Statement() {
     override fun verilogSerialize() = buildString {
-        appendLine("always @(${sensitivity.verilogSerialize()} begin")
+        appendLine("always @(${sensitivity.verilogSerialize()}) begin")
 
         val statements = statements.joinToString("\n") { it.verilogSerialize() }
         appendLine(statements.prependIndent())
