@@ -9,7 +9,8 @@ sealed class PredefinedFunction(
     val outputs: Map<String, InterfaceStructure>,
 ) {
     companion object {
-        fun wire(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
+        fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
+        fun wire() = WireInterfaceStructure
 
         fun searchPredefinedFunctions(instantiationData: ModuleInstantiationTracker.ModuleInstantiationData): PredefinedFunction? {
             val size = instantiationData.genericParameterValues.firstOrNull()?.let {
@@ -23,6 +24,10 @@ sealed class PredefinedFunction(
             val interfaceStructure = instantiationData.genericInterfaceValues.firstOrNull()
 
             return when (instantiationData.functionIdentifier) {
+                "equals" -> EqualsFunction(size!!)
+                "not_equals" -> NotEqualsFunction(size!!)
+                "and" -> AndFunction()
+                "or" -> OrFunction()
                 "add" -> AdditionFunction(size!!)
                 "subtract" -> SubtractionFunction(size!!)
                 "multiply" -> MultiplicationFunction(size!!)
@@ -36,35 +41,69 @@ sealed class PredefinedFunction(
     }
 }
 
-sealed class BinaryOperationFunction(
-    open val size: Int,
-    val lhs: InterfaceStructure = wire(size),
-    val rhs: InterfaceStructure = wire(size),
-    val result: InterfaceStructure = wire(size),
+sealed class BinaryFunction(
+    val lhs: InterfaceStructure,
+    val rhs: InterfaceStructure,
+    val result: InterfaceStructure,
 ): PredefinedFunction(
     inputs = mapOf("lhs" to lhs, "rhs" to rhs),
     outputs = mapOf("result" to result),
 )
 
+sealed class BooleanComparison(
+    open val size: Int,
+): BinaryFunction(
+    lhs = wireVector(size),
+    rhs = wireVector(size),
+    result = wire(),
+)
+
+data class EqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+data class NotEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+sealed class BooleanFunction: BinaryFunction(
+    lhs = wire(),
+    rhs = wire(),
+    result = wire(),
+)
+
+class AndFunction: BooleanFunction()
+
+class OrFunction: BooleanFunction()
+
+sealed class BinaryArithmeticFunction(
+    open val size: Int,
+): BinaryFunction(
+    lhs = wireVector(size),
+    rhs = wireVector(size),
+    result = wireVector(size),
+)
+
+
 data class AdditionFunction(
     override val size: Int,
-): BinaryOperationFunction(size)
+): BinaryArithmeticFunction(size)
 
 data class SubtractionFunction(
     override val size: Int,
-): BinaryOperationFunction(size)
+): BinaryArithmeticFunction(size)
 
 data class MultiplicationFunction(
     override val size: Int,
-): BinaryOperationFunction(size)
+): BinaryArithmeticFunction(size)
 
 data class RightShiftFunction(
     override val size: Int,
-): BinaryOperationFunction(size)
+): BinaryArithmeticFunction(size)
 
 data class LeftShiftFunction(
     override val size: Int,
-): BinaryOperationFunction(size)
+): BinaryArithmeticFunction(size)
 
 data class RegisterFunction(
     val storageStructure: InterfaceStructure
@@ -76,7 +115,7 @@ data class RegisterFunction(
 data class LiteralFunction(
     val size: Int,
     val value: Int,
-    val storageStructure: InterfaceStructure = wire(size),
+    val storageStructure: InterfaceStructure = wireVector(size),
 ): PredefinedFunction(
     inputs = mapOf(),
     outputs = mapOf("value" to storageStructure),

@@ -335,7 +335,7 @@ class NodeBuilder(
         )
     }
 
-    fun createConnections(
+    private fun createConnections(
         outputOfCurrent: List<NodeOutputInterfaceProjection>,
         inputOfNext: List<NodeInputInterfaceProjection>,
     ) {
@@ -413,7 +413,7 @@ class NodeBuilder(
         }
     }
 
-    fun processCircuitConnectionExpressionNode(
+    private fun processCircuitConnectionExpressionNode(
         connectionExpression: CircuitConnectionExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,

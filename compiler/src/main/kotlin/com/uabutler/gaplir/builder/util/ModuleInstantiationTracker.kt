@@ -50,7 +50,11 @@ class ModuleInstantiationTracker(
     fun visitModule(instantiationData: ModuleInstantiationData): ModuleInstantiation {
         modules[instantiationData]?.let { return it }
 
-        val astNode = functionNodes[instantiationData.functionIdentifier]!!
+        val astNode = try {
+            functionNodes[instantiationData.functionIdentifier]!!
+        } catch (e: NullPointerException) {
+            throw Exception("Unable to locate function: ${instantiationData.functionIdentifier}")
+        }
 
         // Match the provided values with the local identifier
         val interfaceValues =

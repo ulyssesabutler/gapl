@@ -1,0 +1,101 @@
+interface char() wire[8]
+
+interface string(parameter size: integer) char()[size]
+
+interface boolean() wire
+
+interface pair<I1, I2>() {
+    first: I1;
+    second: I2;
+}
+
+function windowed<I>(
+    parameter window_size: integer
+) i: I => o: I[window_size] {
+    declare windows: function register<I[window_size]>() => o;
+    i => windows[0];
+    windows[0:window_size - 2] => windows[1:window_size - 1];
+}
+
+function any() i: boolean() => o: boolean() {
+    declare current: function register<boolean()>();
+
+    i, current
+        => function or()
+        => current
+        => o;
+}
+
+function vector_fold<I>(
+    parameter size: integer,
+    parameter operation: function I, I => I
+) i: I[size] => o: I {
+    if (size == 1) {
+        i[0] => o;
+    } else if (size == 2) {
+        i[0], i[1] => function operation => o;
+    } else {
+        declare delayed_fold: I[size - 1];
+
+        i[size - 1], i[size - 2] => function operation => delayed_fold[size - 2];
+        i[0:size - 3] => delayed_fold[0:size - 3];
+
+        delayed_fold
+            => function register<I[size - 1]>()
+            => function vector_fold<I>(size - 1, function operation)
+            => o;
+    }
+}
+
+function vector_zip<I>(
+    parameter vector_size: integer,
+) i1: I[vector_size], i2: I[vector_size] => o: pair<I, I>()[vector_size] {
+    i1[0] => o[0].first;
+    i2[0] => o[0].second;
+
+    i1[1:vector_size - 1], i2[1:vector_size - 1] => function vector_zip<I>(vector_size) => o[1:vector_size - 1];
+}
+
+function vector_map<I, O>(
+    parameter size: integer,
+    parameter operation: function I => O,
+) i: I[size] => o: O[size] {
+    if (size > 0) {
+        i[size - 1] => function operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => function vector_map<I, O>(size - 1, function operation) => o[0:size - 2];
+        }
+    }
+}
+
+function char_pair_equals() i: pair<char(), char()>() => result: boolean() {
+    i.first, i.second => function equals(8) => result;
+}
+
+function string_equals(
+    parameter string_size: integer
+) string1: string(string_size), string2: string(string_size) => result: boolean() {
+    string1, string2
+        => function vector_zip<char()>(string_size)
+        => function vector_map<pair<char(), char()>(), boolean()>(string_size, function char_pair_equals())
+        => function vector_fold<boolean()>(string_size, function and())
+        => result;
+}
+
+function string_matching(
+    parameter needle_size: integer
+) needle: string(needle_size), heystack: char() => result: boolean() {
+    heystack
+        => function windowed<char()>(needle_size)
+        => declare candidates: string(needle_size);
+
+    needle, candidates
+        => function string_equals(needle_size)
+        => function any()
+        => result;
+}
+
+function main() needle: string(5), heystack: char() => result: boolean() {
+    needle, heystack => function string_matching(5) => result;
+}

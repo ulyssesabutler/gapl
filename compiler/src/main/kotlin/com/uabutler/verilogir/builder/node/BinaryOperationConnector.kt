@@ -11,8 +11,12 @@ import com.uabutler.verilogir.module.statement.util.BinaryOperator
 
 object BinaryOperationConnector {
 
-    private fun getOperation(function: BinaryOperationFunction): BinaryOperator {
+    private fun getOperation(function: BinaryFunction): BinaryOperator {
         return when (function) {
+            is EqualsFunction -> BinaryOperator.EQUALS
+            is NotEqualsFunction -> BinaryOperator.NOT_EQUALS
+            is AndFunction -> BinaryOperator.BITWISE_AND
+            is OrFunction -> BinaryOperator.BITWISE_OR
             is AdditionFunction -> BinaryOperator.ADD
             is SubtractionFunction -> BinaryOperator.SUBTRACT
             is MultiplicationFunction -> BinaryOperator.MULTIPLY
@@ -21,7 +25,7 @@ object BinaryOperationConnector {
         }
     }
 
-    fun connect(predefinedFunction: PredefinedFunctionInvocationNode, function: BinaryOperationFunction): List<Statement> {
+    fun connect(predefinedFunction: PredefinedFunctionInvocationNode, function: BinaryFunction): List<Statement> {
         val lhs = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_lhs_input", function.lhs)
         val rhs = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_rhs_input", function.rhs)
         val result = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_result_output", function.result)
