@@ -235,7 +235,11 @@ class NodeBuilder(
 
             is ReferenceCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
-                val referencedNode = existingDeclaredNodes[identifier]!!
+                val referencedNode = try {
+                    existingDeclaredNodes[identifier]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Unable to find referenced node for identifier $identifier")
+                }
 
                 // We should be referencing a declared node, which has a single interface
                 val input = referencedNode.inputs.firstOrNull()?.let { input ->

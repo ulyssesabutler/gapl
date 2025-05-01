@@ -9,93 +9,152 @@ interface pair<I1, I2>() {
     second: I2;
 }
 
-function windowed<I>(
+interface valid<I>() {
+    value: I;
+    valid: boolean();
+}
+
+interface last<I>() {
+    value: I;
+    last: boolean();
+}
+
+function string_matching_windowed<I>(
     parameter window_size: integer
-) i: I => o: I[window_size] {
-    declare windows: function register<I[window_size]>() => o;
-    i => windows[0];
+) i: last<I>() => o: last<I[window_size]>() {
+    declare windows: function register<I[window_size]>() => o.value;
+
+    i.value => windows[0];
     windows[0:window_size - 2] => windows[1:window_size - 1];
+
+    i.last => o.last;
 }
 
-function any() i: boolean() => o: boolean() {
-    declare current: function register<boolean()>();
+function string_matching_any() i: last<boolean()>() => o: valid<boolean()>() {
+    declare current_value: function register<boolean()>();
+    declare current_valid: function register<boolean()>();
 
-    i, current
+    i.value, current_value
         => function or()
-        => current
-        => o;
+        => current_value
+        => o.value;
+
+    i.last, current_valid
+        => function or()
+        => current_valid
+        => o.valid;
 }
 
-function vector_fold<I>(
+function string_matching_vector_fold<I>(
     parameter size: integer,
     parameter operation: function I, I => I
-) i: I[size] => o: I {
+) i: last<I[size]>() => o: last<I>() {
     if (size == 1) {
-        i[0] => o;
+        i.value[0] => o.value;
+        i.last => o.last;
     } else if (size == 2) {
-        i[0], i[1] => function operation => o;
+        i.value[0], i.value[1] => function operation => o.value;
+        i.last => o.last;
     } else {
-        declare delayed_fold: I[size - 1];
+        declare delayed_fold: last<I[size - 1]>();
 
-        i[size - 1], i[size - 2] => function operation => delayed_fold[size - 2];
-        i[0:size - 3] => delayed_fold[0:size - 3];
+        i.value[size - 1], i.value[size - 2] => function operation => delayed_fold.value[size - 2];
+        i.value[0:size - 3] => delayed_fold.value[0:size - 3];
+
+        i.last => delayed_fold.last;
 
         delayed_fold
-            => function register<I[size - 1]>()
-            => function vector_fold<I>(size - 1, function operation)
+            => function register<last<I[size - 1]>()>()
+            => function string_matching_vector_fold<I>(size - 1, function operation)
             => o;
     }
 }
 
-function vector_zip<I>(
+function string_matching_vector_zip<I>(
     parameter vector_size: integer,
-) i1: I[vector_size], i2: I[vector_size] => o: pair<I, I>()[vector_size] {
-    i1[0] => o[0].first;
-    i2[0] => o[0].second;
+) i: last<pair<I[vector_size], I[vector_size]>()>() => o: last<pair<I, I>()[vector_size]>() {
+    i.value.first[0] => o.value[0].first;
+    i.value.second[0] => o.value[0].second;
 
-    i1[1:vector_size - 1], i2[1:vector_size - 1] => function vector_zip<I>(vector_size) => o[1:vector_size - 1];
+    if (vector_size > 2) {
+        declare remainder_unzipped: last<pair<I[vector_size - 1], I[vector_size - 1]>()>();
+        declare remainder_zipped: last<pair<I, I>()[vector_size - 1]>();
+
+        i.value.first[1:vector_size - 1] => remainder_unzipped.value.first;
+        i.value.second[1:vector_size - 1] => remainder_unzipped.value.second;
+        i.last => remainder_unzipped.last;
+
+        remainder_unzipped => function string_matching_vector_zip<I>(vector_size - 1) => remainder_zipped;
+
+        remainder_zipped.value => o.value[1:vector_size - 1];
+    }
 }
 
-function vector_map<I, O>(
+function string_matching_vector_map<I, O>(
     parameter size: integer,
     parameter operation: function I => O,
-) i: I[size] => o: O[size] {
+) i: last<I[size]>() => o: last<O[size]>() {
     if (size > 0) {
-        i[size - 1] => function operation => o[size - 1];
+        i.value[size - 1] => function operation => o.value[size - 1];
+        i.last => o.last;
 
         if (size > 1) {
-            i[0:size - 2] => function vector_map<I, O>(size - 1, function operation) => o[0:size - 2];
+            declare remainder_unmapped: last<I[size - 1]>();
+            declare remainder_mapped: last<O[size - 1]>();
+
+            i.value[0:size - 2] => remainder_unmapped.value;
+            i.last => remainder_unmapped.last;
+
+            remainder_unmapped => function string_matching_vector_map<I, O>(size - 1, function operation) => remainder_mapped;
+
+            remainder_mapped.value => o.value[0:size - 2];
         }
     }
 }
 
-function char_pair_equals() i: pair<char(), char()>() => result: boolean() {
+function string_matching_char_pair_equals() i: pair<char(), char()>() => result: boolean() {
     i.first, i.second => function equals(8) => result;
 }
 
-function string_equals(
+function string_matching_string_equals(
     parameter string_size: integer
-) string1: string(string_size), string2: string(string_size) => result: boolean() {
-    string1, string2
-        => function vector_zip<char()>(string_size)
-        => function vector_map<pair<char(), char()>(), boolean()>(string_size, function char_pair_equals())
-        => function vector_fold<boolean()>(string_size, function and())
+) strings: last<pair<string(string_size), string(string_size)>()>() => result: valid<boolean()>() {
+    strings
+        => function string_matching_vector_zip<char()>(string_size)
+        => function string_matching_vector_map<pair<char(), char()>(), boolean()>(string_size, function string_matching_char_pair_equals())
+        => function string_matching_vector_fold<boolean()>(string_size, function and())
         => result;
 }
 
 function string_matching(
     parameter needle_size: integer
-) needle: string(needle_size), heystack: char() => result: boolean() {
+) needle: string(needle_size), heystack: last<char()>() => result: valid<boolean()>() {
     heystack
-        => function windowed<char()>(needle_size)
-        => declare candidates: string(needle_size);
+        => function string_matching_windowed<char()>(needle_size)
+        => declare candidate: last<string(needle_size)>();
 
-    needle, candidates
-        => function string_equals(needle_size)
-        => function any()
+    declare needle_candidate_pair: last<pair<string(needle_size), string(needle_size)>()>();
+
+    needle => needle_candidate_pair.value.first;
+    candidate.value => needle_candidate_pair.value.second;
+    candidate.last => needle_candidate_pair.last;
+
+    needle_candidate_pair
+        => function string_matching_string_equals(needle_size)
+        => function string_matching_any()
         => result;
 }
 
-function main() needle: string(5), heystack: char() => result: boolean() {
-    needle, heystack => function string_matching(5) => result;
+function string_matching_main() needle: string(5), heystack: char(), last: boolean() => result: boolean(), valid: boolean() {
+    declare heystack_last: last<char()>();
+
+    heystack => heystack_last.value;
+    last => heystack_last.last;
+
+    declare result_valid: valid<boolean()>();
+
+    needle, heystack_last => function string_matching(5) => result_valid;
+
+    result_valid.value => result;
+    result_valid.valid => valid;
 }

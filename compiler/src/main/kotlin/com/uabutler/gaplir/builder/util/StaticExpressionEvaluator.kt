@@ -34,7 +34,11 @@ object StaticExpressionEvaluator {
             is NotEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a != b) 1 else 0 }
             is SubtractionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a - b }
             is IdentifierStaticExpressionNode -> {
-                val identifiedValue = context[e.identifier.value]!!
+                val identifiedValue = try {
+                    context[e.identifier.value]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Unable to find value for ${e.identifier.value}")
+                }
 
                 if (identifiedValue is IntegerParameterValue)
                     identifiedValue.value

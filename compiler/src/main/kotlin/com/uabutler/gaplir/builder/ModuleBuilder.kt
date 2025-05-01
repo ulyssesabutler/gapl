@@ -5,6 +5,7 @@ import com.uabutler.gaplir.Module
 import com.uabutler.gaplir.builder.util.ModuleInstantiationTracker
 import com.uabutler.gaplir.builder.util.ProgramContext
 import com.uabutler.gaplir.util.ModuleInvocation
+import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator
 
 class ModuleBuilder(val program: ProgramNode) {
 
@@ -63,6 +64,16 @@ class ModuleBuilder(val program: ProgramNode) {
     private fun buildModule(
         instantiation: ModuleInstantiationTracker.ModuleInstantiation,
     ): Module {
+        val identifier = ModuleIdentifierGenerator.genIdentifierFromInvocation(
+            ModuleInvocation(
+                gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
+                interfaces = instantiation.moduleInstantiationData.genericInterfaceValues,
+                parameters = instantiation.moduleInstantiationData.genericParameterValues,
+            )
+        )
+
+        println("building module $identifier")
+
         val astNode = instantiation.astNode
 
         // Build input nodes
