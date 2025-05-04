@@ -31,8 +31,16 @@ data class Module(
             endIndex = null,
         )
 
+        val enable = ModuleIO(
+            name = "enable",
+            direction = ModuleIODirection.INPUT,
+            type = DataType.WIRE,
+            startIndex = null,
+            endIndex = null,
+        )
+
         // Module Ports
-        val io = (listOf(clock, reset) + inputs + outputs).joinToString(",\n") { it.verilogSerialize() }
+        val io = (listOf(clock, reset, enable) + inputs + outputs).joinToString(",\n") { it.verilogSerialize() }
         appendLine(io.prependIndent())
 
         appendLine(");")

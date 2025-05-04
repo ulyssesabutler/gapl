@@ -26,22 +26,28 @@ object VerilogBuilder {
         }
     }
 
-    fun verilogModuleFromGAPLModule(gaplModule: GAPLModule) = VerilogModule(
-        name = ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation),
-        inputs = gaplModule.inputNodes.flatMap {
-            moduleIOsFromInterfaceStructure(
-                name = "${it.name}_output",
-                structure = it.inputInterfaceStructure,
-                direction = ModuleIODirection.INPUT,
-            )
-        },
-        outputs = gaplModule.outputNodes.flatMap {
-            moduleIOsFromInterfaceStructure(
-                name = "${it.name}_input",
-                structure = it.outputInterfaceStructure,
-                direction = ModuleIODirection.OUTPUT,
-            )
-        },
-        statements = StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.nodes + gaplModule.outputNodes),
-    )
+    fun verilogModuleFromGAPLModule(gaplModule: GAPLModule): VerilogModule {
+        println("## Building verilog module: ${ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation)}")
+
+        return VerilogModule(
+            name = ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation),
+            inputs = gaplModule.inputNodes.flatMap {
+                moduleIOsFromInterfaceStructure(
+                    name = it.name,
+                    structure = it.inputInterfaceStructure,
+                    direction = ModuleIODirection.INPUT,
+                )
+            },
+            outputs = gaplModule.outputNodes.flatMap {
+                moduleIOsFromInterfaceStructure(
+                    name = it.name,
+                    structure = it.outputInterfaceStructure,
+                    direction = ModuleIODirection.OUTPUT,
+                )
+            },
+            statements =
+                StatementBuilder.verilogStatementsFromIONodes(gaplModule.inputNodes, gaplModule.outputNodes) +
+                        StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.nodes + gaplModule.outputNodes),
+        )
+    }
 }

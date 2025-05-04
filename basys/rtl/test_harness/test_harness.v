@@ -170,14 +170,7 @@ module test_harness
     );
 
     // Processor
-
-    // Example
-    /*
-    assign clock_cycles_ready = 1;
-
-    assign processor_in_ready = debugger_ready;
-
-    add_3 processor
+    string_matching_processor processor
     (
         .clock(clock),
         .reset(reset),
@@ -191,23 +184,5 @@ module test_harness
         .out_valid(processor_out_valid),
         .out_last(processor_out_last)
     );
-    */
-
-    // GAPL
-    wire [31:0] processor_input;
-    wire [31:0] processor_output;
-
-    stream_map_main processor
-    (
-        .i_output(processor_input),
-        .o_input(processor_output)
-    );
-
-    assign processor_out_valid = processor_in_valid;
-    assign processor_out_last = processor_in_last;
-    assign processor_in_ready = processor_out_ready;
-
-    assign processor_input = {24'h0, processor_in_data};
-    assign processor_out_data = processor_output[7:0];
 
 endmodule

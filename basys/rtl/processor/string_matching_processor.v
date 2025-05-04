@@ -1,6 +1,6 @@
 module string_matching_processor
 #(
-    parameter STRING_SIZE = 5,
+    parameter STRING_SIZE = 5
 ) (
     input  wire       clock,
     input  wire       reset,
@@ -15,80 +15,56 @@ module string_matching_processor
     output wire       out_last
 );
 
-    localparam STRING_SIZE_BITS = $clog2(STRING_SIZE + 1);
+    wire [(STRING_SIZE * 8) - 1:0] needle;
 
-    reg [(STRING_SIZE * 8) - 1:0] needle;
-    reg [(STRING_SIZE * 8) - 1:0] needle_next;
+    wire [7:0] heystack_data;
+    wire       heystack_valid;
+    wire       heystack_last;
 
-    reg [STRING_SIZE_BITS - 1:0] needle_index;
-    reg [STRING_SIZE_BITS - 1:0] needle_index_next;
+    needle_heystack_parser parser
+    (
+        .clock(clock),
+        .reset(reset),
+        .enable(enable),
 
-    reg [7:0] heystack_data;
-    reg       heystack_valid;
-    reg       heystack_last;
+        .in_data(in_data),
+        .in_valid(in_valid),
+        .in_last(in_last),
 
-    reg [7:0] heystack_data_next;
-    reg       heystack_valid_next;
-    reg       heystack_last_next;
+        .needle(needle),
 
-    localparam STATE_RECEIVING_NEEDLE   = 0;
-    localparam STATE_RECEIVING_HEYSTACK = 1;
+        .heystack_data(heystack_data),
+        .heystack_valid(heystack_valid),
+        .heystack_last(heystack_last)
+    );
 
-    reg state;
-    reg state_next;
+    // Bad, bad, hacky code.
+    reg  has_seen_last;
+    wire has_seen_last_next = has_seen_last || in_last;
 
-    always @(*) begin
-        needle_next = needle;
-        needle_index_next = needle_index;
-        state_next = state;
+    wire enable_string_matcher = enable || in_valid || has_seen_last;
 
-        heystack_data_next = 0;
-        heystack_valid_next = 0;
-        heystack_last_next = 0;
+    // Output of string matcher
+    wire result;
+    wire valid;
 
-        if (state == STATE_RECEIVING_NEEDLE) begin
-            if (in_valid) begin
-                needle_next = needle_next | (in_data << (needle_index * 8));
+    string_matching_main string_matching
+    (
+        .clock(clock),
+        .reset(reset),
+        .enable(enable_string_matcher),
 
-                if (needle_index == (STRING_SIZE_BITS - 1)) begin
-                    state_next = STATE_RECEIVING_HEYSTACK;
-                    needle_index_next = 0;
-                end else begin
-                    needle_index_next = needle_index + 1;
-                end
-            end
-        end else if (state == STATE_RECEIVING_HEYSTACK) begin
-            if (in_valid) begin
-                heystack_data_next = in_data;
-                heystack_valid_next = 1;
-                heystack_last_next = in_last;
+        .needle(needle),
 
-                if (in_last) begin
-                    state_next  = STATE_RECEIVING_NEEDLE;
-                    needle_next = 0;
-                end
-            end
-        end
-    end
+        .heystack(heystack_data),
+        .last(heystack_last),
 
-    always @(posedge clock) begin
-        if (reset) begin
-            state        <= 0;
-            needle       <= 0;
-            needle_index <= 0;
+        .result(result),
+        .valid(valid)
+    );
 
-            heystack_data  <= 0;
-            heystack_valid <= 0;
-            heystack_last  <= 0;
-        end else begin
-            state        <= state_next;
-            needle       <= needle_next;
-            needle_index <= needle_index_next;
-
-            heystack_data  <= heystack_data_next;
-            heystack_valid <= heystack_valid_next;
-            heystack_last  <= heystack_last_next;
-        end
-    end
+    assign out_data = { 7'b0, result };
+    assign out_valid = valid;
+    assign out_last = valid;
 
 endmodule

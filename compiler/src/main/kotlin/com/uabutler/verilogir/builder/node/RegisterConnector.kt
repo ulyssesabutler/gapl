@@ -63,13 +63,31 @@ object RegisterConnector {
                             )
                         }
                     ),
-                    elseIfBranches = emptyList(),
-                    elseStatements = registers.zip(inputs).map { (register, input) ->
+                    elseIfBranches = listOf(
+                        IfBranch(
+                            condition = Reference(
+                                variableName = "enable",
+                                startIndex = null,
+                                endIndex = null,
+                            ),
+                            then = registers.zip(inputs).map { (register, input) ->
+                                NonBlockingAssignment(
+                                    variableName = register.name,
+                                    expression = Reference(
+                                        variableName = input.name,
+                                        startIndex = input.width - 1,
+                                        endIndex = 0,
+                                    )
+                                )
+                            }
+                        ),
+                    ),
+                    elseStatements = registers.map { register ->
                         NonBlockingAssignment(
                             variableName = register.name,
                             expression = Reference(
-                                variableName = input.name,
-                                startIndex = input.width - 1,
+                                variableName = register.name,
+                                startIndex = register.width - 1,
                                 endIndex = 0,
                             )
                         )

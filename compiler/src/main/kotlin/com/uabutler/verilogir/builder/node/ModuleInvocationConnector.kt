@@ -2,17 +2,40 @@ package com.uabutler.verilogir.builder.node
 
 import com.uabutler.gaplir.node.ModuleInvocationNode
 import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator.genIdentifierFromInvocation
+import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
 import com.uabutler.verilogir.module.statement.Invocation
 import com.uabutler.verilogir.module.statement.Statement
 import com.uabutler.verilogir.module.statement.invocation.InvocationPort
 
 object ModuleInvocationConnector {
     fun connect(node: ModuleInvocationNode): List<Statement> {
-        val inputModulePortNames = node.functionInputInterfaces.map { "${it.name}_output" }
-        val inputOuterWirePortNames = node.inputs.map { "${it.name}_input" }
+        val inputModulePortNames = node.functionInputInterfaces.flatMap {
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = it.name,
+                gaplInterfaceStructure = it.item
+            )
+        }.map { it.name }
 
-        val outputModulePortNames = node.functionOutputInterfaces.map { "${it.name}_input" }
-        val outputOuterWirePortNames = node.outputs.map { "${it.name}_output" }
+        val inputOuterWirePortNames = node.inputs.flatMap {
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = "${it.name}_input",
+                gaplInterfaceStructure = it.item.structure
+            )
+        }.map { it.name }
+
+        val outputModulePortNames = node.functionOutputInterfaces.flatMap {
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = it.name,
+                gaplInterfaceStructure = it.item
+            )
+        }.map { it.name }
+
+        val outputOuterWirePortNames = node.outputs.flatMap {
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = "${it.name}_output",
+                gaplInterfaceStructure = it.item.structure
+            )
+        }.map { it.name }
 
         val ports = (inputModulePortNames + outputModulePortNames).zip(inputOuterWirePortNames + outputOuterWirePortNames)
 

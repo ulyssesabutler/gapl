@@ -26,7 +26,7 @@ class VerilogInterface(
                 }
                 is VectorInterfaceStructure -> {
                     fromGAPLInterfaceStructure(name, gaplInterfaceStructure.vectoredInterface).map {
-                        Wire(name, it.width * gaplInterfaceStructure.size)
+                        Wire(it.name, it.width * gaplInterfaceStructure.size)
                     }
                 }
             }

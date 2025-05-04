@@ -18,6 +18,86 @@ import com.uabutler.verilogir.util.DataType
 
 object StatementBuilder {
 
+    fun verilogStatementsFromIONodes(inputs: List<ModuleInputNode>, outputs: List<ModuleOutputNode>): List<Statement> {
+        val inputIOWires = inputs.flatMap { node ->
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = node.name,
+                gaplInterfaceStructure = node.inputInterfaceStructure,
+            )
+        }
+
+        val inputNodeWires = inputs.flatMap { node ->
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = "${node.name}_output",
+                gaplInterfaceStructure = node.inputInterfaceStructure,
+            )
+        }
+
+        val outputIOWires = outputs.flatMap { node ->
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = node.name,
+                gaplInterfaceStructure = node.outputInterfaceStructure,
+            )
+        }
+
+        val outputNodeWires = outputs.flatMap { node ->
+            VerilogInterface.fromGAPLInterfaceStructure(
+                name = "${node.name}_input",
+                gaplInterfaceStructure = node.outputInterfaceStructure,
+            )
+        }
+
+        val inputDeclarations = inputNodeWires.map { wire ->
+            Declaration(
+                name = wire.name,
+                type = DataType.WIRE,
+                startIndex = wire.width - 1,
+                endIndex = 0,
+            )
+        }
+
+        val outputDeclarations = outputNodeWires.map { wire ->
+            Declaration(
+                name = wire.name,
+                type = DataType.WIRE,
+                startIndex = wire.width - 1,
+                endIndex = 0,
+            )
+        }
+
+        val inputsAssignments = inputIOWires.zip(inputNodeWires).map { (io, node) ->
+            Assignment(
+                destReference = Reference(
+                    variableName = node.name,
+                    startIndex = null,
+                    endIndex = null,
+                ),
+                expression = Reference(
+                    variableName = io.name,
+                    startIndex = null,
+                    endIndex = null,
+                )
+            )
+        }
+
+        val outputsAssignments = outputIOWires.zip(outputNodeWires).map { (io, node) ->
+            Assignment(
+                destReference = Reference(
+                    variableName = io.name,
+                    startIndex = null,
+                    endIndex = null,
+                ),
+                expression = Reference(
+                    variableName = node.name,
+                    startIndex = null,
+                    endIndex = null,
+                )
+            )
+        }
+
+        return inputDeclarations + outputDeclarations +  inputsAssignments + outputsAssignments
+    }
+
     fun verilogStatementsFromGAPLNodes(nodes: List<Node>): List<Statement> {
         val declarations = nodes
             .filter { it !is ModuleOutputNode }

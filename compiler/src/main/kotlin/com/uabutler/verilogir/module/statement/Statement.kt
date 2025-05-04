@@ -57,7 +57,12 @@ data class Invocation(
             variablePortName = "reset",
         )
 
-        val ports = (listOf(clock, reset) + ports).joinToString(",\n") { it.verilogSerialize() }
+        val enable = InvocationPort(
+            modulePortName = "enable",
+            variablePortName = "enable",
+        )
+
+        val ports = (listOf(clock, reset, enable) + ports).joinToString(",\n") { it.verilogSerialize() }
         appendLine(ports.prependIndent())
 
         appendLine(");")
