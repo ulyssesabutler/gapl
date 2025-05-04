@@ -9,24 +9,24 @@ import com.uabutler.verilogir.module.statement.expression.Reference
 object PassThroughNodeConnector {
     fun connect(node: PassThroughNode): List<Statement> {
         val inputWires = node.inputs.map {
-            VerilogInterface.fromGAPLInterfaceStructure("${it.name}_inputs", it.item.structure)
+            VerilogInterface.fromGAPLInterfaceStructure("${it.name}_input", it.item.structure)
         }.flatten()
 
         val outputWires = node.outputs.map {
-            VerilogInterface.fromGAPLInterfaceStructure("${it.name}_outputs", it.item.structure)
+            VerilogInterface.fromGAPLInterfaceStructure("${it.name}_output", it.item.structure)
         }.flatten()
 
         return inputWires.zip(outputWires).map { (input, output) ->
             Assignment(
                 destReference = Reference(
                     variableName = output.name,
-                    startIndex = 0,
-                    endIndex = output.width - 1,
+                    startIndex = output.width - 1,
+                    endIndex = 0,
                 ),
                 expression = Reference(
                     variableName = input.name,
-                    startIndex = 0,
-                    endIndex = input.width - 1,
+                    startIndex = input.width - 1,
+                    endIndex = 0,
                 )
             )
         }

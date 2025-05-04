@@ -16,8 +16,8 @@ object LiteralConnector {
             Assignment(
                 destReference = Reference(
                     variableName = output.name,
-                    startIndex = 0,
-                    endIndex = output.width - 1,
+                    startIndex = output.width - 1,
+                    endIndex = 0,
                 ),
                 expression = IntLiteral(predefinedFunction.value)
             )

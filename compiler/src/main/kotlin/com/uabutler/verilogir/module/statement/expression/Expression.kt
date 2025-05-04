@@ -12,6 +12,11 @@ data class Reference(
     val startIndex: Int?,
     val endIndex: Int?,
 ): Expression() {
+    init {
+        if (startIndex != null && endIndex != null && startIndex < endIndex) {
+            throw IllegalArgumentException("The start index ($startIndex) must be greater than or equal to end index ($endIndex). [$startIndex:$endIndex]")
+        }
+    }
     override fun verilogSerialize() = buildString {
         append(variableName)
         if (startIndex != null && endIndex != null) {

@@ -89,6 +89,10 @@ module test_harness
     wire       processed_packet_ready;
     wire       processed_packet_last;
 
+    wire [31:0] clock_cycles_data;
+    wire        clock_cycles_valid;
+    wire        clock_cycles_ready;
+
     packet_constructor constructor
     (
         .clock(clock),
@@ -98,6 +102,10 @@ module test_harness
         .packet_valid(processed_packet_valid),
         .packet_ready(processed_packet_ready),
         .packet_last(processed_packet_last),
+
+        .clock_data(clock_cycles_data),
+        .clock_valid(clock_cycles_valid),
+        .clock_ready(clock_cycles_ready),
 
         .uart_data(transmitting_data),
         .uart_valid(transmitting_valid),
@@ -116,10 +124,6 @@ module test_harness
     wire        processor_out_last;
 
     wire        enable;
-
-    wire [31:0] clock_cycles_data;
-    wire        clock_cycles_valid;
-    wire        clock_cycles_ready;
 
     processor_controller controller
     (
@@ -170,14 +174,9 @@ module test_harness
     );
 
     // Processor
-
-    // Example
-    /*
-    assign clock_cycles_ready = 1;
-
     assign processor_in_ready = debugger_ready;
 
-    add_3 processor
+    string_matching_processor processor
     (
         .clock(clock),
         .reset(reset),
@@ -191,23 +190,5 @@ module test_harness
         .out_valid(processor_out_valid),
         .out_last(processor_out_last)
     );
-    */
-
-    // GAPL
-    wire [31:0] processor_input;
-    wire [31:0] processor_output;
-
-    stream_map_main processor
-    (
-        .i_output(processor_input),
-        .o_input(processor_output)
-    );
-
-    assign processor_out_valid = processor_in_valid;
-    assign processor_out_last = processor_in_last;
-    assign processor_in_ready = processor_out_ready;
-
-    assign processor_input = {24'h0, processor_in_data};
-    assign processor_out_data = processor_output[7:0];
 
 endmodule
