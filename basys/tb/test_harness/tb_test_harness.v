@@ -114,22 +114,32 @@ module tb_test_harness;
         end
     endtask
 
-    logic [7:0] my_input_string [0:14] = '{
+    logic [7:0] my_input_string [0:24] = '{
+        8'h41,
+        8'h42,
+        8'h43,
+        8'h44,
+        8'h45,
+        8'h46,
+        8'h47,
         8'h48,
-        8'h65,
-        8'h6C,
-        8'h6C,
-        8'h6C,
-        8'h6C,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h6F,
-        8'h00
+        8'h49,
+        8'h41,
+        8'h42,
+        8'h43,
+        8'h41,
+        8'h42,
+        8'h43,
+        8'h44,
+        8'h45,
+        8'h46,
+        8'h47,
+        8'h48,
+        8'h49,
+        8'h4A,
+        8'h4B,
+        8'h4C,
+        8'h4D
     };
 
     // Main
@@ -142,7 +152,7 @@ module tb_test_harness;
 
         reset = 0;
 
-        send_string(my_input_string, 15);
+        send_string(my_input_string, 25);
 
         #(BAUD_PERIOD * 5);
 

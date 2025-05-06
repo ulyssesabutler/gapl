@@ -38,12 +38,6 @@ module string_matching_processor
         .heystack_last(heystack_last)
     );
 
-    // Bad, bad, hacky code.
-    reg  has_seen_last;
-    wire has_seen_last_next = has_seen_last || in_last;
-
-    wire enable_string_matcher = enable || in_valid || has_seen_last;
-
     // Output of string matcher
     wire result;
     wire valid;
@@ -52,7 +46,7 @@ module string_matching_processor
     (
         .clock(clock),
         .reset(reset),
-        .enable(enable_string_matcher),
+        .enable(enable),
 
         .needle(needle),
 

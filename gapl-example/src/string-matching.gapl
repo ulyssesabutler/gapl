@@ -24,8 +24,8 @@ function string_matching_windowed<I>(
 ) i: last<I>() => o: last<I[window_size]>() {
     declare windows: function register<I[window_size]>() => o.value;
 
-    i.value => windows[0];
-    windows[0:window_size - 2] => windows[1:window_size - 1];
+    i.value => windows[window_size - 1];
+    windows[1:window_size - 1] => windows[0:window_size - 2];
 
     i.last => o.last;
 }
@@ -76,7 +76,9 @@ function string_matching_vector_zip<I>(
     i.value.first[0] => o.value[0].first;
     i.value.second[0] => o.value[0].second;
 
-    if (vector_size > 2) {
+    i.last => o.last;
+
+    if (vector_size > 1) {
         declare remainder_unzipped: last<pair<I[vector_size - 1], I[vector_size - 1]>()>();
         declare remainder_zipped: last<pair<I, I>()[vector_size - 1]>();
 
@@ -113,7 +115,9 @@ function string_matching_vector_map<I, O>(
 }
 
 function string_matching_char_pair_equals() i: pair<char(), char()>() => result: boolean() {
-    i.first, i.second => function equals(8) => result;
+    i.first, i.second => function equals(8) => declare is_equal: boolean();
+    i.first, function literal(8, 0) => function not_equals(8) => declare non_null: boolean();
+    is_equal, non_null => function and() => result;
 }
 
 function string_matching_string_equals(

@@ -47,7 +47,7 @@ module needle_heystack_parser
             if (in_valid) begin
                 needle_next = needle_next | (in_data << (needle_index * 8));
 
-                if (needle_index == (STRING_SIZE_BITS - 1)) begin
+                if (needle_index == (STRING_SIZE - 1)) begin
                     state_next = STATE_RECEIVING_HEYSTACK;
                     needle_index_next = 0;
                 end else begin
@@ -77,7 +77,7 @@ module needle_heystack_parser
             heystack_data  <= 0;
             heystack_valid <= 0;
             heystack_last  <= 0;
-        end else begin
+        end else if (enable) begin
             state        <= state_next;
             needle       <= needle_next;
             needle_index <= needle_index_next;
@@ -85,6 +85,14 @@ module needle_heystack_parser
             heystack_data  <= heystack_data_next;
             heystack_valid <= heystack_valid_next;
             heystack_last  <= heystack_last_next;
+        end else begin
+            state        <= state;
+            needle       <= needle;
+            needle_index <= needle_index;
+
+            heystack_data  <= heystack_data;
+            heystack_valid <= heystack_valid;
+            heystack_last  <= heystack_last;
         end
     end
 

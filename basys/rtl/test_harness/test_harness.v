@@ -170,6 +170,8 @@ module test_harness
     );
 
     // Processor
+    assign processor_in_ready = debugger_ready;
+
     string_matching_processor processor
     (
         .clock(clock),
