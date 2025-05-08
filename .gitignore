@@ -64,3 +64,12 @@ xsim.dir
 vivado*.str
 vivado*.debug
 vivado*.zip
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+*.egg-info/
+dist/
+build/

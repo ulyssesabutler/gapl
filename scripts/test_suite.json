@@ -20,5 +20,17 @@
         "expected_output": {
             "file": "test_data/network_packet.hex"
         }
+    },
+    {
+        "name": "test_string_comparison",
+        "description": "Test string comparison with cycle count",
+        "input": {
+            "string1": "0102030405",
+            "string2": "0102030405"
+        },
+        "expected_output": {
+            "result": true,
+            "cycle_count": 42
+        }
     }
 ]

@@ -38,7 +38,7 @@ pip install -r requirements.txt
 
 Example:
 ```bash
-./gradlew :scripts:runFpgaTests --port=/dev/ttyUSB1 --test-name=test_packet_forwarding
+./gradlew :scripts:runFpgaTests --port=/dev/ttyUSB1 --test-name=test_string_comparison
 ```
 
 ## Test Suite Format
@@ -62,13 +62,34 @@ Tests are defined in a JSON file with the following structure:
         "expected_output": {
             "file": "test_data/expected.hex"
         }
+    },
+    {
+        "name": "test_string_comparison",
+        "description": "Test string comparison with cycle count",
+        "input": {
+            "string1": "0102030405",
+            "string2": "0102030405"
+        },
+        "expected_output": {
+            "result": true,
+            "cycle_count": 42
+        }
     }
 ]
 ```
 
 ### Input/Output Formats
+
+#### Basic Packet Tests
 - Inline hex strings: Direct hex values
 - File-based: Path to .hex file containing hex string
+
+#### String Comparison Tests
+- Input format: Two hex strings to compare
+- Output format: Boolean result and cycle count
+- FPGA response format: `<result_byte><cycle_count_4_bytes>`
+  - `result_byte`: 0x00 for false, 0x01 for true
+  - `cycle_count_4_bytes`: 32-bit integer in big-endian format
 
 ## Test Data Files
 
@@ -97,4 +118,5 @@ Example test_data/input.hex:
 3. Test Failures:
    - Verify test data format
    - Check FPGA configuration
-   - Ensure baud rate matches FPGA settings 
+   - Ensure baud rate matches FPGA settings
+   - For string comparison tests, verify FPGA is returning correct response format 
