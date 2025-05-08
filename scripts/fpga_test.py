@@ -117,6 +117,13 @@ def run_test(test_case: Dict, tester: FPGATester) -> Tuple[bool, float]:
             # Original packet test
             expected_output = load_packet_data(test_case['expected_output'])
             success = response.strip() == expected_output
+            
+            # Parse cycle count for all tests
+            try:
+                result, cycle_count = parse_response(response.strip())
+                print(f"Cycle Count: {cycle_count}")
+            except ValueError:
+                print("Cycle Count: Not available")
 
     finally:
         tester.disconnect()
