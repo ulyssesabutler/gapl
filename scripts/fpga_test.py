@@ -80,7 +80,7 @@ def parse_response(response: bytes) -> Tuple[bool, int]:
         raise ValueError("Invalid response format")
     
     result = bool(response[0])
-    cycle_count = int.from_bytes(response[1:5], byteorder='big')  # 32-bit cycle count from FPGA hardware
+    cycle_count = int.from_bytes(response[2:6], byteorder='big')  # 32-bit cycle count from FPGA hardware
     return result, cycle_count
 
 def run_test(test_case: Dict, tester: FPGATester) -> Tuple[bool, float]:
