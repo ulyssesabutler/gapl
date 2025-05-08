@@ -27,8 +27,17 @@ data class DeclaredFunctionCircuitExpressionNode(
     val instantiation: InstantiationNode,
 ): CircuitNodeExpressionNode
 
+data class DeclaredGenericFunctionCircuitExpressionNode(
+    val identifier: IdentifierNode,
+    val functionIdentifier: IdentifierNode,
+): CircuitNodeExpressionNode
+
 data class AnonymousFunctionCircuitExpressionNode(
     val instantiation: InstantiationNode,
+): CircuitNodeExpressionNode
+
+data class AnonymousGenericFunctionCircuitExpressionNode(
+    val functionIdentifier: IdentifierNode,
 ): CircuitNodeExpressionNode
 
 data class ReferenceCircuitExpressionNode(

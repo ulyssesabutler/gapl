@@ -9,16 +9,16 @@ sealed class PredefinedFunction(
     val outputs: Map<String, InterfaceStructure>,
 ) {
     companion object {
-        private fun wire32bit() = VectorInterfaceStructure(WireInterfaceStructure, 32)
+        private fun standard() = VectorInterfaceStructure(WireInterfaceStructure, 32)
 
         fun searchPredefinedFunctions(instantiationData: ModuleInstantiationTracker.ModuleInstantiationData): PredefinedFunction? {
             return when (instantiationData.functionIdentifier) {
-                "add" -> AdditionFunction(wire32bit(), wire32bit(), wire32bit())
-                "subtract" -> SubtractionFunction(wire32bit(), wire32bit(), wire32bit())
-                "multiply" -> MultiplicationFunction(wire32bit(), wire32bit(), wire32bit())
-                "left_shift" -> LeftShiftFunction(wire32bit(), wire32bit(), wire32bit())
-                "right_shift" -> RightShiftFunction(wire32bit(), wire32bit(), wire32bit())
-                "register" -> RegisterFunction(wire32bit())
+                "add" -> AdditionFunction(standard(), standard(), standard())
+                "subtract" -> SubtractionFunction(standard(), standard(), standard())
+                "multiply" -> MultiplicationFunction(standard(), standard(), standard())
+                "left_shift" -> LeftShiftFunction(standard(), standard(), standard())
+                "right_shift" -> RightShiftFunction(standard(), standard(), standard())
+                "register" -> RegisterFunction(standard())
                 else -> null
             }
         }

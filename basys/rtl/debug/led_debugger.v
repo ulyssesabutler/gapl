@@ -3,7 +3,7 @@
 
 module led_debugger
 #(
-    parameter MAX_QUEUE_DEPTH_BITS = 4
+    parameter MAX_QUEUE_DEPTH_BITS = 8
 ) (
     input  wire       clock,
     input  wire       reset,
@@ -12,10 +12,11 @@ module led_debugger
     input  wire       valid_in,
     output wire       ready_in,
 
-    input  wire       display_next,
+    input  wire       button_display_next_value,
     output reg  [7:0] leds
 );
 
+    // FIFO Queue to hold data
     wire [7:0] data_queue;
     wire       valid_queue;
     reg        ready_queue;
@@ -34,6 +35,29 @@ module led_debugger
         .out_ready(ready_queue)
     );
 
+    // Button Handling
+    wire debounced_button_display_next_value;
+
+    debouncer debound_button_display_next_value
+    (
+        .clock(clock),
+        .in(button_display_next_value),
+        .out(debounced_button_display_next_value)
+    );
+
+    reg debounced_button_display_next_value_previous;
+
+    always @(posedge clock) begin
+        if (reset) begin
+            debounced_button_display_next_value_previous <= 0;
+        end else begin
+            debounced_button_display_next_value_previous <= debounced_button_display_next_value;
+        end
+    end
+
+    // Should we display a new value this clock cycle?
+    wire display_next_value = !debounced_button_display_next_value_previous && debounced_button_display_next_value;
+
     reg  [7:0] leds_next;
     reg        ready_queue_next;
 
@@ -41,7 +65,7 @@ module led_debugger
         ready_queue_next = 0;
         leds_next         = leds;
 
-        if (display_next && valid_queue) begin
+        if (display_next_value && valid_queue) begin
             ready_queue_next = 1;
             leds_next         = data_queue;
         end

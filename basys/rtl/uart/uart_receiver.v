@@ -18,7 +18,7 @@ module uart_receiver
 );
 
     // Clock Divider
-    localparam CLOCK_DIVIDER_SIZE = (CLOCK_FREQUENCY / BAUD_RATE);
+    localparam CLOCK_DIVIDER_SIZE = ((CLOCK_FREQUENCY + (BAUD_RATE / 2)) / BAUD_RATE);
     localparam CLOCK_DIVIDER_BITS = $clog2(CLOCK_DIVIDER_SIZE + 1);
 
     reg [CLOCK_DIVIDER_BITS - 1:0] clock_divider_cycles_remaining;
@@ -32,7 +32,7 @@ module uart_receiver
     localparam PACKET_DATA_SIZE        = 8;
     localparam PACKET_DATA_START_INDEX = 1;
 
-    localparam PACKET_SIZE             = 11;
+    localparam PACKET_SIZE             = 10; // Start bit, data, and a buffer bit
     localparam PACKET_BITS             = $clog2(PACKET_SIZE + 1);
 
     reg  [PACKET_SIZE - 1:0] packet;
@@ -45,11 +45,12 @@ module uart_receiver
     // Stablize the incoming UART connection
     wire stablized_uart;
 
-    debouncer #( .COUNT_MAX(CLOCK_DIVIDER_SIZE / 4), .DEFAULT(1) ) uart_stablizer
+    stabilize_async #( .DEFAULT(1) ) uart_stablizer
     (
         .clock(clock),
-        .in(uart),
-        .out(stablized_uart)
+        .reset(reset),
+        .async_input(uart),
+        .sync_output(stablized_uart)
     );
 
     // Transmission, set the packet body and transmit
@@ -64,8 +65,11 @@ module uart_receiver
     reg [PACKET_SIZE - 1:0] packet_next;
     reg [PACKET_BITS - 1:0] packet_transmission_index_next;
 
-    // Debugging
-    reg sampling;
+    reg [CLOCK_DIVIDER_BITS:0] current_sample_1s;
+    reg [CLOCK_DIVIDER_BITS:0] current_sample_0s;
+
+    reg [CLOCK_DIVIDER_BITS:0] current_sample_1s_next;
+    reg [CLOCK_DIVIDER_BITS:0] current_sample_0s_next;
 
     always @(*) begin
         transmission_running_next = transmission_running;
@@ -73,15 +77,16 @@ module uart_receiver
         packet_next = packet;
         packet_transmission_index_next = packet_transmission_index;
         valid_next = valid;
-
-        sampling = 0;
+        current_sample_0s_next = current_sample_0s;
+        current_sample_1s_next = current_sample_1s;
 
         if (!transmission_running && start) begin
             transmission_running_next = 1;
 
-            // We want to take all samples in the middle of the UART clock cycle.
-            // Remember, the debounder essentially delays the time it takes a signal change to reach us by a fourth of a UART clock cycle
-            clock_divider_cycles_remaining_next = CLOCK_DIVIDER_SIZE / 4;
+            clock_divider_cycles_remaining_next = CLOCK_DIVIDER_SIZE - 1;
+
+            current_sample_0s_next = 0;
+            current_sample_1s_next = 1;
 
             packet_next = 0;
             packet_transmission_index_next = 0;
@@ -90,8 +95,13 @@ module uart_receiver
         if (transmission_running) begin
             if (clock_divider_cycles_remaining == 0) begin
                 // We are now in the middle of clock cycle. Take a sample
-                sampling = 1;
                 packet_next[packet_transmission_index] = stablized_uart;
+
+                if (current_sample_1s > current_sample_0s) begin
+                    packet_next[packet_transmission_index] = 1;
+                end else begin
+                    packet_next[packet_transmission_index] = 0;
+                end
 
                 // And now, reset
                 if (packet_transmission_index < (PACKET_SIZE - 1)) begin
@@ -99,12 +109,17 @@ module uart_receiver
                     packet_transmission_index_next = packet_transmission_index + 1;
                     // Wait until the beginning of the next clock cycle
                     clock_divider_cycles_remaining_next = CLOCK_DIVIDER_SIZE - 1;
+
+                    // Reset the counters
+                    current_sample_0s_next = stablized_uart == 0;
+                    current_sample_1s_next = stablized_uart == 1;
                 end else begin
                     transmission_running_next = 0;
                     valid_next = 1;
                 end
             end else begin
-                // We aren't yet to the middle of the clock cycle, keep waiting
+                current_sample_0s_next = current_sample_0s + 1;
+                current_sample_1s_next = current_sample_1s + 1;
                 clock_divider_cycles_remaining_next = clock_divider_cycles_remaining - 1;
             end
         end
@@ -122,12 +137,16 @@ module uart_receiver
             clock_divider_cycles_remaining <= 0;
             packet                         <= 0;
             packet_transmission_index      <= 0;
+            current_sample_0s              <= 0;
+            current_sample_1s              <= 0;
         end else begin
             transmission_running           <= transmission_running_next;
             valid                          <= valid_next;
             clock_divider_cycles_remaining <= clock_divider_cycles_remaining_next;
             packet                         <= packet_next;
             packet_transmission_index      <= packet_transmission_index_next;
+            current_sample_0s              <= current_sample_0s_next;
+            current_sample_1s              <= current_sample_1s_next;
         end
     end
 

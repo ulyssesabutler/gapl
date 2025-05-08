@@ -26,6 +26,29 @@ object FunctionVisitor: GAPLVisitor() {
         )
     }
 
+    override fun visitAbstractFunctionIO(ctx: GAPLParser.AbstractFunctionIOContext): AbstractFunctionIONode {
+        return AbstractFunctionIONode(
+            ioType = visitFunctionIOType(ctx.functionIOType()),
+            interfaceType = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
+        )
+    }
+
+    fun visitAbstractFunctionIOList(ctx: GAPLParser.AbstractFunctionIOListContext): AbstractFunctionIOListNode {
+        return when (ctx) {
+            is GAPLParser.EmptyAbstractFunctionIOListContext -> visitEmptyAbstractFunctionIOList(ctx)
+            is GAPLParser.NonEmptyAbstractFunctionIOListContext -> visitNonEmptyAbstractFunctionIOList(ctx)
+            else -> throw Exception("Unknown function IO list type")
+        }
+    }
+
+    override fun visitEmptyAbstractFunctionIOList(ctx: GAPLParser.EmptyAbstractFunctionIOListContext) = EmptyAbstractFunctionIOListNode
+
+    override fun visitNonEmptyAbstractFunctionIOList(ctx: GAPLParser.NonEmptyAbstractFunctionIOListContext): NonEmptyAbstractFunctionIOListNode {
+        return NonEmptyAbstractFunctionIOListNode(
+            ctx.abstractFunctionIO().map { visitAbstractFunctionIO(it) }
+        )
+    }
+
     override fun visitFunctionIO(ctx: GAPLParser.FunctionIOContext): FunctionIONode {
         return FunctionIONode(
             identifier = TokenVisitor.visitId(ctx.Id()),

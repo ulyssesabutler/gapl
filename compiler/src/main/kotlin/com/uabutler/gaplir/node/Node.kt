@@ -5,6 +5,7 @@ import com.uabutler.util.StringGenerator.genToStringFromProperties
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.builder.util.PredefinedFunction
 import com.uabutler.gaplir.node.input.NodeInputInterface
+import com.uabutler.gaplir.node.input.NodeInputInterfaceParentNode
 import com.uabutler.gaplir.node.output.NodeOutputInterface
 import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
 import com.uabutler.gaplir.util.ModuleInvocation
@@ -15,7 +16,10 @@ sealed class Node(
     outputInterfaceStructures: List<Named<InterfaceStructure>>,
 ) {
     // TODO: From structures
-    val inputs: List<Named<NodeInputInterface>> = inputInterfaceStructures.map { Named(it.name, NodeInputInterface.fromStructure(it.item)) }
+    val inputs: List<Named<NodeInputInterface>> = inputInterfaceStructures.mapIndexed { index, named ->
+        val parent = NodeInputInterfaceParentNode(this, index, named.name)
+        Named(named.name, NodeInputInterface.fromStructure(parent, named.item))
+    }
     val outputs: List<Named<NodeOutputInterface>> = outputInterfaceStructures.mapIndexed { index, named ->
         val parent = NodeOutputInterfaceParentNode(this, index, named.name)
         val nodeOutputInterface = NodeOutputInterface.fromStructure(parent, named.item)

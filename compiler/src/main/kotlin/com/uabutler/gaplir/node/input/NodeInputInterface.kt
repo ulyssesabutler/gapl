@@ -11,14 +11,15 @@ import com.uabutler.gaplir.node.output.NodeOutputVectorInterface
 import com.uabutler.gaplir.node.output.NodeOutputWireInterface
 
 sealed class NodeInputInterface {
+    abstract val parent: NodeInputInterfaceParent
     abstract val structure: InterfaceStructure
 
     companion object {
-        fun fromStructure(interfaceStructure: InterfaceStructure): NodeInputInterface {
+        fun fromStructure(parent: NodeInputInterfaceParent, interfaceStructure: InterfaceStructure): NodeInputInterface {
             return when (interfaceStructure) {
-                is WireInterfaceStructure -> NodeInputWireInterface()
-                is RecordInterfaceStructure -> NodeInputRecordInterface(interfaceStructure)
-                is VectorInterfaceStructure -> NodeInputVectorInterface(interfaceStructure)
+                is WireInterfaceStructure -> NodeInputWireInterface(parent)
+                is RecordInterfaceStructure -> NodeInputRecordInterface(parent, interfaceStructure)
+                is VectorInterfaceStructure -> NodeInputVectorInterface(parent, interfaceStructure)
             }
         }
     }
@@ -26,6 +27,7 @@ sealed class NodeInputInterface {
 
 // TODO: Custom toStrings instead of data classes
 class NodeInputWireInterface(
+    override val parent: NodeInputInterfaceParent,
     var input: NodeOutputWireInterface? = null,
 ): NodeInputInterface() {
     override val structure: InterfaceStructure = WireInterfaceStructure
@@ -38,10 +40,14 @@ class NodeInputWireInterface(
 }
 
 class NodeInputRecordInterface(
+    override val parent: NodeInputInterfaceParent,
     override val structure: RecordInterfaceStructure,
 ): NodeInputInterface() {
     var input: NodeOutputRecordInterface? = null
-    val ports: Map<String, NodeInputInterface> = structure.ports.mapValues { fromStructure(it.value) }
+    val ports: Map<String, NodeInputInterface> = structure.ports.mapValues {
+        val parent = NodeInputInterfaceParentRecordInterface(this, it.key)
+        fromStructure(parent, it.value)
+    }
 
     override fun toString() = genToStringFromValues(
         instanceName = this.javaClass.simpleName,
@@ -73,10 +79,14 @@ data class VectorConnection(
 }
 
 data class NodeInputVectorInterface(
+    override val parent: NodeInputInterfaceParent,
     override val structure: VectorInterfaceStructure,
 ): NodeInputInterface() {
     val connections: MutableList<VectorConnection> = mutableListOf()
-    val vector: List<NodeInputInterface> = List(structure.size) { fromStructure(structure.vectoredInterface) }
+    val vector: List<NodeInputInterface> = List(structure.size) {
+        val parent = NodeInputInterfaceParentVectorInterface(this, it)
+        fromStructure(parent, structure.vectoredInterface)
+    }
 
     override fun toString() = genToStringFromProperties(
         instance = this,

@@ -45,11 +45,21 @@ class CombinationalFunctionIOTypeNode: FunctionIOTypeNode {
     override fun hashCode() = javaClass.hashCode()
 }
 
+data class AbstractFunctionIONode(
+    val ioType: FunctionIOTypeNode,
+    val interfaceType: InterfaceExpressionNode,
+): PersistentNode
+
 data class FunctionIONode(
     val identifier: IdentifierNode,
     val ioType: FunctionIOTypeNode,
     val interfaceType: InterfaceExpressionNode,
 ): PersistentNode
+
+sealed interface AbstractFunctionIOListNode: TemporaryNode
+
+data object EmptyAbstractFunctionIOListNode: AbstractFunctionIOListNode
+data class NonEmptyAbstractFunctionIOListNode(val functionIO: List<AbstractFunctionIONode>): AbstractFunctionIOListNode
 
 sealed interface FunctionIOListNode: TemporaryNode
 

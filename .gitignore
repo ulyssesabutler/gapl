@@ -60,3 +60,7 @@ venv/
 *.egg-info/
 dist/
 build/
+xsim.dir
+vivado*.str
+vivado*.debug
+vivado*.zip

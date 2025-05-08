@@ -26,7 +26,7 @@ class NodeBuilder(
     companion object {
         private fun getCircuitExpressionsFromCircuitStatement(
             circuitStatementNode: CircuitStatementNode,
-            parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+            parameterValuesContext: Map<String, ParameterValue<*>>,
         ): List<CircuitExpressionNode> {
             return when (circuitStatementNode) {
                 is NonConditionalCircuitStatementNode -> listOf(circuitStatementNode.statement)
@@ -111,6 +111,8 @@ class NodeBuilder(
                 invokedModuleName = invocationName,
                 moduleInvocation = ModuleInvocation(
                     gaplFunctionName = instantiationData.functionIdentifier,
+                    interfaces = instantiationData.genericInterfaceValues,
+                    parameters = instantiationData.genericParameterValues,
                 ),
                 functionInputInterfaces = instantiation.input.map { Named(it.key, it.value) },
                 functionOutputInterfaces = instantiation.output.map { Named(it.key, it.value) },
@@ -121,7 +123,7 @@ class NodeBuilder(
     fun processCircuitNodeExpressionNode(
         nodeExpression: CircuitNodeExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
         existingDeclaredNodes: Map<String, Node>
     ): CircuitExpressionResult {
         when (nodeExpression) {
@@ -151,11 +153,32 @@ class NodeBuilder(
             is DeclaredFunctionCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
 
-                val instantiationData = ModuleInstantiationTracker.ModuleInstantiationData(
-                    functionIdentifier = nodeExpression.instantiation.definitionIdentifier.value,
-                    genericInterfaceValues = emptyList(), // TODO
-                    genericParameterValues = emptyList(), // TODO
+                val instantiationData = programContext.buildModuleInstantiationDataWithContext(
+                    node = nodeExpression.instantiation,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
                 )
+
+                val node = createNodeFromFunctionInvocation(identifier, instantiationData)
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        declaredNodes = mapOf(identifier to node),
+                    )
+                )
+            }
+
+            is DeclaredGenericFunctionCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
 
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
@@ -171,11 +194,33 @@ class NodeBuilder(
             is AnonymousFunctionCircuitExpressionNode -> {
                 val identifier = AnonymousIdentifierGenerator.genIdentifier()
 
-                val instantiationData = ModuleInstantiationTracker.ModuleInstantiationData(
-                    functionIdentifier = nodeExpression.instantiation.definitionIdentifier.value,
-                    genericInterfaceValues = emptyList(), // TODO
-                    genericParameterValues = emptyList(), // TODO
+                val instantiationData = programContext.buildModuleInstantiationDataWithContext(
+                    node = nodeExpression.instantiation,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
                 )
+
+                val node = createNodeFromFunctionInvocation(identifier, instantiationData)
+
+                return CircuitExpressionResult(
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    generatedNodes = GeneratedNodes(
+                        anonymousNodes = listOf(node)
+                    )
+                )
+            }
+
+            is AnonymousGenericFunctionCircuitExpressionNode -> {
+                val identifier = AnonymousIdentifierGenerator.genIdentifier()
+
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
 
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
@@ -273,7 +318,7 @@ class NodeBuilder(
     fun processCircuitGroupExpressionNode(
         groupExpression: CircuitGroupExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
         existingDeclaredNodes: Map<String, Node>
     ): CircuitExpressionResult {
         val results = groupExpression.expressions.map { node ->
@@ -371,7 +416,7 @@ class NodeBuilder(
     fun processCircuitConnectionExpressionNode(
         connectionExpression: CircuitConnectionExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
         existingDeclaredNodes: Map<String, Node>
     ): GeneratedNodes {
         val allDeclaredNodes = existingDeclaredNodes.toMutableMap()
@@ -403,7 +448,7 @@ class NodeBuilder(
     fun buildInputNodes(
         astNodes: List<FunctionIONode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
     ): List<ModuleInputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
@@ -422,7 +467,7 @@ class NodeBuilder(
     fun buildOutputNodes(
         astNodes: List<FunctionIONode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
     ): List<ModuleOutputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
@@ -438,12 +483,13 @@ class NodeBuilder(
         }
     }
 
+    // TODO FUNCTIONAL
     fun buildBodyNodes(
         astStatements: List<CircuitStatementNode>,
         inputNodes: List<ModuleInputNode>,
         outputNodes: List<ModuleOutputNode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
     ): NodeBuildResult {
 
         // Step 1: Let's simplify this a bit by evaluating all the conditionals

@@ -78,11 +78,23 @@ genericInterfaceDefinitionList: (AngleL (Id Comma)* Id? AngleR)?;
 
 genericParameterDefinitionList: ParanL (genericParameterDefinition Comma)* genericParameterDefinition? ParanR | ParanL ParanR;
 
-genericParameterDefinition: Parameter identifier=Id Colon typeIdentifier=Id;
+genericParameterDefinition: Parameter identifier=Id Colon type=genericParameterType;
+
+genericParameterType:
+      Id #idGenericParameterType
+    | Function input=abstractFunctionIOList Connector output=abstractFunctionIOList #functionGenericParameterType
+;
 
 genericInterfaceValueList: (interfaceExpression Comma)* interfaceExpression?;
 
-genericParameterValueList: (staticExpression Comma)* staticExpression?;
+// TODO: We should add support for named parameters as well as positional
+genericParameterValueList: (genericParameterValue Comma)* genericParameterValue?;
+
+genericParameterValue:
+      staticExpression #staticExpressionGenericParameterValue
+    | Function instantiation #functionInstantiationGenericParameterValue
+    | Function functionIdentifier=Id #functionReferenceGenericParamterValue
+;
 
 instantiation: Id (AngleL genericInterfaceValueList AngleR)? ParanL genericParameterValueList ParanR;
 
@@ -132,9 +144,15 @@ functionDefinition:
 
 functionType: (Sequential | Combinational)?;
 
+abstractFunctionIOList:
+      Null #emptyAbstractFunctionIOList
+    | abstractFunctionIO (Comma abstractFunctionIO)* Comma? #nonEmptyAbstractFunctionIOList;
+
 functionIOList:
       Null #emptyFunctionIOList
     | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList;
+
+abstractFunctionIO: functionIOType interfaceExpression;
 
 functionIO: functionIOType Id Colon interfaceExpression;
 
@@ -158,10 +176,14 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
+// TODO: We should break this up a bit. Perhaps, split declared off into its own rule. Ditto with function keyword
+// TODO: Add a static expression
 circuitNodeExpression:
-      Declare Id Colon interfaceExpression #declaredInterfaceCircuitExpression
-    | Declare Id Colon Function instantiation #declaredFunctionCircuitExpression
+      Declare nodeIdentifier=Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+    | Declare nodeIdentifier=Id Colon Function instantiation #declaredFunctionCircuitExpression
+    | Declare nodeIdentifier=Id Colon Function functionIdentifier=Id #declaredGenericFunctionCircuitExpression
     | Function instantiation #anonymousFunctionCircuitExpression
+    | Function functionIdentifier=Id #anonymousGenericFunctionCircuitExpression
     | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
     | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression

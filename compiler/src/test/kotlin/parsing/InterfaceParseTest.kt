@@ -91,7 +91,7 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = emptyList(),
                 genericParameters = listOf(
-                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer"))
+                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierGenericParameterTypeNode(IdentifierNode("integer"))),
                 ),
                 aliasedInterface = WireInterfaceExpressionNode(),
             )
@@ -106,8 +106,8 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = emptyList(),
                 genericParameters = listOf(
-                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer")),
-                    GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierNode("integer")),
+                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierGenericParameterTypeNode(IdentifierNode("integer"))),
+                    GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierGenericParameterTypeNode(IdentifierNode("integer"))),
                 ),
                 aliasedInterface = WireInterfaceExpressionNode(),
             )
@@ -122,8 +122,8 @@ class InterfaceParseTest {
                 identifier = IdentifierNode("test"),
                 genericInterfaces = emptyList(),
                 genericParameters = listOf(
-                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierNode("integer")),
-                    GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierNode("integer")),
+                    GenericParameterDefinitionNode(IdentifierNode("size"), IdentifierGenericParameterTypeNode(IdentifierNode("integer"))),
+                    GenericParameterDefinitionNode(IdentifierNode("width"), IdentifierGenericParameterTypeNode(IdentifierNode("integer"))),
                 ),
                 aliasedInterface = WireInterfaceExpressionNode(),
             )

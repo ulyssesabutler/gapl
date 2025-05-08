@@ -1,5 +1,6 @@
 package com.uabutler.gaplir.builder.util
 
+import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.ProgramNode
 import com.uabutler.ast.node.interfaces.*
 import com.uabutler.gaplir.InterfaceStructure
@@ -9,15 +10,16 @@ import com.uabutler.gaplir.WireInterfaceStructure
 import com.uabutler.gaplir.builder.definition.AbstractInterfaceDefinition
 import com.uabutler.gaplir.builder.signature.InterfaceSignature
 
-class ProgramContext(val program: ProgramNode) {
-    private val interfaceSignatures = program.interfaces
-        .map { InterfaceSignature.fromNode(it) }
-        .associateBy { it.identifier }
+class ProgramContext(program: ProgramNode) {
+
     private val interfaceDefinitions = program.interfaces
         .map { AbstractInterfaceDefinition.fromNode(it) }
         .associateBy { it.signature.identifier }
 
-    /* TODO: Do we need this?
+    /* TODO: We should eventually use this for validation
+    private val interfaceSignatures = program.interfaces
+        .map { InterfaceSignature.fromNode(it) }
+        .associateBy { it.identifier }
     private val moduleSignatures = program.functions
         .map { ModuleSignature.fromNode(it) }
         .associateBy { it.identifier }
@@ -27,7 +29,7 @@ class ProgramContext(val program: ProgramNode) {
         definedInterfaceIdentifier: String,
 
         genericInterfaceValues: List<InterfaceStructure>,
-        genericParameterValues: List<Int>, // TODO: This could be any value
+        genericParameterValues: List<ParameterValue<*>>,
     ): InterfaceStructure {
         val interfaceDefinition = interfaceDefinitions[definedInterfaceIdentifier]!!.node
 
@@ -67,7 +69,7 @@ class ProgramContext(val program: ProgramNode) {
         node: InterfaceExpressionNode,
 
         interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, Int>, // TODO: This could be any value
+        parameterValuesContext: Map<String, ParameterValue<*>>,
     ): InterfaceStructure {
         return when (node) {
             is WireInterfaceExpressionNode -> WireInterfaceStructure
@@ -92,13 +94,41 @@ class ProgramContext(val program: ProgramNode) {
                         parameterValuesContext = parameterValuesContext,
                     )
                 },
-                genericParameterValues = node.genericParameters.map {
-                    StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
-                        staticExpression = it.value,
-                        context = parameterValuesContext,
-                    )
-                },
+                genericParameterValues = node.genericParameters.map { ParameterValue.fromNode(it, this, interfaceValuesContext, parameterValuesContext) },
             )
         }
+    }
+
+    fun buildModuleInstantiationDataWithContext(
+        node: InstantiationNode,
+
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, ParameterValue<*>>,
+    ): ModuleInstantiationTracker.ModuleInstantiationData {
+
+        // This supports positional arguments
+        val interfaces = node.genericInterfaces.map {
+            buildInterfaceWithContext(
+                node = it.value,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+        }
+
+        // This supports positional arguments
+        val parameterValues = node.genericParameters.map {
+            ParameterValue.fromNode(
+                node = it,
+                programContext = this,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+        }
+
+        return ModuleInstantiationTracker.ModuleInstantiationData(
+            functionIdentifier = node.definitionIdentifier.value,
+            genericInterfaceValues = interfaces,
+            genericParameterValues = parameterValues,
+        )
     }
 }

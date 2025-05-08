@@ -1,0 +1,16 @@
+interface data() wire[32]
+
+function stream_map<I, O>(parameter operation: function I => O) i: I => o: O
+{
+    i => function operation => o;
+}
+
+function stream_map_double() i: data() => o: data()
+{
+    i, i => function add() => o;
+}
+
+function stream_map_main() i: data() => o: data()
+{
+    i => function stream_map<data(), data()>(function stream_map_double()) => o;
+}

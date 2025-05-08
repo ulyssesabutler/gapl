@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.org.apache.commons.io.output.ByteArrayOutputStream
+
 plugins {
     base
 }
@@ -23,12 +25,32 @@ tasks.register("generateVerilog") {
             throw GradleException("GAPL compiler not found at $compiler")
         }
 
+        var hasFailure = false
+
         gaplFiles.forEach { gaplFile ->
             val verilogFile = output.resolve(gaplFile.nameWithoutExtension + ".v")
             println("Compiling ${gaplFile.name} -> ${verilogFile.name}")
-            exec {
+
+            val errorOut = ByteArrayOutputStream()
+
+            val result = exec {
+                isIgnoreExitValue = true
                 commandLine(compiler, "-i", gaplFile.absolutePath, "-o", verilogFile.absolutePath)
+                errorOutput = errorOut
+                standardOutput = System.out
             }
+
+            if (result.exitValue != 0) {
+                hasFailure = true
+                println("❌ Failed to compile ${gaplFile.name}")
+                println("---- Compiler Error Output ----")
+                println(errorOut.toString().trim())
+                println("-------------------------------")
+            }
+        }
+
+        if (hasFailure) {
+            throw GradleException("One or more gapl files failed to compile")
         }
     }
 }

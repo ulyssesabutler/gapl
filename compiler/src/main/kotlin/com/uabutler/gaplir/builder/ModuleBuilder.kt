@@ -33,8 +33,8 @@ class ModuleBuilder(val program: ProgramNode) {
                 moduleInstantiationTracker.visitModule(
                     ModuleInstantiationTracker.ModuleInstantiationData(
                         functionIdentifier = it.identifier.value,
-                        genericInterfaceValues = emptyList(), // TODO
-                        genericParameterValues = emptyList(), // TODO
+                        genericInterfaceValues = emptyList(),
+                        genericParameterValues = emptyList(),
                     )
                 )
             }
@@ -99,6 +99,8 @@ class ModuleBuilder(val program: ProgramNode) {
         val module = Module(
             moduleInvocation = ModuleInvocation(
                 gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
+                interfaces = instantiation.moduleInstantiationData.genericInterfaceValues,
+                parameters = instantiation.moduleInstantiationData.genericParameterValues,
             ),
             inputStructure = instantiation.input,
             outputStructure = instantiation.output,
