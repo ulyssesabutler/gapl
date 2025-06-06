@@ -12,28 +12,29 @@ object ModuleInvocationConnector {
         val inputModulePortNames = node.functionInputInterfaces.flatMap {
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = it.name,
-                gaplInterfaceStructure = it.item
+                gaplInterfaceStructure = it.interfaceStructure,
+                // TODO: Handle different interface types
             )
         }.map { it.name }
 
         val inputOuterWirePortNames = node.inputs.flatMap {
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${it.name}_input",
-                gaplInterfaceStructure = it.item.structure
+                gaplInterfaceStructure = it.item.inputInterface.structure
             )
         }.map { it.name }
 
         val outputModulePortNames = node.functionOutputInterfaces.flatMap {
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = it.name,
-                gaplInterfaceStructure = it.item
+                gaplInterfaceStructure = it.interfaceStructure,
             )
         }.map { it.name }
 
         val outputOuterWirePortNames = node.outputs.flatMap {
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${it.name}_output",
-                gaplInterfaceStructure = it.item.structure
+                gaplInterfaceStructure = it.item.outputInterface.structure
             )
         }.map { it.name }
 

@@ -34,14 +34,14 @@ object VerilogBuilder {
             inputs = gaplModule.inputNodes.flatMap {
                 moduleIOsFromInterfaceStructure(
                     name = it.name,
-                    structure = it.inputInterfaceStructure,
+                    structure = it.interfaceStructure,
                     direction = ModuleIODirection.INPUT,
                 )
             },
             outputs = gaplModule.outputNodes.flatMap {
                 moduleIOsFromInterfaceStructure(
                     name = it.name,
-                    structure = it.outputInterfaceStructure,
+                    structure = it.interfaceStructure,
                     direction = ModuleIODirection.OUTPUT,
                 )
             },

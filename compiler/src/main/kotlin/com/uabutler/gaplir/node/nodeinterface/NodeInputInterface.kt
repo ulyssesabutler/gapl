@@ -1,4 +1,4 @@
-package com.uabutler.gaplir.node.input
+package com.uabutler.gaplir.node.nodeinterface
 
 import com.uabutler.util.StringGenerator.genToStringFromProperties
 import com.uabutler.util.StringGenerator.genToStringFromValues
@@ -6,11 +6,8 @@ import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.RecordInterfaceStructure
 import com.uabutler.gaplir.VectorInterfaceStructure
 import com.uabutler.gaplir.WireInterfaceStructure
-import com.uabutler.gaplir.node.output.NodeOutputRecordInterface
-import com.uabutler.gaplir.node.output.NodeOutputVectorInterface
-import com.uabutler.gaplir.node.output.NodeOutputWireInterface
 
-sealed class NodeInputInterface {
+sealed class NodeInputInterface: NodeInterface() {
     abstract val parent: NodeInputInterfaceParent
     abstract val structure: InterfaceStructure
 

@@ -1,12 +1,6 @@
 package com.uabutler.gaplir
 
-import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
-
-sealed interface InterfaceStructure {
-    companion object {
-        fun fromNode(node: InterfaceExpressionNode): InterfaceStructure = TODO()
-    }
-}
+sealed interface InterfaceStructure
 
 data object WireInterfaceStructure: InterfaceStructure
 

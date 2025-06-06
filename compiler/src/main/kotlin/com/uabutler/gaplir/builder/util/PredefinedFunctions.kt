@@ -3,10 +3,12 @@ package com.uabutler.gaplir.builder.util
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.VectorInterfaceStructure
 import com.uabutler.gaplir.WireInterfaceStructure
+import com.uabutler.gaplir.util.InterfaceDescription
+import com.uabutler.util.InterfaceType
 
 sealed class PredefinedFunction(
-    val inputs: Map<String, InterfaceStructure>,
-    val outputs: Map<String, InterfaceStructure>,
+    val inputs: List<InterfaceDescription>,
+    val outputs: List<InterfaceDescription>,
 ) {
     companion object {
         fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
@@ -46,8 +48,13 @@ sealed class BinaryFunction(
     val rhs: InterfaceStructure,
     val result: InterfaceStructure,
 ): PredefinedFunction(
-    inputs = mapOf("lhs" to lhs, "rhs" to rhs),
-    outputs = mapOf("result" to result),
+    inputs = listOf(
+        InterfaceDescription(name = "lhs", interfaceStructure = lhs, interfaceType = InterfaceType.SIGNAL),
+        InterfaceDescription(name = "rhs", interfaceStructure = rhs, interfaceType = InterfaceType.SIGNAL),
+    ),
+    outputs = listOf(
+        InterfaceDescription(name = "result", interfaceStructure = result, interfaceType = InterfaceType.SIGNAL),
+    ),
 )
 
 sealed class BooleanComparison(
@@ -108,8 +115,12 @@ data class LeftShiftFunction(
 data class RegisterFunction(
     val storageStructure: InterfaceStructure
 ): PredefinedFunction(
-    inputs = mapOf("next" to storageStructure),
-    outputs = mapOf("current" to storageStructure),
+    inputs = listOf(
+        InterfaceDescription(name = "next", interfaceStructure = storageStructure, interfaceType = InterfaceType.SIGNAL),
+    ),
+    outputs = listOf(
+        InterfaceDescription(name = "current", interfaceStructure = storageStructure, interfaceType = InterfaceType.SIGNAL),
+    ),
 )
 
 data class LiteralFunction(
@@ -117,6 +128,6 @@ data class LiteralFunction(
     val value: Int,
     val storageStructure: InterfaceStructure = wireVector(size),
 ): PredefinedFunction(
-    inputs = mapOf(),
-    outputs = mapOf("value" to storageStructure),
+    inputs = listOf(),
+    outputs = listOf(InterfaceDescription(name = "value", interfaceStructure = storageStructure, interfaceType = InterfaceType.SIGNAL)),
 )

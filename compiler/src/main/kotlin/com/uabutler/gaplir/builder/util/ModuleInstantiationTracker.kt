@@ -3,6 +3,8 @@ package com.uabutler.gaplir.builder.util
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.Module
+import com.uabutler.gaplir.util.InterfaceDescription
+import com.uabutler.util.InterfaceType
 
 class ModuleInstantiationTracker(
     private val functionNodes: Map<String, FunctionDefinitionNode>,
@@ -32,13 +34,13 @@ class ModuleInstantiationTracker(
     data class ModuleInstantiation(
         val moduleInstantiationData: ModuleInstantiationData,
 
-        val input: Map<String, InterfaceStructure>,
-        val output: Map<String, InterfaceStructure>,
+        val input: List<InterfaceDescription>,
+        val output: List<InterfaceDescription>,
 
         val astNode: FunctionDefinitionNode,
 
         val genericInterfaceValues: Map<String, InterfaceStructure>,
-        val genericParameterValues: Map<String, ParameterValue<*>>, // TODO: This could be any value
+        val genericParameterValues: Map<String, ParameterValue<*>>,
 
         var module: Module?,
     )
@@ -62,12 +64,20 @@ class ModuleInstantiationTracker(
         val parameterValues =
             GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.genericParameterValues)
 
-        val input = astNode.inputFunctionIO.associate {
-            it.identifier.value to programContext.buildInterfaceWithContext(it.interfaceType, interfaceValues, parameterValues)
+        val input = astNode.inputFunctionIO.map {
+            InterfaceDescription(
+                name = it.identifier.value,
+                interfaceStructure = programContext.buildInterfaceWithContext(it.interfaceExpression, interfaceValues, parameterValues),
+                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
+            )
         }
 
-        val output = astNode.outputFunctionIO.associate {
-            it.identifier.value to programContext.buildInterfaceWithContext(it.interfaceType, interfaceValues, parameterValues)
+        val output = astNode.outputFunctionIO.map {
+            InterfaceDescription(
+                name = it.identifier.value,
+                interfaceStructure = programContext.buildInterfaceWithContext(it.interfaceExpression, interfaceValues, parameterValues),
+                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
+            )
         }
 
         val moduleInstantiation = ModuleInstantiation(

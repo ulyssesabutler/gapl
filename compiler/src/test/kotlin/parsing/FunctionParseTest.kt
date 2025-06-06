@@ -2,9 +2,9 @@ package parsing
 
 import com.uabutler.Parser
 import com.uabutler.ast.node.*
-import com.uabutler.ast.node.functions.DefaultFunctionIOTypeNode
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.FunctionIONode
+import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
 import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -30,15 +30,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
@@ -59,15 +59,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
@@ -91,15 +91,15 @@ class FunctionParseTest {
                 inputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("input"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 outputFunctionIO = listOf(
                     FunctionIONode(
                         identifier = IdentifierNode("output"),
-                        ioType = DefaultFunctionIOTypeNode(),
-                        interfaceType = WireInterfaceExpressionNode(),
+                        interfaceType = DefaultInterfaceTypeNode(),
+                        interfaceExpression = WireInterfaceExpressionNode(),
                     ),
                 ),
                 statements = emptyList(),
