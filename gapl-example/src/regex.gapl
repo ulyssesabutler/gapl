@@ -1,0 +1,140 @@
+interface character() wire[8]
+
+interface boolean() wire
+
+interface pair<T, U>() {
+    first: T;
+    second: U;
+}
+
+interface nfa() {
+    n1: boolean();
+    n2: boolean();
+}
+
+interface state() {
+    nodes: nfa();
+    result: boolean();
+}
+
+function replicate<I>(parameter factor: integer) i: I => o: I[factor] {
+    i => o[factor - 1];
+
+    if (factor > 1) {
+        i => function replicate(factor - 1) => o[0:factor - 2];
+    }
+}
+
+function is_character_in_range()
+    candidate: character(),
+    range: pair<character(), character()>()
+        => result: boolean()
+{
+    candidate, range.first  => declare lower: function greater_than_equal();
+    candidate, range.second => declare upper: function less_than_equal();
+
+    lower, upper => function and() => result;
+}
+
+function is_character_in_range_pair_wrapper() i: pair<character(), pair<character(), character()>()>() => o: boolean()
+{
+    i.first, i.second => function is_character_in_range() => result;
+}
+
+function is_character_in_set(parameter set_size: integer)
+    candidate: character(),
+    set: pair<character(), character()>()[set_size]
+        => result: boolean()
+{
+    candidate => declare candidate_vector: function replicate<character>(set_size);
+
+    candidate_vector, set
+        => function zip<character(), pair<character(), character()>()>(set_size);
+        => function vector_map<pair<character(), pair<character(), character()>()>, boolean()>(set_size)
+        => function any(set_size);
+}
+
+function is_numeric() i: character() => o: boolean()
+{
+    declare set: pair<character(), character()>()[1];
+
+    function literal(8, 48) => set[0].first;
+    function literal(8, 57) => set[0].second;
+
+    i, set => function is_character_in_set(1) => o;
+}
+
+function is_alpha() i: character() => o: boolean()
+{
+    declare set: pair<character(), character()>()[1];
+
+    function literal(8, 65) => set[0].first;
+    function literal(8, 90) => set[0].second;
+
+    i, set => function is_character_in_set(1) => o;
+}
+
+function nfa_node(parameter input_size: integer) i: boolean[input_size] => o: boolean {
+    i => function any(input_size) => o;
+}
+
+function nfa_edge(parameter condition: function condition character() => boolean())
+    source_node: boolean(),
+    candidate: character()
+        => destination_node: boolean()
+{
+    candidate => declare valid_character: function condition;
+    source_node, valid_character => function and() => destination_node;
+}
+
+function update_nfa(): current_state: state(), char: character() => update: state()
+{
+    declare true_v: function literal(1, 1);
+    declare true: true_v[0];
+
+    declare n1_inputs: boolean[1] => function nfa_node(1) => update.nodes.n1;
+    declare n2_inputs: boolean[1] => function nfa_node(1) => update.nodes.n2;
+
+    true,                   i => declare start_to_n1: function nfa_edge(function is_alpha()) => n1_inputs[0];
+    current_state.nodes.n1, i => declare n1_to_n2:    function nfa_edge(function is_numeric()) => n1_inputs[1];
+
+    update.nodes.n2, current_state.result => function or() => update.result;
+}
+
+function combinational_vector_fold<T, U>(
+    parameter size: integer,
+    parameter function operation: T, U => U,
+) in: T[size], initial: U => out: U {
+    if (size == 1) {
+        in[0], initial => function operation => out;
+    } else {
+        in[0], initial => declare updated_state: function operation;
+        in[1:size - 1], updated_state => function<T, U>(size - 1, function operation) => out;
+    }
+}
+
+function fold<T, U>(
+    parameter replication_factor: integer,
+    parameter function operation: T, U => U,
+) in: T[replication_factor] => out: U {
+    declare state: function register<U>();
+    in, state => function combinational_vector_fold<T, U>(replication_factor, function operation) => state;
+}
+
+function main() i: character() => o: boolean()
+{
+    declare zero_v: wire[1];
+    declare zero: wire;
+
+    declare initial_state: state();
+
+    function literal(1, 0) => zero_v;
+    zero_v[0] => zero;
+
+    zero => initial_state.nfa[0];
+    zero => initial_state.nfa[1];
+
+    zero => initial_state.state;
+
+    initial_state, i => fold<character, state>(3, function update_nfa()) => o;
+}

@@ -132,8 +132,8 @@ function string_matching_string_equals(
 
 function string_matching(
     parameter needle_size: integer
-) needle: string(needle_size), heystack: last<char()>() => result: valid<boolean()>() {
-    heystack
+) needle: string(needle_size), haystack: last<char()>() => result: valid<boolean()>() {
+    haystack
         => function string_matching_windowed<char()>(needle_size)
         => declare candidate: last<string(needle_size)>();
 
@@ -149,15 +149,15 @@ function string_matching(
         => result;
 }
 
-function string_matching_main() needle: string(5), heystack: char(), last: boolean() => result: boolean(), valid: boolean() {
-    declare heystack_last: last<char()>();
+function string_matching_main() needle: string(5), haystack: char(), last: boolean() => result: boolean(), valid: boolean() {
+    declare haystack_last: last<char()>();
 
-    heystack => heystack_last.value;
-    last => heystack_last.last;
+    haystack => haystack_last.value;
+    last => haystack_last.last;
 
     declare result_valid: valid<boolean()>();
 
-    needle, heystack_last => function string_matching(5) => result_valid;
+    needle, haystack_last => function string_matching(5) => result_valid;
 
     result_valid.value => result;
     result_valid.valid => valid;
