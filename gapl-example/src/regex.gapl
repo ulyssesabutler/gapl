@@ -1,0 +1,189 @@
+interface character() wire[8]
+
+interface boolean() wire
+
+interface valid<T>() {
+    value: T;
+    valid: boolean();
+}
+
+interface last<T>() {
+    value: T;
+    last: boolean();
+}
+
+interface pair<T, U>() {
+    first: T;
+    second: U;
+}
+
+interface nfa() {
+    n1: boolean();
+    n2: boolean();
+}
+
+interface state() {
+    nodes: nfa();
+    result: boolean();
+}
+
+function regex_combinational_vector_fold<T, U>(
+    parameter size: integer,
+    parameter operation: function T, U => U,
+) in: T[size], init: U => out: U {
+    if (size == 1) {
+        in[0], init => function operation => out;
+    } else {
+        in[0], init => function operation => declare updated_state: U;
+        in[1:size - 1], updated_state => function regex_combinational_vector_fold<T, U>(size - 1, function operation) => out;
+    }
+}
+
+function regex_vector_any(parameter size: integer) in: boolean()[size] => out: boolean() {
+    declare false_v: function literal(1, 0);
+    in, false_v[0] => function regex_combinational_vector_fold<boolean(), boolean()>(size, function or()) => out;
+}
+
+function regex_stream_any() i: boolean() => o: boolean() {
+    declare current: function register<boolean()>();
+
+    i, current
+        => function or()
+        => current
+        => o;
+}
+
+function regex_vector_map<I, O>(
+    parameter size: integer,
+    parameter operation: function I => O,
+) i: I[size] => o: O[size] {
+    if (size > 0) {
+        i[size - 1] => function operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => function regex_vector_map<I, O>(size - 1, function operation) => o[0:size - 2];
+        }
+    }
+}
+
+function regex_replicate<I>(parameter factor: integer) i: I => o: I[factor] {
+    i => o[factor - 1];
+
+    if (factor > 1) {
+        i => function regex_replicate(factor - 1) => o[0:factor - 2];
+    }
+}
+
+function regex_vector_zip<I, J>(
+    parameter vector_size: integer,
+) i1: I[vector_size], i2: J[vector_size] => o: pair<I, J>()[vector_size] {
+    i1[0] => o[0].first;
+    i2[0] => o[0].second;
+
+    if (vector_size > 1) {
+        declare remainder: pair<I[vector_size - 1], J[vector_size - 1]>();
+
+        i1[1:vector_size - 1]  => remainder.first;
+        i2[1:vector_size - 1] => remainder.second;
+
+        remainder => function regex_vector_zip<I>(vector_size) => o[1:vector_size - 1];
+    }
+}
+
+function regex_is_character_in_range()
+    candidate: character(),
+    range: pair<character(), character()>()
+        => result: boolean()
+{
+    candidate, range.first  => declare lower: function greater_than_equals(8);
+    candidate, range.second => declare upper: function less_than_equals(8);
+
+    lower, upper => function and() => result;
+}
+
+function regex_is_character_in_range_pair_wrapper() i: pair<character(), pair<character(), character()>()>() => o: boolean()
+{
+    i.first, i.second => function regex_is_character_in_range() => o;
+}
+
+function regex_is_character_in_set(parameter set_size: integer)
+    candidate: character(),
+    set: pair<character(), character()>()[set_size]
+        => result: boolean()
+{
+    candidate => declare candidate_vector: function regex_replicate<character()>(set_size);
+
+    candidate_vector, set
+        => function regex_vector_zip<character(), pair<character(), character()>()>(set_size)
+        => function regex_vector_map<pair<character(), pair<character(), character()>()>(), boolean()>(set_size, function regex_is_character_in_range_pair_wrapper())
+        => function regex_vector_any(set_size)
+        => result;
+}
+
+function regex_is_numeric() i: character() => o: boolean()
+{
+    declare set: pair<character(), character()>()[1];
+
+    function literal(8, 48) => set[0].first;
+    function literal(8, 57) => set[0].second;
+
+    i, set => function regex_is_character_in_set(1) => o;
+}
+
+function regex_is_alpha() i: character() => o: boolean()
+{
+    declare set: pair<character(), character()>()[1];
+
+    function literal(8, 65) => set[0].first;
+    function literal(8, 90) => set[0].second;
+
+    i, set => function regex_is_character_in_set(1) => o;
+}
+
+function regex_nfa_node(parameter input_size: integer) i: boolean()[input_size] => o: boolean() {
+    i => function regex_vector_any(input_size) => o;
+}
+
+function regex_nfa_edge(parameter condition: function character() => boolean())
+    source_node: boolean(),
+    candidate: character()
+        => destination_node: boolean()
+{
+    candidate => declare valid_character: function condition;
+    source_node, valid_character => function and() => destination_node;
+}
+
+function regex_update_nfa() new_character: character(), current_state: state() => update: state()
+{
+    declare true_v: function literal(1, 1);
+
+    declare n1_inputs: wire[1] => function regex_nfa_node(1) => update.nodes.n1;
+    declare n2_inputs: wire[1] => function regex_nfa_node(1) => declare n2_output: boolean();
+
+    n2_output => update.nodes.n2;
+
+    true_v[0],              new_character => declare start_to_n1: function regex_nfa_edge(function regex_is_alpha())   => n1_inputs[0];
+    current_state.nodes.n1, new_character => declare n1_to_n2:    function regex_nfa_edge(function regex_is_numeric()) => n2_inputs[0];
+
+    n2_output, current_state.result => function or() => update.result;
+}
+
+function regex_fold<T, U>(
+    parameter replication_factor: integer,
+    parameter operation: function T, U => U,
+) in: last<T[replication_factor]>() => out: valid<U>() {
+    declare state: function register<U>();
+    in.value, state
+        => function regex_combinational_vector_fold<T, U>(replication_factor, function operation)
+        => state
+        => out.value;
+
+    in.last => out.valid;
+}
+
+function regex_main() i: last<character()[3]>() => o: valid<boolean()>() {
+    i => function regex_fold<character(), state()>(3, function regex_update_nfa()) => declare updated_state: valid<state()>();
+
+    updated_state.value.result => o.value;
+    updated_state.valid        => o.valid;
+}

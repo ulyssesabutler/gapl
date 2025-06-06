@@ -4,34 +4,69 @@ import com.uabutler.util.Named
 import com.uabutler.util.StringGenerator.genToStringFromProperties
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.builder.util.PredefinedFunction
-import com.uabutler.gaplir.node.input.NodeInputInterface
-import com.uabutler.gaplir.node.input.NodeInputInterfaceParentNode
-import com.uabutler.gaplir.node.output.NodeOutputInterface
-import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterfaceParentNode
+import com.uabutler.gaplir.node.nodeinterface.NodeInputWireInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeTopLevelInputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentNode
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputWireInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeTopLevelOutputInterface
+import com.uabutler.gaplir.util.InterfaceDescription
 import com.uabutler.gaplir.util.ModuleInvocation
+import com.uabutler.gaplir.util.StreamProtocol
+import com.uabutler.util.InterfaceType
 
-// TODO: Custom toStrings instead of data classes
+
 sealed class Node(
-    inputInterfaceStructures: List<Named<InterfaceStructure>>,
-    outputInterfaceStructures: List<Named<InterfaceStructure>>,
+    inputInterface: List<InterfaceDescription>,
+    outputInterface: List<InterfaceDescription>,
 ) {
     // TODO: From structures
-    val inputs: List<Named<NodeInputInterface>> = inputInterfaceStructures.mapIndexed { index, named ->
-        val parent = NodeInputInterfaceParentNode(this, index, named.name)
-        Named(named.name, NodeInputInterface.fromStructure(parent, named.item))
+    val inputs: List<Named<NodeTopLevelInputInterface>> = inputInterface.mapIndexed { index, description ->
+        val parent = NodeInputInterfaceParentNode(this, index, description.name)
+
+        val nodeInputInterface = NodeInputInterface.fromStructure(parent, description.interfaceStructure)
+
+        val topLevel = when (description.interfaceType) {
+            InterfaceType.SIGNAL -> NodeTopLevelInputInterface(nodeInputInterface, mapOf())
+            InterfaceType.STREAM -> NodeTopLevelInputInterface(
+                nodeInputInterface,
+                mapOf(
+                    StreamProtocol.VALID.value to NodeInputWireInterface(parent),
+                    StreamProtocol.READY.value to NodeOutputWireInterface(NodeOutputInterfaceParentNode(this, index, description.name))
+                )
+            )
+        }
+
+        Named(description.name, topLevel)
     }
-    val outputs: List<Named<NodeOutputInterface>> = outputInterfaceStructures.mapIndexed { index, named ->
-        val parent = NodeOutputInterfaceParentNode(this, index, named.name)
-        val nodeOutputInterface = NodeOutputInterface.fromStructure(parent, named.item)
-        Named(named.name, nodeOutputInterface)
+    val outputs: List<Named<NodeTopLevelOutputInterface>> = outputInterface.mapIndexed { index, description ->
+        val parent = NodeOutputInterfaceParentNode(this, index, description.name)
+
+        val nodeOutputInterface = NodeOutputInterface.fromStructure(parent, description.interfaceStructure)
+
+        val topLevel = when (description.interfaceType) {
+            InterfaceType.SIGNAL -> NodeTopLevelOutputInterface(nodeOutputInterface, mapOf())
+            InterfaceType.STREAM -> NodeTopLevelOutputInterface(
+                nodeOutputInterface,
+                mapOf(
+                    StreamProtocol.VALID.value to NodeOutputWireInterface(parent),
+                    StreamProtocol.READY.value to NodeInputWireInterface(NodeInputInterfaceParentNode(this, index, description.name))
+                )
+            )
+        }
+
+        Named(description.name, topLevel)
     }
 }
 
 class ModuleInputNode(
     val name: String,
-    val inputInterfaceStructure: InterfaceStructure,
+    val interfaceStructure: InterfaceStructure,
+    val interfaceType: InterfaceType,
     // A bit counter-intuitively, the input node only has output wires
-): Node(emptyList(), listOf(Named(name, inputInterfaceStructure))) {
+): Node(emptyList(), listOf(InterfaceDescription(name, interfaceStructure, interfaceType))) {
     override fun toString() = genToStringFromProperties(
         instance = this,
         ModuleInputNode::name,
@@ -41,9 +76,10 @@ class ModuleInputNode(
 
 class ModuleOutputNode(
     val name: String,
-    val outputInterfaceStructure: InterfaceStructure,
+    val interfaceStructure: InterfaceStructure,
+    val interfaceType: InterfaceType,
     // A bit counter-intuitively, the output node only has input wires
-): Node(listOf(Named(name, outputInterfaceStructure)), emptyList()) {
+): Node(listOf(InterfaceDescription(name, interfaceStructure, interfaceType)), emptyList()) {
     override fun toString(): String = genToStringFromProperties(
         instance = this,
         ModuleOutputNode::name,
@@ -52,7 +88,7 @@ class ModuleOutputNode(
 }
 
 class PassThroughNode(
-    val interfaceStructures: List<Named<InterfaceStructure>>,
+    val interfaceStructures: List<InterfaceDescription>,
 ): Node(interfaceStructures, interfaceStructures) {
     override fun toString() = genToStringFromProperties(
         instance = this,
@@ -66,11 +102,23 @@ class ModuleInvocationNode(
 
     val moduleInvocation: ModuleInvocation,
 
-    val functionInputInterfaces: List<Named<InterfaceStructure>>,
-    val functionOutputInterfaces: List<Named<InterfaceStructure>>,
+    val functionInputInterfaces: List<InterfaceDescription>,
+    val functionOutputInterfaces: List<InterfaceDescription>,
 ): Node(
-    inputInterfaceStructures = functionInputInterfaces.map { Named("${invokedModuleName}_${it.name}", it.item) },
-    outputInterfaceStructures = functionOutputInterfaces.map { Named("${invokedModuleName}_${it.name}", it.item) },
+    inputInterface = functionInputInterfaces.map {
+        InterfaceDescription(
+            name = "${invokedModuleName}_${it.name}",
+            interfaceStructure = it.interfaceStructure,
+            interfaceType = it.interfaceType,
+        )
+    },
+    outputInterface = functionOutputInterfaces.map {
+        InterfaceDescription(
+            name = "${invokedModuleName}_${it.name}",
+            interfaceStructure = it.interfaceStructure,
+            interfaceType = it.interfaceType,
+        )
+    },
 ) {
     override fun toString() = genToStringFromProperties(
         instance = this,
@@ -86,8 +134,18 @@ class PredefinedFunctionInvocationNode(
     val invocationName: String,
     val predefinedFunction: PredefinedFunction,
 ): Node(
-    inputInterfaceStructures = predefinedFunction.inputs.map { Named("${invocationName}_${it.key}", it.value) },
-    outputInterfaceStructures = predefinedFunction.outputs.map { Named("${invocationName}_${it.key}", it.value) },
+    inputInterface = predefinedFunction.inputs.map {
+        InterfaceDescription(
+            name = "${invocationName}_${it.name}",
+            interfaceStructure = it.interfaceStructure,
+            interfaceType = it.interfaceType,
+        )
+    },
+    outputInterface = predefinedFunction.outputs.map {
+        InterfaceDescription(
+            name = "${invocationName}_${it.name}",
+            interfaceStructure = it.interfaceStructure,
+            interfaceType = it.interfaceType,
+        )
+    }
 )
-
-// TODO: Create nodes for built-in functions, register, priority queues, etc.

@@ -1,4 +1,4 @@
-package com.uabutler.gaplir.node.output
+package com.uabutler.gaplir.node.nodeinterface
 
 import com.uabutler.gaplir.node.Node
 

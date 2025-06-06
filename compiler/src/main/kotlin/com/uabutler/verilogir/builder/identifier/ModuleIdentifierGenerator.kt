@@ -51,17 +51,18 @@ object ModuleIdentifierGenerator {
     }
 
     private fun generateParameterDisambiguator(parameterValue: ParameterValue<*>): String {
-
         return when (parameterValue) {
             is IntegerParameterValue -> parameterValue.value.toString()
             is FunctionInstantiationParameterValue -> buildString {
                 append("f")
                 append("_")
-                genIdentifierFromInvocation(
-                    ModuleInvocation(
-                        gaplFunctionName = parameterValue.value.functionIdentifier,
-                        interfaces = parameterValue.value.genericInterfaceValues,
-                        parameters = parameterValue.value.genericParameterValues,
+                append(
+                    genIdentifierFromInvocation(
+                        ModuleInvocation(
+                            gaplFunctionName = parameterValue.value.functionIdentifier,
+                            interfaces = parameterValue.value.genericInterfaceValues,
+                            parameters = parameterValue.value.genericParameterValues,
+                        )
                     )
                 )
                 append("$")
@@ -73,7 +74,7 @@ object ModuleIdentifierGenerator {
     fun genIdentifierFromInvocation(invocation: ModuleInvocation): String {
         return buildString {
             append(invocation.gaplFunctionName)
-            if (invocation.interfaces.isNotEmpty() && invocation.parameters.isNotEmpty()) {
+            if (invocation.interfaces.isNotEmpty() || invocation.parameters.isNotEmpty()) {
                 append("$")
 
                 invocation.interfaces.forEach {

@@ -3,11 +3,19 @@ package com.uabutler.verilogir.builder
 import com.uabutler.gaplir.VectorInterfaceStructure
 import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.*
-import com.uabutler.gaplir.node.input.*
-import com.uabutler.gaplir.node.output.NodeOutputInterface
-import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentNode
-import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentRecordInterface
-import com.uabutler.gaplir.node.output.NodeOutputInterfaceParentVectorInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterfaceParentNode
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterfaceParentRecordInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterfaceParentVectorInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputRecordInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputVectorInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputWireInterface
+import com.uabutler.gaplir.node.nodeinterface.VectorSlice
+import com.uabutler.gaplir.node.nodeinterface.WholeVector
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentNode
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentRecordInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentVectorInterface
 import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
 import com.uabutler.verilogir.builder.node.*
 import com.uabutler.verilogir.module.statement.Assignment
@@ -22,28 +30,28 @@ object StatementBuilder {
         val inputIOWires = inputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = node.name,
-                gaplInterfaceStructure = node.inputInterfaceStructure,
+                gaplInterfaceStructure = node.interfaceStructure,
             )
         }
 
         val inputNodeWires = inputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${node.name}_output",
-                gaplInterfaceStructure = node.inputInterfaceStructure,
+                gaplInterfaceStructure = node.interfaceStructure,
             )
         }
 
         val outputIOWires = outputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = node.name,
-                gaplInterfaceStructure = node.outputInterfaceStructure,
+                gaplInterfaceStructure = node.interfaceStructure,
             )
         }
 
         val outputNodeWires = outputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${node.name}_input",
-                gaplInterfaceStructure = node.outputInterfaceStructure,
+                gaplInterfaceStructure = node.interfaceStructure,
             )
         }
 
@@ -112,8 +120,8 @@ object StatementBuilder {
 
     private fun declareNodeWires(node: Node): List<Statement> {
         // TODO: Move computing identifiers
-        val inputs = node.inputs.map { VerilogInterface.fromGAPLInterfaceStructure("${it.name}_input", it.item.structure) }
-        val outputs = node.outputs.map { VerilogInterface.fromGAPLInterfaceStructure("${it.name}_output", it.item.structure) }
+        val inputs = node.inputs.map { VerilogInterface.fromGAPLInterfaceStructure("${it.name}_input", it.item.inputInterface.structure) }
+        val outputs = node.outputs.map { VerilogInterface.fromGAPLInterfaceStructure("${it.name}_output", it.item.outputInterface.structure) }
 
         return (inputs + outputs).flatten().map { wire ->
             Declaration(
@@ -131,6 +139,8 @@ object StatementBuilder {
             is ModuleInvocationNode -> ModuleInvocationConnector.connect(node)
             is PredefinedFunctionInvocationNode -> when (node.predefinedFunction) {
                 is EqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is GreaterThanEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is LessThanEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is NotEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is AndFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is OrFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
@@ -152,7 +162,7 @@ object StatementBuilder {
 
     private fun getAssignments(node: Node): List<Assignment> {
         return node.inputs
-            .flatMap { getNodeInputInterfaceConnections(it.item) }
+            .flatMap { getNodeInputInterfaceConnections(it.item.inputInterface) }
             .flatMap { generateAssignmentsForConnection(it) }
     }
 
@@ -169,7 +179,7 @@ object StatementBuilder {
     data class VectorConnection(
         override val nodeInputInterface: NodeInputInterface,
         override val nodeOutputInterface: NodeOutputInterface,
-        val vectorConnection: com.uabutler.gaplir.node.input.VectorConnection,
+        val vectorConnection: com.uabutler.gaplir.node.nodeinterface.VectorConnection,
     ): AbstractConnection(nodeInputInterface, nodeOutputInterface)
 
     private fun getNodeInputInterfaceConnections(nodeInputInterface: NodeInputInterface): List<AbstractConnection> {

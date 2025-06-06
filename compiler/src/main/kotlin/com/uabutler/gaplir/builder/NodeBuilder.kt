@@ -1,17 +1,24 @@
 package com.uabutler.gaplir.builder
 
-import com.uabutler.util.Named
 import com.uabutler.ast.node.functions.FunctionIONode
 import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.*
-import com.uabutler.gaplir.node.input.*
-import com.uabutler.gaplir.node.output.NodeOutputInterface
-import com.uabutler.gaplir.node.output.NodeOutputRecordInterface
-import com.uabutler.gaplir.node.output.NodeOutputVectorInterface
-import com.uabutler.gaplir.node.output.NodeOutputWireInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputRecordInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputVectorInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeInputWireInterface
+import com.uabutler.gaplir.node.nodeinterface.VectorConnection
+import com.uabutler.gaplir.node.nodeinterface.VectorSlice
+import com.uabutler.gaplir.node.nodeinterface.WholeVector
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputRecordInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputVectorInterface
+import com.uabutler.gaplir.node.nodeinterface.NodeOutputWireInterface
+import com.uabutler.gaplir.util.InterfaceDescription
 import com.uabutler.gaplir.util.ModuleInvocation
+import com.uabutler.util.InterfaceType
 
 class NodeBuilder(
     val programContext: ProgramContext,
@@ -114,8 +121,8 @@ class NodeBuilder(
                     interfaces = instantiationData.genericInterfaceValues,
                     parameters = instantiationData.genericParameterValues,
                 ),
-                functionInputInterfaces = instantiation.input.map { Named(it.key, it.value) },
-                functionOutputInterfaces = instantiation.output.map { Named(it.key, it.value) },
+                functionInputInterfaces = instantiation.input,
+                functionOutputInterfaces = instantiation.output,
             )
         }
     }
@@ -131,6 +138,8 @@ class NodeBuilder(
             is DeclaredInterfaceCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
 
+                val interfaceType = InterfaceType.fromInterfaceTypeNode(nodeExpression.interfaceType)
+
                 val interfaceStructure = programContext.buildInterfaceWithContext(
                     node = nodeExpression.type,
                     interfaceValuesContext = interfaceValuesContext,
@@ -138,12 +147,18 @@ class NodeBuilder(
                 )
 
                 val node = PassThroughNode(
-                    interfaceStructures = listOf(Named(identifier, interfaceStructure)),
+                    interfaceStructures = listOf(
+                        InterfaceDescription(
+                            name = identifier,
+                            interfaceStructure = interfaceStructure,
+                            interfaceType = interfaceType,
+                        ),
+                    ),
                 )
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item.inputInterface) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item.outputInterface) },
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
                     ),
@@ -162,8 +177,8 @@ class NodeBuilder(
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item.inputInterface) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item.outputInterface) },
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
                     )
@@ -183,8 +198,8 @@ class NodeBuilder(
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item.inputInterface) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item.outputInterface) },
                     generatedNodes = GeneratedNodes(
                         declaredNodes = mapOf(identifier to node),
                     )
@@ -203,8 +218,8 @@ class NodeBuilder(
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item.inputInterface) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item.outputInterface) },
                     generatedNodes = GeneratedNodes(
                         anonymousNodes = listOf(node)
                     )
@@ -225,8 +240,8 @@ class NodeBuilder(
                 val node = createNodeFromFunctionInvocation(identifier, instantiationData)
 
                 return CircuitExpressionResult(
-                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item) },
-                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item) },
+                    inputs = node.inputs.map { NodeInputInterfaceProjection(it.item.inputInterface) },
+                    outputs = node.outputs.map { NodeOutputInterfaceProjection(it.item.outputInterface) },
                     generatedNodes = GeneratedNodes(
                         anonymousNodes = listOf(node)
                     )
@@ -235,6 +250,7 @@ class NodeBuilder(
 
             is ReferenceCircuitExpressionNode -> {
                 val identifier = nodeExpression.identifier.value
+
                 val referencedNode = try {
                     existingDeclaredNodes[identifier]!!
                 } catch (_: NullPointerException) {
@@ -243,7 +259,7 @@ class NodeBuilder(
 
                 // We should be referencing a declared node, which has a single interface
                 val input = referencedNode.inputs.firstOrNull()?.let { input ->
-                    nodeExpression.singleAccesses.fold(input.item) { currentInput, accessNode ->
+                    nodeExpression.singleAccesses.fold(input.item.inputInterface) { currentInput, accessNode ->
                         when (accessNode) {
                             is MemberAccessOperationNode -> {
                                 assert(currentInput is NodeInputRecordInterface)
@@ -262,7 +278,7 @@ class NodeBuilder(
                 }
 
                 val output = referencedNode.outputs.firstOrNull()?.let { output ->
-                    nodeExpression.singleAccesses.fold(output.item) { currentOutput, accessNode ->
+                    nodeExpression.singleAccesses.fold(output.item.outputInterface) { currentOutput, accessNode ->
                         when (accessNode) {
                             is MemberAccessOperationNode -> {
                                 assert(currentOutput is NodeOutputRecordInterface)
@@ -310,6 +326,31 @@ class NodeBuilder(
                             )
                         },
                     ),
+                )
+            }
+
+            is ProtocolAccessorCircuitExpressionNode -> {
+                val identifier = nodeExpression.identifier.value
+
+                val referencedNode = try {
+                    existingDeclaredNodes[identifier]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Unable to find referenced node for identifier $identifier")
+                }
+
+                val protocolMemberIdentifier = nodeExpression.memberIdentifier.value
+
+                // We should be referencing a declared node, which has a single interface
+                val fromInput = referencedNode.inputs.firstOrNull()?.let { it.item.protocol[protocolMemberIdentifier] }
+                val fromOutput = referencedNode.outputs.firstOrNull()?.let { it.item.protocol[protocolMemberIdentifier] }
+                val allProtocolWires = listOfNotNull(fromInput, fromOutput)
+
+                val input = allProtocolWires.filterIsInstance<NodeInputInterface>()
+                val output = allProtocolWires.filterIsInstance<NodeOutputInterface>()
+
+                return CircuitExpressionResult(
+                    inputs = input.map { NodeInputInterfaceProjection(it) },
+                    outputs = output.map { NodeOutputInterfaceProjection(it) },
                 )
             }
 
@@ -456,14 +497,15 @@ class NodeBuilder(
     ): List<ModuleInputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
-                node = it.interfaceType,
+                node = it.interfaceExpression,
                 interfaceValuesContext = interfaceValuesContext,
                 parameterValuesContext = parameterValuesContext,
             )
 
             ModuleInputNode(
                 name = it.identifier.value,
-                inputInterfaceStructure = interfaceStructure,
+                interfaceStructure = interfaceStructure,
+                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
             )
         }
     }
@@ -475,19 +517,19 @@ class NodeBuilder(
     ): List<ModuleOutputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
-                node = it.interfaceType,
+                node = it.interfaceExpression,
                 interfaceValuesContext = interfaceValuesContext,
                 parameterValuesContext = parameterValuesContext,
             )
 
             ModuleOutputNode(
                 name = it.identifier.value,
-                outputInterfaceStructure = interfaceStructure,
+                interfaceStructure = interfaceStructure,
+                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
             )
         }
     }
 
-    // TODO FUNCTIONAL
     fun buildBodyNodes(
         astStatements: List<CircuitStatementNode>,
         inputNodes: List<ModuleInputNode>,

@@ -9,8 +9,8 @@ Interface: 'interface';
 Parameter: 'parameter';
 Wire: 'wire';
 Function: 'function';
-Combinational: 'combinational';
-Sequential: 'sequential';
+Stream: 'stream';
+Signal: 'signal';
 Declare: 'declare';
 If: 'if';
 Else: 'else';
@@ -43,6 +43,10 @@ LessThanEquals: '<=';
 Connector: '=>';
 Comma: ',';
 Dot: '.';
+ProtocolAccessor: '::';
+
+LineComment: '//' ~[\r\n]* -> skip;
+BlockComment: '/*' .*? '*/' -> skip;
 
 WhiteSpace: [ \t\r\n]+ -> skip;
 IntLiteral: [0-9]+;
@@ -107,14 +111,16 @@ aliasInterfaceDefinition:
     Interface Id
     genericInterfaceDefinitionList
     genericParameterDefinitionList
-    interfaceExpression;
+    interfaceExpression
+;
 
 recordInterfaceDefinition:
     Interface Id
     genericInterfaceDefinitionList
     genericParameterDefinitionList
     (Colon inheritList)?
-    CurlyL portDefinitionList CurlyR;
+    CurlyL portDefinitionList CurlyR
+;
 
 // Interface Definition Helpers
 
@@ -136,27 +142,28 @@ interfaceExpression:
 
 // Function Definition
 functionDefinition:
-    functionType Function Id
+    Function Id
     genericInterfaceDefinitionList
     genericParameterDefinitionList
     input=functionIOList Connector output=functionIOList
-    CurlyL (circuitStatement)* CurlyR;
-
-functionType: (Sequential | Combinational)?;
+    CurlyL (circuitStatement)* CurlyR
+;
 
 abstractFunctionIOList:
       Null #emptyAbstractFunctionIOList
-    | abstractFunctionIO (Comma abstractFunctionIO)* Comma? #nonEmptyAbstractFunctionIOList;
+    | abstractFunctionIO (Comma abstractFunctionIO)* Comma? #nonEmptyAbstractFunctionIOList
+;
 
 functionIOList:
       Null #emptyFunctionIOList
-    | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList;
+    | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList
+;
 
-abstractFunctionIO: functionIOType interfaceExpression;
+abstractFunctionIO: interfaceType interfaceExpression;
 
-functionIO: functionIOType Id Colon interfaceExpression;
+functionIO: interfaceType Id Colon interfaceExpression;
 
-functionIOType: (Sequential | Combinational)?;
+interfaceType: (Stream | Signal)?;
 
 // Circuit Statement
 circuitStatement:
@@ -166,7 +173,8 @@ circuitStatement:
 
 conditionalCircuit:
     If ParanL predicate=staticExpression ParanR ifBody=conditionalCircuitBody
-    (Else elseBody=conditionalCircuitBody)?;
+    (Else elseBody=conditionalCircuitBody)?
+;
 
 conditionalCircuitBody: circuitStatement | CurlyL circuitStatement* CurlyR;
 
@@ -177,14 +185,15 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 // TODO: We should break this up a bit. Perhaps, split declared off into its own rule. Ditto with function keyword
-// TODO: Add a static expression
+// TODO: Add a static expression for literals (instead of using literal function)
 circuitNodeExpression:
-      Declare nodeIdentifier=Id Colon interfaceExpression #declaredInterfaceCircuitExpression
+      Declare interfaceType nodeIdentifier=Id Colon interfaceExpression #declaredInterfaceCircuitExpression
     | Declare nodeIdentifier=Id Colon Function instantiation #declaredFunctionCircuitExpression
     | Declare nodeIdentifier=Id Colon Function functionIdentifier=Id #declaredGenericFunctionCircuitExpression
     | Function instantiation #anonymousFunctionCircuitExpression
     | Function functionIdentifier=Id #anonymousGenericFunctionCircuitExpression
-    | Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
+    | nodeIdentifier=Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
+    | nodeIdentifier=Id ProtocolAccessor protocolIdentifier=Id #protocolAccessorCircuitExpression
     | ParanL circuitExpression ParanR #paranCircuitExpression
     | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression
     // TODO: vector interface constructor

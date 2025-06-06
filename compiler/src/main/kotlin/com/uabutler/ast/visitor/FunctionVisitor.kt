@@ -1,6 +1,11 @@
 package com.uabutler.ast.visitor
 
+import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.functions.*
+import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
+import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
+import com.uabutler.ast.node.functions.interfaces.SignalInterfaceTypeNode
+import com.uabutler.ast.node.functions.interfaces.StreamInterfaceTypeNode
 import com.uabutler.parsers.generated.GAPLParser
 
 object FunctionVisitor: GAPLVisitor() {
@@ -28,8 +33,8 @@ object FunctionVisitor: GAPLVisitor() {
 
     override fun visitAbstractFunctionIO(ctx: GAPLParser.AbstractFunctionIOContext): AbstractFunctionIONode {
         return AbstractFunctionIONode(
-            ioType = visitFunctionIOType(ctx.functionIOType()),
-            interfaceType = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
+            interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
+            interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
         )
     }
 
@@ -52,8 +57,8 @@ object FunctionVisitor: GAPLVisitor() {
     override fun visitFunctionIO(ctx: GAPLParser.FunctionIOContext): FunctionIONode {
         return FunctionIONode(
             identifier = TokenVisitor.visitId(ctx.Id()),
-            ioType = visitFunctionIOType(ctx.functionIOType()),
-            interfaceType = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
+            interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
+            interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
         )
     }
 
@@ -71,18 +76,6 @@ object FunctionVisitor: GAPLVisitor() {
         return NonEmptyFunctionIOListNode(
             ctx.functionIO().map { visitFunctionIO(it) }
         )
-    }
-
-    override fun visitFunctionType(ctx: GAPLParser.FunctionTypeContext): FunctionTypeNode {
-        return if (ctx.Sequential() != null) SequentialFunctionTypeNode()
-        else if (ctx.Combinational() != null) CombinationalFunctionTypeNode()
-        else DefaultFunctionTypeNode()
-    }
-
-    override fun visitFunctionIOType(ctx: GAPLParser.FunctionIOTypeContext): FunctionIOTypeNode {
-        return if (ctx.Sequential() != null) SequentialFunctionIOTypeNode()
-        else if (ctx.Combinational() != null) CombinationalFunctionIOTypeNode()
-        else DefaultFunctionIOTypeNode()
     }
 
 }

@@ -30,6 +30,7 @@ object CircuitExpressionVisitor: GAPLVisitor() {
             is GAPLParser.AnonymousFunctionCircuitExpressionContext -> visitAnonymousFunctionCircuitExpression(ctx)
             is GAPLParser.AnonymousGenericFunctionCircuitExpressionContext -> visitAnonymousGenericFunctionCircuitExpression(ctx)
             is GAPLParser.ReferenceCircuitExpressionContext -> visitReferenceCircuitExpression(ctx)
+            is GAPLParser.ProtocolAccessorCircuitExpressionContext -> visitProtocolAccessorCircuitExpression(ctx)
             is GAPLParser.ParanCircuitExpressionContext -> visitParanCircuitExpression(ctx)
             is GAPLParser.RecordInterfaceConstructorCircuitExpressionContext -> visitRecordInterfaceConstructorCircuitExpression(ctx)
             else -> throw Exception("Unrecognized circuit expression")
@@ -38,8 +39,9 @@ object CircuitExpressionVisitor: GAPLVisitor() {
 
     override fun visitDeclaredInterfaceCircuitExpression(ctx: GAPLParser.DeclaredInterfaceCircuitExpressionContext): DeclaredInterfaceCircuitExpressionNode {
          return DeclaredInterfaceCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
-            type = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
+             identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
+             interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
+             type = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
         )
     }
 
@@ -74,6 +76,13 @@ object CircuitExpressionVisitor: GAPLVisitor() {
             identifier = TokenVisitor.visitId(ctx.Id()),
             singleAccesses = ctx.singleAccessOperation().map { visitSingleAccessOperation(it) },
             multipleAccess = ctx.multipleArrayAccessOperation()?.let { visitMultipleArrayAccessOperation(it) },
+        )
+    }
+
+    override fun visitProtocolAccessorCircuitExpression(ctx: GAPLParser.ProtocolAccessorCircuitExpressionContext): ProtocolAccessorCircuitExpressionNode {
+        return ProtocolAccessorCircuitExpressionNode(
+            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
+            memberIdentifier = TokenVisitor.visitId(ctx.protocolIdentifier)
         )
     }
 
