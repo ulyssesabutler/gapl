@@ -13,6 +13,8 @@ object BinaryOperationConnector {
 
     private fun getOperation(function: BinaryFunction): BinaryOperator {
         return when (function) {
+            is GreaterThanEqualsFunction -> BinaryOperator.GREATER_THAN_EQUALS
+            is LessThanEqualsFunction -> BinaryOperator.LESS_THAN_EQUALS
             is EqualsFunction -> BinaryOperator.EQUALS
             is NotEqualsFunction -> BinaryOperator.NOT_EQUALS
             is AndFunction -> BinaryOperator.BITWISE_AND

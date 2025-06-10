@@ -84,7 +84,13 @@ class ProgramContext(program: ProgramNode) {
                     context = parameterValuesContext,
                 ),
             )
-            is IdentifierInterfaceExpressionNode -> interfaceValuesContext[node.interfaceIdentifier.value]!!
+            is IdentifierInterfaceExpressionNode -> {
+                try {
+                    interfaceValuesContext[node.interfaceIdentifier.value]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Cannot find interface value: ${node.interfaceIdentifier.value}")
+                }
+            }
             is DefinedInterfaceExpressionNode -> buildDefinedInterface(
                 definedInterfaceIdentifier = node.interfaceIdentifier.value,
                 genericInterfaceValues = node.genericInterfaces.map {

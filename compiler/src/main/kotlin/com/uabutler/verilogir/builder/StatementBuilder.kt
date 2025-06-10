@@ -139,6 +139,8 @@ object StatementBuilder {
             is ModuleInvocationNode -> ModuleInvocationConnector.connect(node)
             is PredefinedFunctionInvocationNode -> when (node.predefinedFunction) {
                 is EqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is GreaterThanEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
+                is LessThanEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is NotEqualsFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is AndFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)
                 is OrFunction -> BinaryOperationConnector.connect(node, node.predefinedFunction)

@@ -26,6 +26,8 @@ sealed class PredefinedFunction(
             val interfaceStructure = instantiationData.genericInterfaceValues.firstOrNull()
 
             return when (instantiationData.functionIdentifier) {
+                "less_than_equals" -> LessThanEqualsFunction(size!!)
+                "greater_than_equals" -> GreaterThanEqualsFunction(size!!)
                 "equals" -> EqualsFunction(size!!)
                 "not_equals" -> NotEqualsFunction(size!!)
                 "and" -> AndFunction()
@@ -70,6 +72,14 @@ data class EqualsFunction(
 ): BooleanComparison(size)
 
 data class NotEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+data class LessThanEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+data class GreaterThanEqualsFunction(
     override val size: Int,
 ): BooleanComparison(size)
 
