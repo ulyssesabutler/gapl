@@ -20,11 +20,11 @@ interface state() {
 function regex_combinational_vector_fold<T, U>(
     parameter size: integer,
     parameter operation: function T, U => U,
-) in: T[size], initial: U => out: U {
+) in: T[size], init: U => out: U {
     if (size == 1) {
-        in[0], initial => function operation => out;
+        in[0], init => function operation => out;
     } else {
-        in[0], initial => function operation => declare updated_state: U;
+        in[0], init => function operation => declare updated_state: U;
         in[1:size - 1], updated_state => function regex_combinational_vector_fold<T, U>(size - 1, function operation) => out;
     }
 }

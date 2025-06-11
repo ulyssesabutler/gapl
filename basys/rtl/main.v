@@ -23,6 +23,7 @@ module main
         .out(reset)
     );
 
+    /*
     test_harness harness
     (
         .clock(clock),
@@ -34,6 +35,17 @@ module main
 
         .display_next_debug_value_button(button_right),
         .debug_leds(leds)
+    );
+    */
+
+    high_throughput_test_harness harness
+    (
+        .clock(clock),
+
+        .reset(reset),
+
+        .uart_receive(uart_receive),
+        .uart_transmit(uart_transmit)
     );
 
 endmodule

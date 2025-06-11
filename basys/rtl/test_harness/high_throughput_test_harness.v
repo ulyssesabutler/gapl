@@ -11,10 +11,7 @@ module high_throughput_test_harness
     input  wire       reset,
 
     input  wire       uart_receive,
-    output wire       uart_transmit,
-
-    input  wire       display_next_debug_value_button,
-    output wire [7:0] debug_leds
+    output wire       uart_transmit
 );
 
     // UART
@@ -42,5 +39,38 @@ module high_throughput_test_harness
         .receive_valid(received_valid),
         .receive_ready(received_ready)
     );
+
+    // Replication
+    wire [23:0] replicated_data;
+    wire        replicated_valid;
+    wire        replicated_ready;
+
+    replicate replicate_uart
+    (
+        .in_data(received_data),
+        .in_valid(received_valid),
+        .in_ready(received_ready),
+
+        .out_data(replicated_data),
+        .out_valid(replicated_valid),
+        .out_ready(replicated_ready)
+    );
+
+    // TODO: Controller
+
+    // Processor
+    wire enable = 1;
+
+    high_throughput_regex_processor #( .REPLICATION_FACTOR(3) ) processor
+    (
+        .clock(clock),
+        .reset(reset),
+        .enable(enable),
+
+        .data_in(replicated_data),
+        .data_out(transmitting_data)
+    );
+
+    assign transmitting_valid = 1;
 
 endmodule
