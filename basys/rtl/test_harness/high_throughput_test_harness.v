@@ -4,7 +4,8 @@
 module high_throughput_test_harness
 #(
     parameter BAUD_RATE = 9600, // Default for UART
-    parameter CLOCK_FREQUENCY = 100000000 // 100 MHz
+    parameter CLOCK_FREQUENCY = 100000000, // 100 MHz
+    parameter REPLICATION_FACTOR = 52
 ) (
     input  wire       clock,
 
@@ -13,7 +14,6 @@ module high_throughput_test_harness
     input  wire       uart_receive,
     output wire       uart_transmit
 );
-
     // UART
     wire [7:0] transmitting_data;
     wire       transmitting_valid;
@@ -41,11 +41,11 @@ module high_throughput_test_harness
     );
 
     // Replication
-    wire [23:0] replicated_data;
+    wire [8 * REPLICATION_FACTOR - 1:0] replicated_data;
     wire        replicated_valid;
     wire        replicated_ready;
 
-    replicate replicate_uart
+    replicate #( .REPLICATION_FACTOR(REPLICATION_FACTOR) ) replicate_uart
     (
         .in_data(received_data),
         .in_valid(received_valid),
@@ -61,7 +61,7 @@ module high_throughput_test_harness
     // Processor
     wire enable = 1;
 
-    high_throughput_regex_processor #( .REPLICATION_FACTOR(3) ) processor
+    high_throughput_stateful_processor #( .REPLICATION_FACTOR(REPLICATION_FACTOR) ) processor
     (
         .clock(clock),
         .reset(reset),

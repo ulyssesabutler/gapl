@@ -1,0 +1,54 @@
+function state_transition_combinational_vector_fold<T, U>(
+    parameter size: integer,
+    parameter operation: function T, U => U,
+) in: T[size], init: U => out: U {
+    if (size == 1) {
+        in[0], init => function operation => out;
+    } else {
+        in[0], init => function operation => declare updated_state: U;
+        in[1:size - 1], updated_state => function state_transition_combinational_vector_fold<T, U>(size - 1, function operation) => out;
+    }
+}
+
+function state_transition_fold<T, U>(
+    parameter replication_factor: integer,
+    parameter operation: function T, U => U,
+) in: T[replication_factor] => out: U {
+    declare state: function register<U>();
+    in, state
+        => function state_transition_combinational_vector_fold<T, U>(replication_factor, function operation)
+        => state
+        => out;
+}
+
+function expensive_unary() in: wire[8] => out: wire[8] {
+    in[0:3], in[4:7] => function multiply(4) => declare tmp1: wire[4];
+
+    declare tmp2: wire[8];
+
+    in[0:3], tmp1 => function multiply(4) => tmp2[0:3];
+    in[4:7], tmp1 => function multiply(4) => tmp2[4:7];
+
+    tmp2, tmp2 => function multiply(8) => out;
+}
+
+function early_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+    declare mid: wire[8];
+    previous_state => function expensive_unary() => mid;
+    mid, new => function add(8) => updated_state;
+}
+
+function late_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+    declare mid: wire[8];
+    new => function expensive_unary() => mid;
+    mid, previous_state => function add(8) => updated_state;
+}
+
+function addition_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+    new, previous_state => function add(8) => updated_state;
+}
+
+function state_transition_main() i: wire[8][52] => o: wire[8]
+{
+    i => function state_transition_fold<wire[8], wire[8]>(52, function late_state_transition_update()) => o;
+}

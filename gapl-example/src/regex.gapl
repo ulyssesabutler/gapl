@@ -166,8 +166,8 @@ function regex_fold<T, U>(
         => out;
 }
 
-function regex_main() i: character()[3] => o: boolean()
+function regex_main() i: character()[200] => o: boolean()
 {
-    i => function regex_fold<character(), state()>(3, function regex_update_nfa()) => declare updated_state: state();
+    i => function regex_fold<character(), state()>(200, function regex_update_nfa()) => declare updated_state: state();
     updated_state.result => o;
 }
