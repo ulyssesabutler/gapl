@@ -32,20 +32,20 @@ function expensive_unary() in: wire[8] => out: wire[8] {
     tmp2, tmp2 => function multiply(8) => out;
 }
 
-function early_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+function early_state_transition_update() new_value: wire[8], previous_state: wire[8] => updated_state: wire[8] {
     declare mid: wire[8];
     previous_state => function expensive_unary() => mid;
-    mid, new => function add(8) => updated_state;
+    mid, new_value => function add(8) => updated_state;
 }
 
-function late_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+function late_state_transition_update() new_value: wire[8], previous_state: wire[8] => updated_state: wire[8] {
     declare mid: wire[8];
-    new => function expensive_unary() => mid;
+    new_value => function expensive_unary() => mid;
     mid, previous_state => function add(8) => updated_state;
 }
 
-function addition_state_transition_update() new: wire[8], previous_state: wire[8] => updated_state: wire[8] {
-    new, previous_state => function add(8) => updated_state;
+function addition_state_transition_update() new_value: wire[8], previous_state: wire[8] => updated_state: wire[8] {
+    new_value, previous_state => function add(8) => updated_state;
 }
 
 function state_transition_main() i: wire[8][12] => o: wire[8]
