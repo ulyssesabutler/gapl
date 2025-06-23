@@ -5,7 +5,7 @@ module high_throughput_test_harness
 #(
     parameter BAUD_RATE = 9600, // Default for UART
     parameter CLOCK_FREQUENCY = 100000000, // 100 MHz
-    parameter REPLICATION_FACTOR = 52
+    parameter REPLICATION_FACTOR = 12
 ) (
     input  wire       clock,
 

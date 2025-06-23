@@ -48,7 +48,7 @@ function addition_state_transition_update() new: wire[8], previous_state: wire[8
     new, previous_state => function add(8) => updated_state;
 }
 
-function state_transition_main() i: wire[8][52] => o: wire[8]
+function state_transition_main() i: wire[8][12] => o: wire[8]
 {
-    i => function state_transition_fold<wire[8], wire[8]>(52, function late_state_transition_update()) => o;
+    i => function state_transition_fold<wire[8], wire[8]>(12, function late_state_transition_update()) => o;
 }
