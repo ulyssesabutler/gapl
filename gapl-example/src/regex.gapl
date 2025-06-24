@@ -116,7 +116,8 @@ function regex_is_character_in_set(parameter set_size: integer)
     candidate_vector, set
         => function regex_vector_zip<character(), pair<character(), character()>()>(set_size)
         => function regex_vector_map<pair<character(), pair<character(), character()>()>(), boolean()>(set_size, function regex_is_character_in_range_pair_wrapper())
-        => function regex_vector_any(set_size);
+        => function regex_vector_any(set_size)
+        => result;
 }
 
 function regex_is_numeric() i: character() => o: boolean()
@@ -157,12 +158,14 @@ function regex_update_nfa() new_character: character(), current_state: state() =
     declare true_v: function literal(1, 1);
 
     declare n1_inputs: wire[1] => function regex_nfa_node(1) => update.nodes.n1;
-    declare n2_inputs: wire[1] => function regex_nfa_node(1) => update.nodes.n2;
+    declare n2_inputs: wire[1] => function regex_nfa_node(1) => declare n2_output: boolean();
 
-    true_v[0],              new_character => declare start_to_n1: function regex_nfa_edge(function regex_is_alpha()) => n1_inputs[0];
+    n2_output => update.nodes.n2;
+
+    true_v[0],              new_character => declare start_to_n1: function regex_nfa_edge(function regex_is_alpha())   => n1_inputs[0];
     current_state.nodes.n1, new_character => declare n1_to_n2:    function regex_nfa_edge(function regex_is_numeric()) => n2_inputs[0];
 
-    update.nodes.n2, current_state.result => function or() => update.result;
+    n2_output, current_state.result => function or() => update.result;
 }
 
 function regex_fold<T, U>(

@@ -64,15 +64,15 @@ class ModuleBuilder(val program: ProgramNode) {
     private fun buildModule(
         instantiation: ModuleInstantiationTracker.ModuleInstantiation,
     ): Module {
-        val identifier = ModuleIdentifierGenerator.genIdentifierFromInvocation(
-            ModuleInvocation(
-                gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
-                interfaces = instantiation.moduleInstantiationData.genericInterfaceValues,
-                parameters = instantiation.moduleInstantiationData.genericParameterValues,
-            )
+        val invocation = ModuleInvocation(
+            gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
+            interfaces = instantiation.moduleInstantiationData.genericInterfaceValues,
+            parameters = instantiation.moduleInstantiationData.genericParameterValues,
         )
 
-        println("building module $identifier")
+        val identifier = ModuleIdentifierGenerator.genIdentifierFromInvocation(invocation)
+
+        println("■ building module $identifier")
 
         val astNode = instantiation.astNode
 

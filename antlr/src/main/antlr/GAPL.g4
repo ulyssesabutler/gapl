@@ -45,6 +45,9 @@ Comma: ',';
 Dot: '.';
 ProtocolAccessor: '::';
 
+LineComment: '//' ~[\r\n]* -> skip;
+BlockComment: '/*' .*? '*/' -> skip;
+
 WhiteSpace: [ \t\r\n]+ -> skip;
 IntLiteral: [0-9]+;
 Id: [a-zA-Z_] [a-zA-Z0-9_]*;

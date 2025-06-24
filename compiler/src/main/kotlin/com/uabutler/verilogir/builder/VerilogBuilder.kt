@@ -27,8 +27,6 @@ object VerilogBuilder {
     }
 
     fun verilogModuleFromGAPLModule(gaplModule: GAPLModule): VerilogModule {
-        println("## Building verilog module: ${ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation)}")
-
         return VerilogModule(
             name = ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation),
             inputs = gaplModule.inputNodes.flatMap {
