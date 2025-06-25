@@ -15,17 +15,17 @@ module test;
   );
 
   initial
-    $monitor("in  %h\nout %h", in, out);
-    //  $monitor("in  {%d, %d, %d, %d, %d }\nout {%d, %d, %d, %d, %d }",
-    //     in[0*4 +: 4],
-    //     in[1*4 +: 4],
-    //     in[2*4 +: 4],
-    //     in[3*4 +: 4],
-    //     in[4*4 +: 4],
-    //     out[0*4 +: 4],
-    //     out[1*4 +: 4],
-    //     out[2*4 +: 4],
-    //     out[3*4 +: 4],
-    //     out[4*4 +: 4]
-    //  );
+    // $monitor("in  %h\nout %h", in, out);
+    $monitor("in  {%d, %d, %d, %d, %d }\nout {%d, %d, %d, %d, %d }",
+      in[0*4 +: 4],
+      in[1*4 +: 4],
+      in[2*4 +: 4],
+      in[3*4 +: 4],
+      in[4*4 +: 4],
+      out[0*4 +: 4],
+      out[1*4 +: 4],
+      out[2*4 +: 4],
+      out[3*4 +: 4],
+      out[4*4 +: 4]
+    );
 endmodule
