@@ -122,9 +122,8 @@ module tb_high_throughput_test_harness;
         8'h41, // A
         8'h42, // B
         8'h43, // C
-        8'h30, // 0
-        8'h31, // 1
-        8'h2E, // .
+        8'h44, // D
+        //8'h2E, // .
         8'h41, // A
         8'h42, // B
         8'h43, // C
@@ -134,6 +133,8 @@ module tb_high_throughput_test_harness;
         8'h47, // G
         8'h48, // H
         8'h49, // I
+        8'h4A, // J
+        8'h4B, // K
         8'h0   // Null terminator
     };
 
