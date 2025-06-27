@@ -17,8 +17,11 @@ object BinaryOperationConnector {
             is LessThanEqualsFunction -> BinaryOperator.LESS_THAN_EQUALS
             is EqualsFunction -> BinaryOperator.EQUALS
             is NotEqualsFunction -> BinaryOperator.NOT_EQUALS
-            is AndFunction -> BinaryOperator.BITWISE_AND
-            is OrFunction -> BinaryOperator.BITWISE_OR
+            is AndFunction -> BinaryOperator.AND
+            is OrFunction -> BinaryOperator.OR
+            is BitwiseAndFunction -> BinaryOperator.BITWISE_AND
+            is BitwiseOrFunction -> BinaryOperator.BITWISE_OR
+            is BitwiseXorFunction -> BinaryOperator.BITWISE_XOR
             is AdditionFunction -> BinaryOperator.ADD
             is SubtractionFunction -> BinaryOperator.SUBTRACT
             is MultiplicationFunction -> BinaryOperator.MULTIPLY

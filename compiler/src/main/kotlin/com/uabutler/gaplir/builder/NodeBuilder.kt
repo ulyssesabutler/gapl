@@ -229,7 +229,11 @@ class NodeBuilder(
             is AnonymousGenericFunctionCircuitExpressionNode -> {
                 val identifier = AnonymousIdentifierGenerator.genIdentifier()
 
-                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+                val parameterValue = try {
+                    parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Cannot locate function: ${nodeExpression.functionIdentifier.value}")
+                }
 
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
