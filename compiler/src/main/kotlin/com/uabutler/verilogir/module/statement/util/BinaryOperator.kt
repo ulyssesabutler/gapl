@@ -26,6 +26,7 @@ enum class BinaryOperator(val verilog: String) {
     // Bitwise
     BITWISE_AND("&"),
     BITWISE_OR("|"),
+    BITWISE_XOR("^"),
 
     // Shift
     LEFT_SHIFT("<<"),

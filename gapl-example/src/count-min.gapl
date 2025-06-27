@@ -1,0 +1,210 @@
+/* INTERFACES */
+
+interface pair<T, U>() {
+    first: T;
+    second: U;
+}
+
+interface boolean() wire
+
+interface valid<T>() {
+    value: T;
+    valid: boolean();
+}
+
+interface last<T>() {
+    value: T;
+    last: boolean();
+}
+
+interface count() wire[32]
+
+interface sketch_column(
+    // The number of possible values each has function can produce
+    parameter hash_function_depth: integer,
+) count()[hash_function_depth]
+
+// TODO: Something that would be cool? A datatype that represents the number of bits need to store a value of at least size N.
+interface sketch_column_index() wire[4]
+
+interface sketch(
+    // The number of hash functions we need support
+    parameter hash_function_count: integer,
+    // The number of possible values each has function can produce
+    parameter hash_function_depth: integer,
+) sketch_column(hash_function_depth)[hash_function_count]
+
+interface sketch3(parameter hash_function_depth: integer) sketch(3, hash_function_depth)
+
+/* LIBRARY FUNCTIONS */
+
+function count_min_vector_zip<I, J>(
+    parameter vector_size: integer,
+) i1: I[vector_size], i2: J[vector_size] => o: pair<I, J>()[vector_size] {
+    i1[0] => o[0].first;
+    i2[0] => o[0].second;
+
+    if (vector_size > 1) {
+        i1[1:vector_size - 1], i2[1:vector_size - 1]
+            => function count_min_vector_zip<I, J>(vector_size - 1)
+            => o[1:vector_size - 1];
+    }
+}
+
+function count_min_combinational_vector_fold<T, U>(
+    parameter size: integer,
+    parameter operation: function T, U => U,
+) in: T[size], init: U => out: U {
+    if (size == 1) {
+        in[0], init => function operation => out;
+    } else {
+        in[0], init => function operation => declare updated_state: U;
+        in[1:size - 1], updated_state => function count_min_combinational_vector_fold<T, U>(size - 1, function operation) => out;
+    }
+}
+
+function count_min_vector_map<I, O>(
+    parameter size: integer,
+    parameter operation: function I => O,
+) i: I[size] => o: O[size] {
+    if (size > 0) {
+        i[size - 1] => function operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => function count_min_vector_map<I, O>(size - 1, function operation) => o[0:size - 2];
+        }
+    }
+}
+
+function count_min_generate_index_list(parameter size: integer) null => out: sketch_column_index()[size] {
+    function literal(4, size - 1) => out[size - 1];
+    if (size > 1) {
+        function count_min_generate_index_list(size - 1) => out[0:size - 2];
+    }
+}
+
+function count_min_replicate<I>(parameter factor: integer) i: I => o: I[factor] {
+    i => o[0];
+    if (factor > 1) {
+        i => function count_min_replicate<I>(factor - 1) => o[1:factor - 1];
+    }
+}
+
+function count_min_unpair<T, U, V>(
+    parameter operation: function T, U => V
+) i: pair<T, U>() => o: V {
+    i.first, i.second => function operation => o;
+}
+
+function count_min_vector_to_wire() i: wire[1] => o: wire { i[0] => o; }
+
+function count_min_wire_to_vector() i: wire => o: wire[1] { i => o[0]; }
+
+function count_min_left_pad(
+    parameter original: integer,
+    parameter padding: integer,
+) i: wire[original] => o: wire[original + padding] {
+    i => o[0:original - 1];
+    function literal(padding, 0) => o[original:original + padding - 1];
+}
+
+function count_min_boolean_to_int(parameter size: integer) i: wire => o: wire[size] {
+    i => function count_min_wire_to_vector() => function count_min_left_pad(1, size - 1) => o;
+}
+
+function count_min_fold<T, U>(
+    parameter replication_factor: integer,
+    parameter operation: function T, U => U,
+) in: last<T[replication_factor]>() => out: valid<U>() {
+    declare state: function register<U>();
+    in.value, state
+        => function count_min_combinational_vector_fold<T, U>(replication_factor, function operation)
+        => state
+        => out.value;
+
+    in.last => out.valid;
+}
+
+/* SKETCH UPDATE FUNCTIONS */
+
+function count_min_increment_sketch_column(
+    parameter depth: integer,
+) index: sketch_column_index(), original: sketch_column(depth) => updated: sketch_column(depth) {
+
+    // First, let's generate the increment vector. This will be a vector where a single value is 1, all others are 0
+    index => function count_min_replicate<sketch_column_index()>(depth) => declare replicated_index: sketch_column_index()[depth];
+    function count_min_generate_index_list(depth) => declare index_list: sketch_column_index()[depth];
+
+    replicated_index, index_list
+        => function count_min_vector_zip<sketch_column_index(), sketch_column_index()>(depth)
+        => function count_min_vector_map<pair<sketch_column_index(), sketch_column_index()>(), boolean()>(
+            depth,
+            function count_min_unpair<sketch_column_index(), sketch_column_index(), boolean()>(function equals(4)),
+        )
+        => function count_min_vector_map<boolean(), count()>(depth, function count_min_boolean_to_int(32))
+        => declare increment_vector: sketch_column(depth);
+
+    // Now, let's add the increment vector to the input column
+    original, increment_vector
+        => function count_min_vector_zip<count(), count()>(depth)
+        => function count_min_vector_map<pair<count(), count()>(), count()>(
+            depth,
+            function count_min_unpair<count(), count(), count()>(function add(32))
+        )
+        => updated;
+
+}
+
+/* HASH FUNCTIONS */
+
+function count_min_int_hash0() i: wire[8] => o: sketch_column_index() {
+    i[0:3], i[4:7] => function bitwise_xor(4) => o;
+}
+
+function count_min_int_hash1() i: wire[8] => o: sketch_column_index() {
+    i[0:3], i[4:7] => function add(4) => o;
+}
+
+function count_min_int_hash2() i: wire[8] => o: sketch_column_index() {
+    i[0:3], i[4:7] => function multiply(4) => o;
+}
+
+/* UPDATE FUNCTION */
+
+function count_min_update_sketch3<T>(
+    parameter depth: integer,
+    parameter hash0: function T => sketch_column_index(),
+    parameter hash1: function T => sketch_column_index(),
+    parameter hash2: function T => sketch_column_index(),
+) value: T, original: sketch3(depth) => updated: sketch3(depth) {
+
+    // Run the hash functions on the input
+    value => function count_min_int_hash0() => declare hash0_index: sketch_column_index();
+    value => function count_min_int_hash1() => declare hash1_index: sketch_column_index();
+    value => function count_min_int_hash2() => declare hash2_index: sketch_column_index();
+
+    // Now, using the results of the hash functions to update the sketch
+    hash0_index, original[0] => function count_min_increment_sketch_column(depth) => updated[0];
+    hash1_index, original[1] => function count_min_increment_sketch_column(depth) => updated[1];
+    hash2_index, original[2] => function count_min_increment_sketch_column(depth) => updated[2];
+
+}
+
+/* MAIN FUNCTION */
+
+function count_min_main() i: last<wire[8][3]>() => o: valid<wire[8]>() {
+    i
+        => function count_min_fold<wire[8], sketch3(16)>(
+            3,
+            function count_min_update_sketch3<wire[8]>(
+                16,
+                function count_min_int_hash0(),
+                function count_min_int_hash1(),
+                function count_min_int_hash2(),
+            ),
+        )
+        => declare updated_state: valid<sketch3(16)>();
+
+    updated_state.value[0][0][0:7] => o.value;
+    updated_state.valid            => o.valid;
+}

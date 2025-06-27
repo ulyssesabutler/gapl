@@ -32,6 +32,9 @@ sealed class PredefinedFunction(
                 "not_equals" -> NotEqualsFunction(size!!)
                 "and" -> AndFunction()
                 "or" -> OrFunction()
+                "bitwise_and" -> BitwiseAndFunction(size!!)
+                "bitwise_or" -> BitwiseOrFunction(size!!)
+                "bitwise_xor" -> BitwiseXorFunction(size!!)
                 "add" -> AdditionFunction(size!!)
                 "subtract" -> SubtractionFunction(size!!)
                 "multiply" -> MultiplicationFunction(size!!)
@@ -101,6 +104,18 @@ sealed class BinaryArithmeticFunction(
     result = wireVector(size),
 )
 
+
+data class BitwiseAndFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class BitwiseOrFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class BitwiseXorFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
 
 data class AdditionFunction(
     override val size: Int,

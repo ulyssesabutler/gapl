@@ -20,7 +20,7 @@ module high_throughput_stateful_processor
     wire out_data_boolean;
 
     //regex_main main
-    email_regex_main main
+    count_min_main main
     (
         .clock(clock),
         .reset(reset),
