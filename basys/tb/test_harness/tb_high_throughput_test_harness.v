@@ -108,33 +108,24 @@ module tb_high_throughput_test_harness;
         end
     endtask
 
-    logic [7:0] my_input_string [0:25] = '{
+    /*
+    logic [7:0] my_input_string [0:6] = '{
         8'h41, // A
-        8'h42, // B
-        8'h43, // C
-        8'h44, // D
-        8'h45, // E
-        8'h46, // F
-        8'h47, // G
-        8'h48, // H
-        8'h49, // I
         8'h40, // @
         8'h41, // A
-        8'h42, // B
-        8'h43, // C
-        8'h44, // D
-        //8'h2E, // .
+        8'h2E, // .
         8'h41, // A
-        8'h42, // B
-        8'h43, // C
-        8'h44, // D
-        8'h45, // E
-        8'h46, // F
-        8'h47, // G
-        8'h48, // H
-        8'h49, // I
-        8'h4A, // J
-        8'h4B, // K
+        8'h41, // A
+        8'h0   // Null terminator
+    };
+    */
+
+    logic [7:0] my_input_string [0:34] = '{
+        8'h11, 8'h22, 8'h33,
+        8'h44, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
+        8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
+        8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
+        8'h01, 8'h01, 8'h01, 8'h01,
         8'h0   // Null terminator
     };
 
@@ -148,7 +139,7 @@ module tb_high_throughput_test_harness;
 
         reset = 0;
 
-        send_string(my_input_string, 26);
+        send_string(my_input_string, 35);
 
         #(BAUD_PERIOD * 100);
 
