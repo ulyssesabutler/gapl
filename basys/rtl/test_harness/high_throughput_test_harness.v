@@ -103,7 +103,7 @@ module high_throughput_test_harness
     );
 
     // Packet Constructor
-    wire       processed_packet_data;
+    wire [7:0] processed_packet_data;
     wire       processed_packet_valid;
     wire       processed_packet_ready;
     wire       processed_packet_last;

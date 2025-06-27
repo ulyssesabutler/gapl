@@ -17,9 +17,25 @@ module high_throughput_stateful_processor
     output wire                                out_last
 );
 
-    wire out_data_boolean;
+    /*
+    wire direct_output;
 
     //regex_main main
+    email_regex_main main
+    (
+        .clock(clock),
+        .reset(reset),
+        .enable(enable),
+
+        .i_value(in_data),
+        .i_last(in_last),
+
+        .o_value(direct_output),
+        .o_valid(out_valid)
+    );
+    assign out_data = {{7{0}}, direct_output};
+    */
+
     count_min_main main
     (
         .clock(clock),
@@ -29,12 +45,11 @@ module high_throughput_stateful_processor
         .i_value(in_data),
         .i_last(in_last),
 
-        .o_value(out_data_boolean),
+        .o_value(out_data),
         .o_valid(out_valid)
     );
 
     assign in_ready = 1;
     assign out_last = 1;
-    assign out_data = {{7{0}}, out_data_boolean};
 
 endmodule
