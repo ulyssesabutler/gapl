@@ -33,7 +33,8 @@ module tb_high_throughput_test_harness;
     end
 
     // Instantiate DUT
-    high_throughput_test_harness #( .BAUD_RATE(BAUD_FREQUENCY), .CLOCK_FREQUENCY(CLOCK_FREQUENCY) ) dut
+    //high_throughput_test_harness #( .BAUD_RATE(BAUD_FREQUENCY), .CLOCK_FREQUENCY(CLOCK_FREQUENCY) ) dut
+    high_throughput_array_output_test_harness #( .BAUD_RATE(BAUD_FREQUENCY), .CLOCK_FREQUENCY(CLOCK_FREQUENCY) ) dut
     (
         .clock(clock),
         .reset(reset),
