@@ -17,27 +17,45 @@ def send_data(ser, payload):
         ser.flush()
         time.sleep(0.01)  # slight delay between bytes (tweak as needed)
 
-def receive_response(ser):
-    print(f"Listening for {LISTEN_DURATION} seconds...")
-    end_time = time.time() + LISTEN_DURATION
-    while time.time() < end_time:
-        if ser.in_waiting:
-            byte = ser.read(1)
-            if byte:
-                print("Result: True")
-            else:
-                print("Result: False")
-        time.sleep(0.01)  # prevent CPU hogging
+def receive_data(ser, duration=LISTEN_DURATION) -> bytes:
+    print(f"Listening for {duration} seconds...")
+    end_time = time.time() + duration
+    received = bytearray()
 
-def receive_data(ser):
-    print(f"Listening for {LISTEN_DURATION} seconds...")
-    end_time = time.time() + LISTEN_DURATION
     while time.time() < end_time:
         if ser.in_waiting:
             byte = ser.read(1)
-            print(f"Received byte: {byte.hex().upper()}")
+            received += byte
         else:
-            time.sleep(0.01)  # prevent CPU hogging
+            time.sleep(0.01)  # Sleep briefly to avoid CPU hogging
+
+    return bytes(received)
+
+def output_raw(ser=None):
+    data = receive_data(ser)
+    for byte in data:
+        print(f"{byte:02X}")
+
+def output_tabled(item_width_bits: int = 8, array_width: int = 1, ser=None):
+    data = receive_data(ser)
+    if item_width_bits % 8 != 0:
+        raise ValueError("Item width must be a multiple of 8.")
+    item_width_bytes = item_width_bits // 8
+    if item_width_bytes == 0:
+        raise ValueError("Item width must be at least 8 bits (1 byte).")
+
+    grouped = [data[i:i+item_width_bytes] for i in range(0, len(data), item_width_bytes)]
+    for i in range(0, len(grouped), array_width):
+        row = grouped[i:i+array_width]
+        print("  ".join("".join(f"{b:02X}" for b in item) for item in row))
+
+def receive_formatted_data(mode: str = 'raw', item_width: int = 8, array_width: int = 1, ser=None):
+    if mode == "raw":
+        output_raw(ser)
+    elif mode == "tabled":
+        output_tabled(item_width, array_width, ser)
+    else:
+        raise ValueError(f"Unknown output mode: {mode}")
 
 def parse_string_input(args):
     return b''.join(arg.encode() for arg in args)
@@ -61,6 +79,10 @@ def main():
     group.add_argument('--hex', nargs='+', help='List of hex byte values (e.g. 0f 1a ff).')
     group.add_argument('--dec', nargs='+', help='List of decimal byte values (0–255).')
 
+    parser.add_argument('--output', choices=['raw', 'tabled'], default='raw', help='Output mode (default: raw).')
+    parser.add_argument('--item-width', type=int, help='Item width in bits (must be multiple of 4) for tabled output.')
+    parser.add_argument('--array-width', type=int, help='Number of items per row for tabled output.')
+
     args = parser.parse_args()
 
     if args.string:
@@ -76,7 +98,7 @@ def main():
 
     with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0) as ser:
         sender = threading.Thread(target=send_data, args=(ser, payload))
-        receiver = threading.Thread(target=receive_data, args=(ser,))
+        receiver = threading.Thread(target=receive_formatted_data, args=(args.output, args.item_width or 8, args.array_width or 1, ser))
 
         receiver.start()
         sender.start()
