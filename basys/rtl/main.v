@@ -38,7 +38,7 @@ module main
     );
     */
 
-    high_throughput_test_harness harness
+    high_throughput_array_output_test_harness harness
     (
         .clock(clock),
 
