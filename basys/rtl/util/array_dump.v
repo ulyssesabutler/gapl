@@ -1,8 +1,8 @@
 module array_dump
 #(
-    parameter ARRAY_HEIGHT,
-    parameter ARRAY_WIDTH,
-    parameter CELL_WIDTH
+    parameter ARRAY_HEIGHT = 16,
+    parameter ARRAY_WIDTH  = 3,
+    parameter CELL_WIDTH   = 8
 ) (
     input  wire clock,
     input  wire reset,
@@ -11,13 +11,13 @@ module array_dump
     input  wire                                                 in_valid,
     output wire                                                 in_ready,
 
-    output wire [CELL_WIDTH - 1:0]                              out_data,
+    output wire [7:0]                                           out_data,
     output wire                                                 out_valid,
     input  wire                                                 out_ready,
     output wire                                                 out_last
 );
 
-    localparam ARRAY_SIZE = ARRAY_HEIGHT * ARRAY_WIDTH;
+    localparam ARRAY_SIZE = (ARRAY_HEIGHT * ARRAY_WIDTH * CELL_WIDTH) / 8;
     localparam ARRAY_INDEX_BITS = $clog2(ARRAY_SIZE + 1);
 
     reg [ARRAY_HEIGHT * ARRAY_WIDTH * CELL_WIDTH - 1:0] buffer;
@@ -26,7 +26,7 @@ module array_dump
     reg [ARRAY_INDEX_BITS - 1:0] current_index;
     reg [ARRAY_INDEX_BITS - 1:0] current_index_next;
 
-    assign out_data = buffer[current_index * CELL_WIDTH +: CELL_WIDTH];
+    assign out_data = buffer[current_index * 8 +: 8];
     assign out_last = current_index == (ARRAY_SIZE - 1);
 
     localparam STATE_RECEIVING = 0;

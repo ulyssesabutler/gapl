@@ -123,7 +123,7 @@ function count_min_fold<T, U>(
         => state
         => out.value;
 
-    in.last => out.valid;
+    in.last => function register<boolean()>() => out.valid;
 }
 
 /* SKETCH UPDATE FUNCTIONS */
@@ -158,12 +158,12 @@ function count_min_increment_sketch_column(
 
 /* HASH FUNCTIONS */
 
-function hash_with_op(parameter op: function wire[4] => wire[4]) i: wire[8] => o: wire[4] {
+function hash_with_op(parameter op: function wire[4], wire[4] => wire[4]) i: wire[8] => o: wire[4] {
     i[0:3], i[4:7] => function op => o;
 }
 
 function count_min_int_hash0() i: wire[8] => o: sketch_column_index() {
-    i => function hash_with_op(function bitwise_or(4)) => o;
+    i => function hash_with_op(function bitwise_xor(4)) => o;
 }
 
 function count_min_int_hash1() i: wire[8] => o: sketch_column_index() {
@@ -227,7 +227,7 @@ function count_min_update_sketch6<T>(
 
 function count_min_main() i: last<wire[8][3]>() => o: valid<sketch3(16)>() {
     i
-        => function count_min_fold<wire[8], sketch6(16)>(
+        => function count_min_fold<wire[8], sketch3(16)>(
             3,
             function count_min_update_sketch3<wire[8]>(
                 16,
