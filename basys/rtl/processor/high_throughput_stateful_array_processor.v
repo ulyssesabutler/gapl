@@ -1,9 +1,9 @@
 module high_throughput_stateful_array_processor
 #(
     parameter REPLICATION_FACTOR = 3,
-    parameter ARRAY_HEIGHT,
-    parameter ARRAY_WIDTH,
-    parameter CELL_WIDTH
+    parameter ARRAY_HEIGHT = 16,
+    parameter ARRAY_WIDTH = 3,
+    parameter CELL_WIDTH = 8
 ) (
     input  wire clock,
     input  wire reset,

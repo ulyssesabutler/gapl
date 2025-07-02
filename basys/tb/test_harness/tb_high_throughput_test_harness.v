@@ -121,12 +121,21 @@ module tb_high_throughput_test_harness;
     };
     */
 
+    /*
     logic [7:0] my_input_string [0:34] = '{
         8'h11, 8'h22, 8'h33,
         8'h44, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
         8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
         8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01, 8'h01,
         8'h01, 8'h01, 8'h01, 8'h01,
+        8'h0   // Null terminator
+    };
+    */
+
+    logic [7:0] my_input_string [0:12] = '{
+        8'h11, 8'h22, 8'h33, 8'h44, 8'h55,
+        8'h06, 8'h07, 8'h08, 8'h09,
+        8'h01, 8'h01, 8'h01,
         8'h0   // Null terminator
     };
 
@@ -140,7 +149,7 @@ module tb_high_throughput_test_harness;
 
         reset = 0;
 
-        send_string(my_input_string, 35);
+        send_string(my_input_string, 13);
 
         #(BAUD_PERIOD * 100);
 
