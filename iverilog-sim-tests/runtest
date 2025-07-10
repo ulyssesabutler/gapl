@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# ==========================================================
+# can edit the following lines if needed
+
+# iverilog consists of multiple executables
+IVERILOG="$HOME/.local/bin/iverilog"
+VVP="$HOME/.local/bin/vvp"
+
+GAPL_COMPILER="../compiler/build/install/gapl/bin/gapl"
+SRC_DIR="src"
+TEST_MAIN_DIR="test-drivers"
+V_DIR="compiled-verilog"
+
+
+# ==========================================================
+# DO NOT EDIT BELOW HERE
+# filenames are all derived from the gapl example filename
+
+TEST_MAIN="$TEST_MAIN_DIR/test-$@.v"
+GAPL_IN="$SRC_DIR/$@.gapl"
+VERILOG_OUT="$V_DIR/$@.v"
+
+function iverun() {
+  local outfile
+  outfile=$(mktemp /tmp/iverun_out.XXXXXXXXX)
+
+  # Ensure cleanup on script exit or interruption
+  trap 'rm -f "$outfile"' EXIT
+
+  # Run iverilog; abort if it fails
+  if ! $IVERILOG -o "$outfile" "$@"; then
+    rm -f "$outfile"
+    echo "iverilog compilation failed."
+    return 1
+  fi
+
+  # Run the simulation
+  if ! $VVP "$outfile"; then
+    rm -f "$outfile"
+    echo "vvp execution failed."
+    return 1
+  fi
+}
+
+mkdir -p $V_DIR
+./gapl -i $GAPL_IN -o $VERILOG_OUT
+iverun $TEST_MAIN $VERILOG_OUT
