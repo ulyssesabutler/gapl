@@ -1,4 +1,4 @@
-package com.uabutler.verilogir.builder.interfaceutil
+package com.uabutler.util
 
 import com.uabutler.gaplir.InterfaceStructure
 import com.uabutler.gaplir.RecordInterfaceStructure
@@ -12,21 +12,25 @@ class VerilogInterface(
 
     companion object {
         fun fromGAPLInterfaceStructure(
-            name: String,
-            gaplInterfaceStructure: InterfaceStructure,
+            structure: InterfaceStructure,
+            name: String? = null,
         ): List<Wire> {
-            return when (gaplInterfaceStructure) {
+            return when (structure) {
                 is WireInterfaceStructure -> {
-                    listOf(Wire(name, 1))
+                    listOf(Wire(name ?: "", 1))
                 }
                 is RecordInterfaceStructure -> {
-                    gaplInterfaceStructure.ports.flatMap {
-                        fromGAPLInterfaceStructure("${name}_${it.key}", it.value)
+                    structure.ports.flatMap {
+                        if (name == null) {
+                            fromGAPLInterfaceStructure(name = it.key, structure = it.value)
+                        } else {
+                            fromGAPLInterfaceStructure(name = "${name}_${it.key}", structure = it.value)
+                        }
                     }
                 }
                 is VectorInterfaceStructure -> {
-                    fromGAPLInterfaceStructure(name, gaplInterfaceStructure.vectoredInterface).map {
-                        Wire(it.name, it.width * gaplInterfaceStructure.size)
+                    fromGAPLInterfaceStructure(name = name, structure = structure.vectoredInterface).map {
+                        Wire(it.name, it.width * structure.size)
                     }
                 }
             }

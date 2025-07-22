@@ -16,7 +16,7 @@ import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterface
 import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentNode
 import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentRecordInterface
 import com.uabutler.gaplir.node.nodeinterface.NodeOutputInterfaceParentVectorInterface
-import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.builder.node.*
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
@@ -26,32 +26,32 @@ import com.uabutler.verilogir.util.DataType
 
 object StatementBuilder {
 
-    fun verilogStatementsFromIONodes(inputs: List<ModuleInputNode>, outputs: List<ModuleOutputNode>): List<Statement> {
+    fun verilogStatementsFromIONodes(inputs: List<InputNode>, outputs: List<OutputNode>): List<Statement> {
         val inputIOWires = inputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = node.name,
-                gaplInterfaceStructure = node.interfaceStructure,
+                structure = node.interfaceStructure,
             )
         }
 
         val inputNodeWires = inputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${node.name}_output",
-                gaplInterfaceStructure = node.interfaceStructure,
+                structure = node.interfaceStructure,
             )
         }
 
         val outputIOWires = outputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = node.name,
-                gaplInterfaceStructure = node.interfaceStructure,
+                structure = node.interfaceStructure,
             )
         }
 
         val outputNodeWires = outputs.flatMap { node ->
             VerilogInterface.fromGAPLInterfaceStructure(
                 name = "${node.name}_input",
-                gaplInterfaceStructure = node.interfaceStructure,
+                structure = node.interfaceStructure,
             )
         }
 
@@ -108,7 +108,7 @@ object StatementBuilder {
 
     fun verilogStatementsFromGAPLNodes(nodes: List<Node>): List<Statement> {
         val declarations = nodes
-            .filter { it !is ModuleOutputNode }
+            .filter { it !is OutputNode }
             .flatMap { node -> declareNodeWires(node) }
 
         val connections = nodes.flatMap { node ->
@@ -239,11 +239,11 @@ object StatementBuilder {
             is Connection -> {
                 val sinkWires = VerilogInterface.fromGAPLInterfaceStructure(
                     name = sinkLocation.name,
-                    gaplInterfaceStructure = connection.nodeInputInterface.structure,
+                    structure = connection.nodeInputInterface.structure,
                 )
                 val sourceWires = VerilogInterface.fromGAPLInterfaceStructure(
                     name = sourceLocation.name,
-                    gaplInterfaceStructure = connection.nodeOutputInterface.structure,
+                    structure = connection.nodeOutputInterface.structure,
                 )
 
                 sinkWires.zip(sourceWires).map { (sink, source) ->
@@ -269,7 +269,7 @@ object StatementBuilder {
                     is WholeVector -> {
                         VerilogInterface.fromGAPLInterfaceStructure(
                             name = sinkLocation.name,
-                            gaplInterfaceStructure = connection.nodeInputInterface.structure,
+                            structure = connection.nodeInputInterface.structure,
                         ).map { sink ->
                             Reference(
                                 variableName = sink.name,
@@ -287,7 +287,7 @@ object StatementBuilder {
 
                         VerilogInterface.fromGAPLInterfaceStructure(
                             name = sinkLocation.name,
-                            gaplInterfaceStructure = vectoredStructure,
+                            structure = vectoredStructure,
                         ).map { sink ->
                             Reference(
                                 variableName = sink.name,
@@ -302,7 +302,7 @@ object StatementBuilder {
                     is WholeVector -> {
                         VerilogInterface.fromGAPLInterfaceStructure(
                             name = sourceLocation.name,
-                            gaplInterfaceStructure = connection.nodeOutputInterface.structure,
+                            structure = connection.nodeOutputInterface.structure,
                         ).map { source ->
                             Reference(
                                 variableName = source.name,
@@ -320,7 +320,7 @@ object StatementBuilder {
 
                         VerilogInterface.fromGAPLInterfaceStructure(
                             name = sourceLocation.name,
-                            gaplInterfaceStructure = vectoredStructure,
+                            structure = vectoredStructure,
                         ).map { source ->
                             Reference(
                                 variableName = source.name,

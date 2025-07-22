@@ -2,7 +2,7 @@ package com.uabutler.verilogir.builder.node
 
 import com.uabutler.gaplir.builder.util.*
 import com.uabutler.gaplir.node.PredefinedFunctionInvocationNode
-import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Statement
 import com.uabutler.verilogir.module.statement.expression.BinaryOperation
@@ -31,9 +31,9 @@ object BinaryOperationConnector {
     }
 
     fun connect(predefinedFunction: PredefinedFunctionInvocationNode, function: BinaryFunction): List<Statement> {
-        val lhs = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_lhs_input", function.lhs)
-        val rhs = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_rhs_input", function.rhs)
-        val result = VerilogInterface.fromGAPLInterfaceStructure("${predefinedFunction.invocationName}_result_output", function.result)
+        val lhs = VerilogInterface.fromGAPLInterfaceStructure(function.lhs, "${predefinedFunction.invocationName}_lhs_input")
+        val rhs = VerilogInterface.fromGAPLInterfaceStructure(function.rhs, "${predefinedFunction.invocationName}_rhs_input")
+        val result = VerilogInterface.fromGAPLInterfaceStructure(function.result, "${predefinedFunction.invocationName}_result_output")
 
         // TODO: Generalize
         assert(lhs.size == 1)

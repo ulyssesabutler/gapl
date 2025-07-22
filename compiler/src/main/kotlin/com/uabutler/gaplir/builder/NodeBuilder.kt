@@ -18,6 +18,7 @@ import com.uabutler.gaplir.node.nodeinterface.NodeOutputVectorInterface
 import com.uabutler.gaplir.node.nodeinterface.NodeOutputWireInterface
 import com.uabutler.gaplir.util.InterfaceDescription
 import com.uabutler.gaplir.util.ModuleInvocation
+import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.InterfaceType
 
 class NodeBuilder(
@@ -26,7 +27,7 @@ class NodeBuilder(
 ) {
 
     data class NodeBuildResult(
-        val nodes: List<Node>,
+        val bodyNodes: List<BodyNode>,
         val moduleInstantiations: List<ModuleInstantiationTracker.ModuleInstantiationData>,
     )
 
@@ -88,8 +89,8 @@ class NodeBuilder(
     )
 
     data class GeneratedNodes(
-        val declaredNodes: Map<String, Node> = emptyMap(),
-        val anonymousNodes: Collection<Node> = emptyList(),
+        val declaredNodes: Map<String, BodyNode> = emptyMap(),
+        val anonymousNodes: Collection<BodyNode> = emptyList(),
     )
 
     data class CircuitExpressionResult(
@@ -101,7 +102,7 @@ class NodeBuilder(
     private fun createNodeFromFunctionInvocation(
         invocationName: String,
         instantiationData: ModuleInstantiationTracker.ModuleInstantiationData
-    ): Node {
+    ): BodyNode {
         // First, search predefined functions. If there is no predefined function with this name, search defined functions
         val matchingPredefinedFunction = PredefinedFunction.searchPredefinedFunctions(instantiationData)
 
@@ -466,11 +467,11 @@ class NodeBuilder(
         connectionExpression: CircuitConnectionExpressionNode,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,
-        existingDeclaredNodes: Map<String, Node>
+        existingDeclaredNodes: Map<String, BodyNode>
     ): GeneratedNodes {
         val allDeclaredNodes = existingDeclaredNodes.toMutableMap()
-        val newDeclaredNodes = mutableMapOf<String, Node>()
-        val anonymousNodes = mutableListOf<Node>()
+        val newDeclaredNodes = mutableMapOf<String, BodyNode>()
+        val anonymousNodes = mutableListOf<BodyNode>()
 
         // Step 1: Process each group
         val groups = connectionExpression.connectedExpression.asSequence()
@@ -498,7 +499,7 @@ class NodeBuilder(
         astNodes: List<FunctionIONode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,
-    ): List<ModuleInputNode> {
+    ): List<InputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
                 node = it.interfaceExpression,
@@ -506,7 +507,7 @@ class NodeBuilder(
                 parameterValuesContext = parameterValuesContext,
             )
 
-            ModuleInputNode(
+            InputNode(
                 name = it.identifier.value,
                 interfaceStructure = interfaceStructure,
                 interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
@@ -518,7 +519,7 @@ class NodeBuilder(
         astNodes: List<FunctionIONode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,
-    ): List<ModuleOutputNode> {
+    ): List<OutputNode> {
         return astNodes.map {
             val interfaceStructure = programContext.buildInterfaceWithContext(
                 node = it.interfaceExpression,
@@ -526,7 +527,7 @@ class NodeBuilder(
                 parameterValuesContext = parameterValuesContext,
             )
 
-            ModuleOutputNode(
+            OutputNode(
                 name = it.identifier.value,
                 interfaceStructure = interfaceStructure,
                 interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
@@ -536,8 +537,6 @@ class NodeBuilder(
 
     fun buildBodyNodes(
         astStatements: List<CircuitStatementNode>,
-        inputNodes: List<ModuleInputNode>,
-        outputNodes: List<ModuleOutputNode>,
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,
     ): NodeBuildResult {
@@ -550,8 +549,7 @@ class NodeBuilder(
             )
         }
 
-        val ioNodes = inputNodes.associateBy { it.name } + outputNodes.associateBy { it.name }
-        val allDeclaredNodes = ioNodes.toMutableMap()
+        val allDeclaredNodes = mutableMapOf<String, BodyNode>()
         val anonymousNodes = mutableListOf<Node>()
 
         // Step 2: Process the expressions to create nodes and connect them
@@ -562,7 +560,7 @@ class NodeBuilder(
             .toList()
 
         return NodeBuildResult(
-            nodes = results.flatMap { it.declaredNodes.values } + results.flatMap { it.anonymousNodes },
+            bodyNodes = results.flatMap { it.declaredNodes.values } + results.flatMap { it.anonymousNodes },
             moduleInstantiations = emptyList() // TODO: Once we handle function calls
         )
     }

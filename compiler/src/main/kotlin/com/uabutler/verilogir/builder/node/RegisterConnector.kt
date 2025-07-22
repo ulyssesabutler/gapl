@@ -2,7 +2,7 @@ package com.uabutler.verilogir.builder.node
 
 import com.uabutler.gaplir.builder.util.RegisterFunction
 import com.uabutler.gaplir.node.PredefinedFunctionInvocationNode
-import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.module.statement.Always
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
@@ -17,10 +17,10 @@ import com.uabutler.verilogir.util.DataType
 
 object RegisterConnector {
     fun connect(node: PredefinedFunctionInvocationNode, predefinedFunction: RegisterFunction): List<Statement> {
-        val inputs = VerilogInterface.fromGAPLInterfaceStructure("${node.invocationName}_next_input", predefinedFunction.storageStructure)
-        val outputs = VerilogInterface.fromGAPLInterfaceStructure("${node.invocationName}_current_output", predefinedFunction.storageStructure)
+        val inputs = VerilogInterface.fromGAPLInterfaceStructure(predefinedFunction.storageStructure, "${node.invocationName}_next_input")
+        val outputs = VerilogInterface.fromGAPLInterfaceStructure(predefinedFunction.storageStructure, "${node.invocationName}_current_output")
 
-        val registers = VerilogInterface.fromGAPLInterfaceStructure("${node.invocationName}_register", predefinedFunction.storageStructure)
+        val registers = VerilogInterface.fromGAPLInterfaceStructure(predefinedFunction.storageStructure, "${node.invocationName}_register")
 
         val declarations = registers.map {
             Declaration(
