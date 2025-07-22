@@ -1,7 +1,7 @@
 package com.uabutler.verilogir.builder
 
 import com.uabutler.gaplir.InterfaceStructure
-import com.uabutler.verilogir.builder.interfaceutil.VerilogInterface
+import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator
 import com.uabutler.verilogir.module.ModuleIO
 import com.uabutler.verilogir.module.ModuleIODirection
@@ -15,7 +15,7 @@ object VerilogBuilder {
         structure: InterfaceStructure,
         direction: ModuleIODirection,
     ): List<ModuleIO> {
-        return VerilogInterface.fromGAPLInterfaceStructure(name, structure).map {
+        return VerilogInterface.fromGAPLInterfaceStructure(name = name, structure = structure).map {
              ModuleIO(
                  name = it.name,
                  direction = direction,
@@ -45,7 +45,7 @@ object VerilogBuilder {
             },
             statements =
                 StatementBuilder.verilogStatementsFromIONodes(gaplModule.inputNodes, gaplModule.outputNodes) +
-                        StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.nodes + gaplModule.outputNodes),
+                        StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.bodyNodes + gaplModule.outputNodes),
         )
     }
 }

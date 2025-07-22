@@ -19,8 +19,8 @@ import com.uabutler.util.InterfaceType
 
 
 sealed class Node(
-    inputInterface: List<InterfaceDescription>,
-    outputInterface: List<InterfaceDescription>,
+    val inputInterface: List<InterfaceDescription>,
+    val outputInterface: List<InterfaceDescription>,
 ) {
     // TODO: From structures
     val inputs: List<Named<NodeTopLevelInputInterface>> = inputInterface.mapIndexed { index, description ->
@@ -41,6 +41,7 @@ sealed class Node(
 
         Named(description.name, topLevel)
     }
+
     val outputs: List<Named<NodeTopLevelOutputInterface>> = outputInterface.mapIndexed { index, description ->
         val parent = NodeOutputInterfaceParentNode(this, index, description.name)
 
@@ -61,35 +62,45 @@ sealed class Node(
     }
 }
 
-class ModuleInputNode(
+sealed class IONode(
+    inputInterface: List<InterfaceDescription>,
+    outputInterface: List<InterfaceDescription>,
+) : Node(inputInterface, outputInterface)
+
+sealed class BodyNode(
+    inputInterface: List<InterfaceDescription>,
+    outputInterface: List<InterfaceDescription>,
+) : Node(inputInterface, outputInterface)
+
+class InputNode(
     val name: String,
     val interfaceStructure: InterfaceStructure,
     val interfaceType: InterfaceType,
-    // A bit counter-intuitively, the input node only has output wires
-): Node(emptyList(), listOf(InterfaceDescription(name, interfaceStructure, interfaceType))) {
+    // A bit counter-intuitive, the input node only has output wires
+) : IONode(emptyList(), listOf(InterfaceDescription(name, interfaceStructure, interfaceType))) {
     override fun toString() = genToStringFromProperties(
         instance = this,
-        ModuleInputNode::name,
-        ModuleInputNode::outputs,
+        InputNode::name,
+        InputNode::outputs,
     )
 }
 
-class ModuleOutputNode(
+class OutputNode(
     val name: String,
     val interfaceStructure: InterfaceStructure,
     val interfaceType: InterfaceType,
-    // A bit counter-intuitively, the output node only has input wires
-): Node(listOf(InterfaceDescription(name, interfaceStructure, interfaceType)), emptyList()) {
-    override fun toString(): String = genToStringFromProperties(
+    // A bit counter-intuitive, the output node only has input wires
+) : IONode(listOf(InterfaceDescription(name, interfaceStructure, interfaceType)), emptyList()) {
+    override fun toString() = genToStringFromProperties(
         instance = this,
-        ModuleOutputNode::name,
-        ModuleOutputNode::inputs,
+        OutputNode::name,
+        OutputNode::inputs,
     )
 }
 
 class PassThroughNode(
     val interfaceStructures: List<InterfaceDescription>,
-): Node(interfaceStructures, interfaceStructures) {
+) : BodyNode(interfaceStructures, interfaceStructures) {
     override fun toString() = genToStringFromProperties(
         instance = this,
         PassThroughNode::inputs,
@@ -104,7 +115,7 @@ class ModuleInvocationNode(
 
     val functionInputInterfaces: List<InterfaceDescription>,
     val functionOutputInterfaces: List<InterfaceDescription>,
-): Node(
+) : BodyNode(
     inputInterface = functionInputInterfaces.map {
         InterfaceDescription(
             name = "${invokedModuleName}_${it.name}",
@@ -133,7 +144,7 @@ class ModuleInvocationNode(
 class PredefinedFunctionInvocationNode(
     val invocationName: String,
     val predefinedFunction: PredefinedFunction,
-): Node(
+) : BodyNode(
     inputInterface = predefinedFunction.inputs.map {
         InterfaceDescription(
             name = "${invocationName}_${it.name}",

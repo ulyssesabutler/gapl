@@ -1,4 +1,4 @@
-package com.uabutler.gaplir.builder.util
+package com.uabutler.util
 
 object AnonymousIdentifierGenerator {
     private var counter = 0

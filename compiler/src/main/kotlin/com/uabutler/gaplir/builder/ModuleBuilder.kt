@@ -93,8 +93,6 @@ class ModuleBuilder(val program: ProgramNode) {
         // Build body nodes
         val nodeBuildResult = nodeBuilder.buildBodyNodes(
             astStatements = astNode.statements,
-            inputNodes = inputNodes,
-            outputNodes = outputNodes,
             interfaceValuesContext = instantiation.genericInterfaceValues,
             parameterValuesContext = instantiation.genericParameterValues,
         )
@@ -117,7 +115,7 @@ class ModuleBuilder(val program: ProgramNode) {
             outputStructure = instantiation.output,
             inputNodes = inputNodes,
             outputNodes = outputNodes,
-            nodes = nodeBuildResult.nodes,
+            bodyNodes = nodeBuildResult.bodyNodes,
         )
 
         return module
