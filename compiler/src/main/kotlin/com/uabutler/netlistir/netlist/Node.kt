@@ -12,6 +12,9 @@ sealed class Node(
     val inputWireVectorGroups: Map<String, InputWireVectorGroup> = inputWireVectorGroupsBuilder(this).associateBy { it.identifier }
     val outputWireVectorGroups: Map<String, OutputWireVectorGroup> = outputWireVectorGroupsBuilder(this).associateBy { it.identifier }
 
+    fun inputWires() = inputWireVectorGroups.values.flatMap { it.wireVectors.values.flatMap { it.wires } }
+    fun outputWires() = outputWireVectorGroups.values.flatMap { it.wireVectors.values.flatMap { it.wires } }
+
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,
@@ -51,6 +54,32 @@ sealed class Node(
     }
 }
 
+sealed class IONode(
+    identifier: String,
+    parentModule: Module,
+    inputWireVectorGroupsBuilder: (Node) -> Collection<InputWireVectorGroup>,
+    outputWireVectorGroupsBuilder: (Node) -> Collection<OutputWireVectorGroup>
+) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+
+sealed class InputNode(
+    identifier: String,
+    parentModule: Module,
+    outputWireVectorGroupsBuilder: (Node) -> Collection<OutputWireVectorGroup>
+) : Node(identifier, parentModule, { emptyList() }, outputWireVectorGroupsBuilder)
+
+sealed class OutputNode(
+    identifier: String,
+    parentModule: Module,
+    inputWireVectorGroupsBuilder: (Node) -> Collection<InputWireVectorGroup>,
+) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, { emptyList() })
+
+sealed class BodyNode(
+    identifier: String,
+    parentModule: Module,
+    inputWireVectorGroupsBuilder: (Node) -> Collection<InputWireVectorGroup>,
+    outputWireVectorGroupsBuilder: (Node) -> Collection<OutputWireVectorGroup>
+) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+
 class ModuleInvocationNode(
     identifier: String,
     parentModule: Module,
@@ -59,7 +88,7 @@ class ModuleInvocationNode(
     // By this stage, modules will be uniquely defined by their identifier.
     // TODO: Is this the right way to do this? Should we just keep the invocation information and compare it directly?
     val invokedModuleIdentifier: String
-) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+) : BodyNode(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
 
 class PredefinedFunctionNode(
     identifier: String,
@@ -67,7 +96,7 @@ class PredefinedFunctionNode(
     inputWireVectorGroupsBuilder: (Node) -> Collection<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> Collection<OutputWireVectorGroup>,
     val predefinedFunction: PredefinedFunction
-) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+) : BodyNode(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
 
 class PassThroughNode(
     identifier: String,
@@ -76,4 +105,4 @@ class PassThroughNode(
     //   For now, the user is just going to pinky promise they're the same
     inputWireVectorGroupsBuilder: (Node) -> Collection<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> Collection<OutputWireVectorGroup>,
-): Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+): BodyNode(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
