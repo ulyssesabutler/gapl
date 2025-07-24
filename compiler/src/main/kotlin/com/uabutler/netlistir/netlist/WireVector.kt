@@ -2,8 +2,20 @@ package com.uabutler.netlistir.netlist
 
 import com.uabutler.netlistir.util.ObjectUtils
 
-sealed class WireVector<T : Wire>(val identifier: String, val parentGroup: WireVectorGroup<*>) {
+sealed class WireVector<T : Wire>(val identifier: List<String>, val parentGroup: WireVectorGroup<*>) {
     abstract val wires: List<T>
+
+    class Projection<T : Wire>(
+        val sourceWireVector: WireVector<T>,
+        val range: IntRange?,
+    ) {
+        val wires: List<T> = range?.let { sourceWireVector.wires.filterIndexed { index, _ -> index in range } } ?: sourceWireVector.wires
+    }
+
+    fun projection(range: IntRange? = null): Projection<T> {
+        return Projection(this, range)
+    }
+
 
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
@@ -42,12 +54,12 @@ sealed class WireVector<T : Wire>(val identifier: String, val parentGroup: WireV
 }
 
 class InputWireVector(
-    identifier: String,
+    identifier: List<String>,
     parentGroup: InputWireVectorGroup,
     wiresBuilder: (InputWireVector) -> List<InputWire>
 ) : WireVector<InputWire>(identifier, parentGroup) {
     constructor(
-        identifier: String,
+        identifier: List<String>,
         parentGroup: InputWireVectorGroup,
         size: Int,
     ) : this(
@@ -67,12 +79,12 @@ class InputWireVector(
 }
 
 class OutputWireVector(
-    identifier: String,
+    identifier: List<String>,
     parentGroup: OutputWireVectorGroup,
     wiresBuilder: (OutputWireVector) -> List<OutputWire>
 ) : WireVector<OutputWire>(identifier, parentGroup) {
     constructor(
-        identifier: String,
+        identifier: List<String>,
         parentGroup: OutputWireVectorGroup,
         size: Int,
     ) : this(
