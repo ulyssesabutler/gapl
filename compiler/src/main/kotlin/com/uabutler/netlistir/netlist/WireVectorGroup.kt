@@ -3,7 +3,7 @@ package com.uabutler.netlistir.netlist
 import com.uabutler.netlistir.util.ObjectUtils
 
 sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val parentNode: Node) {
-    abstract val wireVectors: Map<String, T>
+    abstract val wireVectors: List<T>
 
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
@@ -28,7 +28,7 @@ sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val pare
                 otherValue = o.parentNode,
                 identifierAccessor = { it.identifier }
             ) },
-            { o -> wireVectors.keys == o.wireVectors.keys }
+            { o -> wireVectors == o.wireVectors }
         )
     }
 
@@ -36,7 +36,7 @@ sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val pare
         return ObjectUtils.hashCodeBuilder(
             identifier,
             parentNode.identifier,
-            wireVectors.keys
+            wireVectors
         )
     }
 }
@@ -44,15 +44,15 @@ sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val pare
 class InputWireVectorGroup(
     identifier: String,
     parentNode: Node,
-    wireVectorsBuilder: (InputWireVectorGroup) -> Collection<InputWireVector>
+    wireVectorsBuilder: (InputWireVectorGroup) -> List<InputWireVector>
 ) : WireVectorGroup<InputWireVector>(identifier, parentNode) {
-    override val wireVectors: Map<String, InputWireVector> = wireVectorsBuilder(this).associateBy { it.identifier }
+    override val wireVectors: List<InputWireVector> = wireVectorsBuilder(this)
 }
 
 class OutputWireVectorGroup(
     identifier: String,
     parentNode: Node,
-    wireVectorsBuilder: (OutputWireVectorGroup) -> Collection<OutputWireVector>
+    wireVectorsBuilder: (OutputWireVectorGroup) -> List<OutputWireVector>
 ) : WireVectorGroup<OutputWireVector>(identifier, parentNode) {
-    override val wireVectors: Map<String, OutputWireVector> = wireVectorsBuilder(this).associateBy { it.identifier }
+    override val wireVectors: List<OutputWireVector> = wireVectorsBuilder(this)
 }

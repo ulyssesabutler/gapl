@@ -103,6 +103,20 @@ class ProgramContext(program: ProgramNode) {
         }
     }
 
+    fun buildFlatInterfaceWithContext(
+        node: InterfaceExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, ParameterValue<*>>,
+    ): List<FlatInterfaceWireVector> {
+        return InterfaceFlattener.fromGAPLInterfaceStructure(
+            buildInterfaceWithContext(
+                node = node,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+        )
+    }
+
     fun buildModuleInstantiationDataWithContext(
         node: InstantiationNode,
 

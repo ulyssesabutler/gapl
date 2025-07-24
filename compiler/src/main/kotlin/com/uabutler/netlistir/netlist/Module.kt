@@ -1,39 +1,70 @@
 package com.uabutler.netlistir.netlist
 
+import com.uabutler.netlistir.builder.util.InterfaceStructure
+import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.util.ObjectUtils
-
-// data class IOWireVector(val identifier: String, val size: Int)
-// data class IONode(val identifier: String, val wireVectors: List<IOWireVector>)
+import com.uabutler.util.Named
 
 class Module(
-    val identifier: String,
-    inputNodesBuilder: (Module) -> Collection<InputNode>,
-    outputNodesBuilder: (Module) -> Collection<OutputNode>,
-    childNodesBuilder: (Module) -> Collection<BodyNode>,
+    val invocation: Invocation,
 ) {
+
+    data class Invocation(
+        val gaplFunctionName: String,
+        val interfaces: List<InterfaceStructure>,
+        val parameters: List<ParameterValue<*>>,
+    )
 
     data class Connection(
         val outputWire: OutputWire,
         val inputWire: InputWire,
     )
 
-    private val inputNodes = inputNodesBuilder(this).associateBy { it.identifier }.toMutableMap()
-    private val outputNodes = outputNodesBuilder(this).associateBy { it.identifier }.toMutableMap()
-    private val bodyNodes = childNodesBuilder(this).associateBy { it.identifier }.toMutableMap()
+    // Nodes and Connections
+    private val inputNodes = mutableListOf<InputNode>()
+    private val outputNodes = mutableListOf<OutputNode>()
+    private val bodyNodes = mutableListOf<BodyNode>()
 
     private val connections = mutableSetOf<Connection>()
 
-    fun currentInputNodes() = inputNodes.toMap()
-    fun currentOutputNodes() = outputNodes.toMap()
-    fun currentBodyNodes() = bodyNodes.toMap()
-    fun currentConnection() = connections.toSet()
+    // Single Getters
+    fun getInputNode(identifier: String) = inputNodes.first { it.identifier == identifier }
+    fun getOutputNode(identifier: String) = outputNodes.first { it.identifier == identifier }
+    fun getBodyNode(identifier: String) = bodyNodes.first { it.identifier == identifier }
 
-    fun getInputNode(identifier: String) = inputNodes[identifier]
-    fun getOutputNode(identifier: String) = outputNodes[identifier]
-    fun getBodyNode(identifier: String) = bodyNodes[identifier]
-    fun getConnectionsForOutputWire(outputWire: OutputWire) = connections.filter { it.outputWire == outputWire }.toSet()
     fun getConnectionForInputWireOrNull(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire }
     fun getConnectionForInputWire(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire } ?: throw Exception("Input wire $inputWire not connected")
+
+    // Multi Getters
+    fun getInputNodes() = inputNodes.toList()
+    fun getOutputNodes() = outputNodes.toList()
+    fun getBodyNodes() = bodyNodes.toList()
+
+    fun getConnections() = connections.toSet()
+    fun getConnectionsForOutputWire(outputWire: OutputWire) = connections.filter { it.outputWire == outputWire }.toSet()
+    fun getConnectionsForNodeInput(node: Node) = node.inputWires().mapNotNull { getConnectionForInputWireOrNull(it) }
+    fun getConnectionsForNodeOutput(node: Node) = node.outputWires().flatMap { getConnectionsForOutputWire(it) }
+    fun getConnectionsForNode(node: Node) = getConnectionsForNodeInput(node) + getConnectionsForNodeOutput(node)
+
+    // Setters
+    fun addInputNode(node: InputNode) { inputNodes += node }
+    fun addOutputNode(node: OutputNode) { outputNodes += node }
+    fun addBodyNode(node: BodyNode) { bodyNodes += node }
+
+    fun removeNode(node: Node) {
+        // Validation: The node must be disconnected
+        val connections = getConnectionsForNode(node)
+
+        if (connections.isNotEmpty()) {
+            throw Exception("Attempted to remove connected node. This is a bug in the compiler. ${connections.joinToString(", ")}")
+        }
+
+        when (node) {
+            is InputNode -> inputNodes.remove(node)
+            is OutputNode -> outputNodes.remove(node)
+            is BodyNode -> bodyNodes.remove(node)
+        }
+    }
 
     fun connect(inputWire: InputWire, outputWire: OutputWire) {
         // Validation: Each input wire should have exactly one source
@@ -44,17 +75,20 @@ class Module(
         connections.add(Connection(outputWire, inputWire))
     }
 
-    // The input wire uniquely identifies the connection
     fun disconnect(inputWire: InputWire) {
         connections.remove(getConnectionForInputWire(inputWire))
     }
 
+    //
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,
             normalProps = mapOf(
-                "identifier" to identifier,
-                "bodyNodes" to bodyNodes
+                "invocation" to invocation,
+                "inputNodes" to inputNodes,
+                "outputNodes" to outputNodes,
+                "bodyNodes" to bodyNodes,
+                "connections" to connections,
             )
         )
     }
@@ -63,13 +97,16 @@ class Module(
         return ObjectUtils.equalsBuilder<Module>(
             self = this,
             other = other,
-            { o -> identifier == o.identifier },
-            { o -> bodyNodes.keys == o.bodyNodes.keys }
+            { o -> invocation == o.invocation },
+            { o -> inputNodes == o.inputNodes },
+            { o -> outputNodes == o.outputNodes },
+            { o -> connections == o.connections },
+            { o -> bodyNodes == o.bodyNodes },
         )
     }
 
     override fun hashCode(): Int {
-        return ObjectUtils.hashCodeBuilder(identifier, bodyNodes.keys)
+        return ObjectUtils.hashCodeBuilder(invocation, inputNodes, outputNodes, bodyNodes, connections)
     }
 
 }
