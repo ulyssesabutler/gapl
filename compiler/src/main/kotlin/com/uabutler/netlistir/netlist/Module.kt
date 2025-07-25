@@ -4,6 +4,7 @@ import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.util.ObjectUtils
 import com.uabutler.util.Named
+import com.uabutler.verilogir.builder.creator.util.Identifier
 
 class Module(
     val invocation: Invocation,
@@ -41,12 +42,13 @@ class Module(
     fun getBodyNode(identifier: String) = bodyNodes.first { it.identifier == identifier }
 
     fun getConnectionForInputWireOrNull(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire }
-    fun getConnectionForInputWire(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire } ?: throw Exception("Input wire $inputWire not connected")
+    fun getConnectionForInputWire(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire } ?: throw Exception("Input wire $inputWire of ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} not connected")
 
     // Multi Getters
     fun getInputNodes() = inputNodes.toList()
     fun getOutputNodes() = outputNodes.toList()
     fun getBodyNodes() = bodyNodes.toList()
+    fun getNodes() = getInputNodes() + getOutputNodes() + getBodyNodes()
 
     fun getConnections() = connections.toSet()
     fun getConnectionsForOutputWire(outputWire: OutputWire) = connections.filter { it.outputWire == outputWire }.toSet()
@@ -76,8 +78,9 @@ class Module(
 
     fun connect(inputWire: InputWire, outputWire: OutputWire) {
         // Validation: Each input wire should have exactly one source
-        if (getConnectionForInputWireOrNull(inputWire) != null) {
-            throw IllegalArgumentException("Input wire $inputWire already connected")
+        val testConnection = getConnectionForInputWireOrNull(inputWire)
+        if (testConnection != null) {
+            throw IllegalArgumentException("Input wire $inputWire at ${inputWire.index} for ${Identifier.wire(inputWire.parentWireVector)} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} already connected")
         }
 
         connections.add(Connection(outputWire, inputWire))
@@ -100,21 +103,4 @@ class Module(
             )
         )
     }
-
-    override fun equals(other: Any?): Boolean {
-        return ObjectUtils.equalsBuilder<Module>(
-            self = this,
-            other = other,
-            { o -> invocation == o.invocation },
-            { o -> inputNodes == o.inputNodes },
-            { o -> outputNodes == o.outputNodes },
-            { o -> connections == o.connections },
-            { o -> bodyNodes == o.bodyNodes },
-        )
-    }
-
-    override fun hashCode(): Int {
-        return ObjectUtils.hashCodeBuilder(invocation, inputNodes, outputNodes, bodyNodes, connections)
-    }
-
 }

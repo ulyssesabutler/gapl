@@ -12,8 +12,11 @@ sealed class Node(
     val inputWireVectorGroups: List<InputWireVectorGroup> = inputWireVectorGroupsBuilder(this)
     val outputWireVectorGroups: List<OutputWireVectorGroup> = outputWireVectorGroupsBuilder(this)
 
-    fun inputWires() = inputWireVectorGroups.flatMap { it.wireVectors.flatMap { it.wires } }
-    fun outputWires() = outputWireVectorGroups.flatMap { it.wireVectors.flatMap { it.wires } }
+    fun inputWires(): List<InputWire> = inputWireVectorGroups.flatMap { it.wires() }
+    fun outputWires(): List<OutputWire> = outputWireVectorGroups.flatMap { it.wires() }
+
+    fun inputWireVectors() = inputWireVectorGroups.flatMap { it.wireVectors }
+    fun outputWireVectors() = outputWireVectorGroups.flatMap { it.wireVectors }
 
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
@@ -26,26 +29,6 @@ sealed class Node(
             identityProps = mapOf(
                 "parentModule" to parentModule
             )
-        )
-    }
-
-    override fun equals(other: Any?): Boolean {
-        return ObjectUtils.equalsBuilder<Node>(
-            self = this,
-            other = other,
-            { o -> identifier == o.identifier },
-            { o -> parentModule == o.parentModule },
-            { o -> inputWireVectorGroups == o.inputWireVectorGroups },
-            { o -> outputWireVectorGroups == o.outputWireVectorGroups },
-        )
-    }
-
-    override fun hashCode(): Int {
-        return ObjectUtils.hashCodeBuilder(
-            identifier,
-            parentModule.invocation,
-            inputWireVectorGroups,
-            outputWireVectorGroups,
         )
     }
 }

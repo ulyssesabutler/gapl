@@ -1,51 +1,47 @@
 package com.uabutler.verilogir.builder
 
-import com.uabutler.gaplir.InterfaceStructure
-import com.uabutler.util.VerilogInterface
-import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator
+import com.uabutler.netlistir.netlist.WireVectorGroup
+import com.uabutler.netlistir.netlist.Module as NetlistModule
+import com.uabutler.verilogir.builder.creator.util.Identifier
 import com.uabutler.verilogir.module.ModuleIO
 import com.uabutler.verilogir.module.ModuleIODirection
 import com.uabutler.verilogir.util.DataType
 import com.uabutler.verilogir.module.Module as VerilogModule
-import com.uabutler.gaplir.Module as GAPLModule
 
 object VerilogBuilder {
     private fun moduleIOsFromInterfaceStructure(
-        name: String,
-        structure: InterfaceStructure,
+        structure: List<WireVectorGroup<*>>,
         direction: ModuleIODirection,
     ): List<ModuleIO> {
-        return VerilogInterface.fromGAPLInterfaceStructure(name = name, structure = structure).map {
-             ModuleIO(
-                 name = it.name,
-                 direction = direction,
-                 type = DataType.WIRE,
-                 startIndex = it.width - 1,
-                 endIndex = 0,
-            )
+        return structure.flatMap { group ->
+            group.wireVectors.map { wireVector ->
+                ModuleIO(
+                    name = Identifier.wire(wireVector),
+                    direction = direction,
+                    type = DataType.WIRE,
+                    startIndex = wireVector.wires.size - 1,
+                    endIndex = 0,
+                )
+            }
         }
     }
 
-    fun verilogModuleFromGAPLModule(gaplModule: GAPLModule): VerilogModule {
+    fun verilogModuleFromGAPLModule(netlistModule: NetlistModule): VerilogModule {
         return VerilogModule(
-            name = ModuleIdentifierGenerator.genIdentifierFromInvocation(gaplModule.moduleInvocation),
-            inputs = gaplModule.inputNodes.flatMap {
+            name = Identifier.module(netlistModule.invocation),
+            inputs = netlistModule.getInputNodes().flatMap {
                 moduleIOsFromInterfaceStructure(
-                    name = it.name,
-                    structure = it.interfaceStructure,
+                    structure = it.inputWireVectorGroups,
                     direction = ModuleIODirection.INPUT,
                 )
             },
-            outputs = gaplModule.outputNodes.flatMap {
+            outputs = netlistModule.getOutputNodes().flatMap {
                 moduleIOsFromInterfaceStructure(
-                    name = it.name,
-                    structure = it.interfaceStructure,
+                    structure = it.outputWireVectorGroups,
                     direction = ModuleIODirection.OUTPUT,
                 )
             },
-            statements =
-                StatementBuilder.verilogStatementsFromIONodes(gaplModule.inputNodes, gaplModule.outputNodes) +
-                        StatementBuilder.verilogStatementsFromGAPLNodes(gaplModule.bodyNodes + gaplModule.outputNodes),
+            statements = StatementBuilder.verilogStatementsFromNodes(netlistModule.getNodes())
         )
     }
 }
