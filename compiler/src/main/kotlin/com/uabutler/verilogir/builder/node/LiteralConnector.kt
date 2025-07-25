@@ -1,7 +1,5 @@
 package com.uabutler.verilogir.builder.node
 
-import com.uabutler.gaplir.builder.util.LiteralFunction
-import com.uabutler.gaplir.node.PredefinedFunctionInvocationNode
 import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Statement

@@ -1,6 +1,5 @@
 package com.uabutler.verilogir.builder.node
 
-import com.uabutler.gaplir.node.ModuleInvocationNode
 import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator.genIdentifierFromInvocation
 import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.module.statement.Invocation

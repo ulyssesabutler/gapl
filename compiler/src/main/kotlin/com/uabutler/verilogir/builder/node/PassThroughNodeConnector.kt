@@ -1,6 +1,5 @@
 package com.uabutler.verilogir.builder.node
 
-import com.uabutler.gaplir.node.PassThroughNode
 import com.uabutler.util.VerilogInterface
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Statement

@@ -1,13 +1,13 @@
 package com.uabutler.verilogir.builder.identifier
 
-import com.uabutler.gaplir.InterfaceStructure
-import com.uabutler.gaplir.RecordInterfaceStructure
-import com.uabutler.gaplir.VectorInterfaceStructure
-import com.uabutler.gaplir.WireInterfaceStructure
-import com.uabutler.gaplir.builder.util.FunctionInstantiationParameterValue
-import com.uabutler.gaplir.builder.util.IntegerParameterValue
-import com.uabutler.gaplir.builder.util.ParameterValue
-import com.uabutler.gaplir.util.ModuleInvocation
+import com.uabutler.netlistir.builder.util.FunctionInstantiationParameterValue
+import com.uabutler.netlistir.builder.util.IntegerParameterValue
+import com.uabutler.netlistir.builder.util.InterfaceStructure
+import com.uabutler.netlistir.builder.util.ParameterValue
+import com.uabutler.netlistir.builder.util.RecordInterfaceStructure
+import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
+import com.uabutler.netlistir.builder.util.WireInterfaceStructure
+import com.uabutler.netlistir.netlist.Module
 
 object ModuleIdentifierGenerator {
 
@@ -56,22 +56,14 @@ object ModuleIdentifierGenerator {
             is FunctionInstantiationParameterValue -> buildString {
                 append("f")
                 append("_")
-                append(
-                    genIdentifierFromInvocation(
-                        ModuleInvocation(
-                            gaplFunctionName = parameterValue.value.functionIdentifier,
-                            interfaces = parameterValue.value.genericInterfaceValues,
-                            parameters = parameterValue.value.genericParameterValues,
-                        )
-                    )
-                )
+                append(genIdentifierFromInvocation(parameterValue.value))
                 append("$")
             }
         }
 
     }
 
-    fun genIdentifierFromInvocation(invocation: ModuleInvocation): String {
+    fun genIdentifierFromInvocation(invocation: Module.Invocation): String {
         return buildString {
             append(invocation.gaplFunctionName)
             if (invocation.interfaces.isNotEmpty() || invocation.parameters.isNotEmpty()) {
