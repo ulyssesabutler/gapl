@@ -104,7 +104,6 @@ sealed class BinaryArithmeticFunction(
     result = wireVector(size),
 )
 
-
 data class BitwiseAndFunction(
     override val size: Int,
 ): BinaryArithmeticFunction(size)

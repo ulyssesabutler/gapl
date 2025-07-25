@@ -26,10 +26,10 @@ class ModuleBuilder(val program: ProgramNode) {
             .filter { it.genericInterfaces.isEmpty() && it.genericParameters.isEmpty() }
             .forEach {
                 moduleInstantiationTracker.visitModule(
-                    ModuleInstantiationTracker.ModuleInstantiationData(
-                        functionIdentifier = it.identifier.value,
-                        genericInterfaceValues = emptyList(),
-                        genericParameterValues = emptyList(),
+                    Module.Invocation(
+                        gaplFunctionName = it.identifier.value,
+                        interfaces = emptyList(),
+                        parameters = emptyList(),
                     )
                 )
             }
@@ -44,7 +44,7 @@ class ModuleBuilder(val program: ProgramNode) {
                 val module = buildModule(it)
 
                 moduleInstantiationTracker.addBuiltModule(
-                    instantiation = it.moduleInstantiationData,
+                    instantiation = it.moduleInvocation,
                     module = module
                 )
             }
@@ -58,11 +58,7 @@ class ModuleBuilder(val program: ProgramNode) {
     private fun buildModule(
         instantiation: ModuleInstantiationTracker.ModuleInstantiation,
     ) = Module(
-        invocation = Module.Invocation(
-            gaplFunctionName = instantiation.moduleInstantiationData.functionIdentifier,
-            interfaces = instantiation.moduleInstantiationData.genericInterfaceValues,
-            parameters = instantiation.moduleInstantiationData.genericParameterValues,
-        )
+        invocation = instantiation.moduleInvocation,
     ).also { module ->
         NodeBuilder(
             programContext = programContext,

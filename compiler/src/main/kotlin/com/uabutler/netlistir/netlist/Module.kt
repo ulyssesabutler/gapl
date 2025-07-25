@@ -9,6 +9,14 @@ class Module(
     val invocation: Invocation,
 ) {
 
+    /* This is a data class that stores all of the data needed to instantiate any module. That is, it contains enough
+     * information to find the definition (using the identifier), and it contains the values for each parameter.
+     *
+     * Each unique set of module instantiation data will correspond to one verilog module. That said, depending on how
+     * much resource sharing is possible, it might correspond to multiple verilog instantiations.
+     *
+     * We might need to modify this if we want to support something like function overloading in the future.
+     */
     data class Invocation(
         val gaplFunctionName: String,
         val interfaces: List<InterfaceStructure>,

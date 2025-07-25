@@ -49,15 +49,7 @@ object ModuleIdentifierGenerator {
             is FunctionInstantiationParameterValue -> buildString {
                 append("f")
                 append("_")
-                append(
-                    genIdentifierFromInvocation(
-                        Module.Invocation(
-                            gaplFunctionName = parameterValue.value.functionIdentifier,
-                            interfaces = parameterValue.value.genericInterfaceValues,
-                            parameters = parameterValue.value.genericParameterValues,
-                        )
-                    )
-                )
+                append(genIdentifierFromInvocation(parameterValue.value))
                 append("$")
             }
         }

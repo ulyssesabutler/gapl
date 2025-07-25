@@ -3,6 +3,7 @@ package com.uabutler.netlistir.builder.util
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.ProgramNode
 import com.uabutler.ast.node.interfaces.*
+import com.uabutler.netlistir.netlist.Module
 
 class ProgramContext(program: ProgramNode) {
 
@@ -103,26 +104,12 @@ class ProgramContext(program: ProgramNode) {
         }
     }
 
-    fun buildFlatInterfaceWithContext(
-        node: InterfaceExpressionNode,
-        interfaceValuesContext: Map<String, InterfaceStructure>,
-        parameterValuesContext: Map<String, ParameterValue<*>>,
-    ): List<FlatInterfaceWireVector> {
-        return InterfaceFlattener.fromGAPLInterfaceStructure(
-            buildInterfaceWithContext(
-                node = node,
-                interfaceValuesContext = interfaceValuesContext,
-                parameterValuesContext = parameterValuesContext,
-            )
-        )
-    }
-
-    fun buildModuleInstantiationDataWithContext(
+    fun buildModuleInvocationDataWithContext(
         node: InstantiationNode,
 
         interfaceValuesContext: Map<String, InterfaceStructure>,
         parameterValuesContext: Map<String, ParameterValue<*>>,
-    ): ModuleInstantiationTracker.ModuleInstantiationData {
+    ): Module.Invocation {
 
         // This supports positional arguments
         val interfaces = node.genericInterfaces.map {
@@ -143,10 +130,10 @@ class ProgramContext(program: ProgramNode) {
             )
         }
 
-        return ModuleInstantiationTracker.ModuleInstantiationData(
-            functionIdentifier = node.definitionIdentifier.value,
-            genericInterfaceValues = interfaces,
-            genericParameterValues = parameterValues,
+        return Module.Invocation(
+            gaplFunctionName = node.definitionIdentifier.value,
+            interfaces = interfaces,
+            parameters = parameterValues,
         )
     }
 }

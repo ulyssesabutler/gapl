@@ -1,9 +1,38 @@
 package com.uabutler.netlistir.netlist
 
+import com.uabutler.netlistir.builder.util.InterfaceFlattener
+import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.util.ObjectUtils
+import kotlin.compareTo
 
-sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val parentNode: Node) {
+sealed class WireVectorGroup<T : WireVector<*>>(
+    val identifier: String,
+    val parentNode: Node,
+    val gaplStructure: InterfaceStructure,
+) {
     abstract val wireVectors: List<T>
+
+    class Projection<T : WireVector<*>>(
+        val sourceGroup: WireVectorGroup<T>,
+        val projectionIdentifier: List<String>?,
+        val range: IntRange?,
+    ) {
+        val wireVectors: List<WireVector.Projection<*>> = projectionIdentifier?.let {
+            sourceGroup.wireVectors
+                .filter { wireVector ->
+                    wireVector.identifier.size >= projectionIdentifier.size &&
+                            wireVector.identifier.subList(0, projectionIdentifier.size) == projectionIdentifier
+                }
+                .map { wireVector ->
+                    @Suppress("UNCHECKED_CAST")
+                    (wireVector as WireVector<Wire>).projection(range)
+                }
+        } ?: sourceGroup.wireVectors.map { it.projection(range) }
+    }
+
+    fun projection(identifier: List<String>? = null, range: IntRange? = null): Projection<T> {
+        return Projection(this, identifier, range)
+    }
 
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
@@ -44,15 +73,30 @@ sealed class WireVectorGroup<T : WireVector<*>>(val identifier: String, val pare
 class InputWireVectorGroup(
     identifier: String,
     parentNode: Node,
-    wireVectorsBuilder: (InputWireVectorGroup) -> List<InputWireVector>
-) : WireVectorGroup<InputWireVector>(identifier, parentNode) {
-    override val wireVectors: List<InputWireVector> = wireVectorsBuilder(this)
+    structure: InterfaceStructure,
+) : WireVectorGroup<InputWireVector>(identifier, parentNode, structure) {
+
+    override val wireVectors: List<InputWireVector> = InterfaceFlattener.fromInterfaceStructure(structure).map {
+        InputWireVector(
+            identifier = it.identifier,
+            parentGroup = this,
+            size = it.width,
+        )
+    }
+
 }
 
 class OutputWireVectorGroup(
     identifier: String,
     parentNode: Node,
-    wireVectorsBuilder: (OutputWireVectorGroup) -> List<OutputWireVector>
-) : WireVectorGroup<OutputWireVector>(identifier, parentNode) {
-    override val wireVectors: List<OutputWireVector> = wireVectorsBuilder(this)
+    structure: InterfaceStructure,
+) : WireVectorGroup<OutputWireVector>(identifier, parentNode, structure) {
+
+    override val wireVectors = InterfaceFlattener.fromInterfaceStructure(structure).map {
+        OutputWireVector(
+            identifier = it.identifier,
+            parentGroup = this,
+            size = it.width,
+        )
+    }
 }

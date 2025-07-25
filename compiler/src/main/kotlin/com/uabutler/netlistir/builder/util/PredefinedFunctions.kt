@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder.util
 
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.util.InterfaceType
 
 sealed class PredefinedFunction(
@@ -10,18 +11,18 @@ sealed class PredefinedFunction(
         fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
         fun wire() = WireInterfaceStructure
 
-        fun searchPredefinedFunctions(instantiationData: ModuleInstantiationTracker.ModuleInstantiationData): PredefinedFunction? {
-            val size = instantiationData.genericParameterValues.firstOrNull()?.let {
+        fun searchPredefinedFunctions(invocation: Module.Invocation): PredefinedFunction? {
+            val size = invocation.parameters.firstOrNull()?.let {
                 if (it is IntegerParameterValue) it.value else null
             }
 
-            val value = instantiationData.genericParameterValues.getOrNull(1)?.let {
+            val value = invocation.parameters.getOrNull(1)?.let {
                 if (it is IntegerParameterValue) it.value else null
             }
 
-            val interfaceStructure = instantiationData.genericInterfaceValues.firstOrNull()
+            val interfaceStructure = invocation.interfaces.firstOrNull()
 
-            return when (instantiationData.functionIdentifier) {
+            return when (invocation.gaplFunctionName) {
                 "less_than_equals" -> LessThanEqualsFunction(size!!)
                 "greater_than_equals" -> GreaterThanEqualsFunction(size!!)
                 "equals" -> EqualsFunction(size!!)

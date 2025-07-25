@@ -4,6 +4,7 @@ import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
 import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
+import com.uabutler.netlistir.netlist.Module
 
 
 sealed interface ParameterValue<T> {
@@ -30,7 +31,7 @@ sealed interface ParameterValue<T> {
 
                 is FunctionInstantiationGenericParameterValueNode -> {
                     FunctionInstantiationParameterValue(
-                        programContext.buildModuleInstantiationDataWithContext(
+                        programContext.buildModuleInvocationDataWithContext(
                             node = node.instantiation,
                             interfaceValuesContext = interfaceValuesContext,
                             parameterValuesContext = parameterValuesContext,
@@ -51,5 +52,5 @@ data class IntegerParameterValue(
 ): ParameterValue<Int>
 
 data class FunctionInstantiationParameterValue(
-    override val value: ModuleInstantiationTracker.ModuleInstantiationData
-): ParameterValue<ModuleInstantiationTracker.ModuleInstantiationData>
+    override val value: Module.Invocation
+): ParameterValue<Module.Invocation>

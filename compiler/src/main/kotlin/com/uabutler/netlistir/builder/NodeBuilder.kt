@@ -5,6 +5,7 @@ import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.netlistir.util.PredefinedFunction
+import com.uabutler.util.AnonymousIdentifierGenerator
 
 class NodeBuilder(
     val programContext: ProgramContext,
@@ -27,7 +28,7 @@ class NodeBuilder(
         identifier = identifier,
         parentModule = module,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }
+    ).also { netlistNodes[it.identifier] = it }.also { module.addInputNode(it) }
 
     private fun createOutputNode(
         identifier: String,
@@ -36,7 +37,7 @@ class NodeBuilder(
         identifier = identifier,
         parentModule = module,
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }
+    ).also { netlistNodes[it.identifier] = it }.also { module.addOutputNode(it) }
 
     private fun createModuleInvocationNode(
         identifier: String,
@@ -49,7 +50,7 @@ class NodeBuilder(
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
         invocation = invocation,
-    ).also { netlistNodes[it.identifier] = it }
+    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
 
     private fun createPredefinedFunctionNode(
         identifier: String,
@@ -62,7 +63,7 @@ class NodeBuilder(
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
         predefinedFunction = predefinedFunction,
-    ).also { netlistNodes[it.identifier] = it }
+    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
 
     private fun createPassThroughNode(
         identifier: String,
@@ -75,36 +76,24 @@ class NodeBuilder(
         parentModule = module,
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }
+    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
 
     private fun buildInputWireVectorGroups(
-        structure: List<FlatInterfaceWireVector>,
+        structure: InterfaceStructure,
         parent: Node,
     ) = InputWireVectorGroup(
         identifier = "only",
         parentNode = parent,
-        wireVectorsBuilder = { wireVectorGroup -> structure.map { buildInputWireVectors(it, wireVectorGroup) } },
+        structure = structure,
     )
 
     private fun buildOutputWireVectorGroups(
-        structure: List<FlatInterfaceWireVector>,
+        structure: InterfaceStructure,
         parent: Node,
     ) = OutputWireVectorGroup(
         identifier = "only",
         parentNode = parent,
-        wireVectorsBuilder = { wireVectorGroup -> structure.map { buildOutputWireVectors(it, wireVectorGroup) } },
-    )
-
-    private fun buildInputWireVectors(verilogWire: FlatInterfaceWireVector, parent: InputWireVectorGroup) = InputWireVector(
-        identifier = verilogWire.name,
-        parentGroup = parent,
-        size = verilogWire.width,
-    )
-
-    private fun buildOutputWireVectors(verilogWire: FlatInterfaceWireVector, parent: OutputWireVectorGroup) = OutputWireVector(
-        identifier = verilogWire.name,
-        parentGroup = parent,
-        size = verilogWire.width,
+        structure = structure,
     )
 
     fun buildNodesIntoModule() {
@@ -115,7 +104,7 @@ class NodeBuilder(
 
     private fun buildInputNodes() {
         inputAstNodes.map { astNode ->
-            val interfaceStructure = programContext.buildFlatInterfaceWithContext(
+            val interfaceStructure = programContext.buildInterfaceWithContext(
                 node = astNode.interfaceExpression,
                 interfaceValuesContext = interfaceValuesContext,
                 parameterValuesContext = parameterValuesContext,
@@ -126,8 +115,8 @@ class NodeBuilder(
                 outputWireVectorGroupsBuilder = { node ->
                     listOf(
                         buildOutputWireVectorGroups(
-                            structure = interfaceStructure,
                             parent = node,
+                            structure = interfaceStructure,
                         )
                     )
                 }
@@ -137,7 +126,7 @@ class NodeBuilder(
 
     private fun buildOutputNodes() {
         outputAstNodes.map { astNode ->
-            val interfaceStructure = programContext.buildFlatInterfaceWithContext(
+            val interfaceStructure = programContext.buildInterfaceWithContext(
                 node = astNode.interfaceExpression,
                 interfaceValuesContext = interfaceValuesContext,
                 parameterValuesContext = parameterValuesContext,
@@ -148,8 +137,8 @@ class NodeBuilder(
                 inputWireVectorGroupsBuilder = { node ->
                     listOf(
                         buildInputWireVectorGroups(
-                            structure = interfaceStructure,
                             parent = node,
+                            structure = interfaceStructure,
                         )
                     )
                 }
@@ -188,9 +177,14 @@ class NodeBuilder(
     }
 
     data class IOGroups(
-        val inputs: List<InputWireVectorGroup>,
-        val outputs: List<OutputWireVectorGroup>,
-    )
+        val inputs: List<WireVectorGroup.Projection<InputWireVector>>,
+        val outputs: List<WireVectorGroup.Projection<OutputWireVector>>,
+    ) {
+        constructor(
+            inputs: List<InputWireVectorGroup>,
+            outputs: List<OutputWireVectorGroup>,
+        ): this(inputs.map { it.projection() }, outputs.map { it.projection() })
+    }
 
     /* Each circuit connection expression will be a list of circuit groups separated by the connection operator.
      * For example, we might have groups "a,b,c", "d,e", and "f". Then, a connection expression "a,b,c => d,e => f"
@@ -225,8 +219,8 @@ class NodeBuilder(
     }
 
     private fun createOutputWireVectorGroupConnections(
-        previousOutputs: List<OutputWireVectorGroup>,
-        currentInputs: List<InputWireVectorGroup>,
+        previousOutputs: List<WireVectorGroup.Projection<OutputWireVector>>,
+        currentInputs: List<WireVectorGroup.Projection<InputWireVector>>,
     ) {
         // TODO: This is a very lazy, overly simplistic validation.
         //   There are definition interface structures that will match here that shouldn't actually match.
@@ -243,7 +237,7 @@ class NodeBuilder(
         }
 
         wirePairs.forEach { (previousOutput, currentInput) ->
-            module.connect(currentInput, previousOutput)
+            module.connect(currentInput as InputWire, previousOutput as OutputWire)
         }
     }
 
@@ -251,8 +245,9 @@ class NodeBuilder(
         nodeExpression: CircuitNodeExpressionNode,
     ): IOGroups {
         return when (nodeExpression) {
+
             is DeclaredInterfaceCircuitExpressionNode -> {
-                val structure = programContext.buildFlatInterfaceWithContext(
+                val structure = programContext.buildInterfaceWithContext(
                     node = nodeExpression.type,
                     interfaceValuesContext = interfaceValuesContext,
                     parameterValuesContext = parameterValuesContext,
@@ -284,12 +279,90 @@ class NodeBuilder(
                 )
             }
 
-            is DeclaredFunctionCircuitExpressionNode -> TODO()
-            is DeclaredGenericFunctionCircuitExpressionNode -> TODO()
-            is AnonymousFunctionCircuitExpressionNode -> TODO()
-            is AnonymousGenericFunctionCircuitExpressionNode -> TODO()
-            is ReferenceCircuitExpressionNode -> TODO()
+            is DeclaredFunctionCircuitExpressionNode -> {
+                val instantiationData = programContext.buildModuleInvocationDataWithContext(
+                    node = nodeExpression.instantiation,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
 
+                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
+
+                IOGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+
+            is DeclaredGenericFunctionCircuitExpressionNode -> {
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
+
+                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
+
+                IOGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+
+            is AnonymousFunctionCircuitExpressionNode -> {
+                val instantiationData = programContext.buildModuleInvocationDataWithContext(
+                    node = nodeExpression.instantiation,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
+
+                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
+
+                IOGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+
+            is AnonymousGenericFunctionCircuitExpressionNode -> {
+                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
+
+                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
+
+                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
+
+                IOGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+
+            is ReferenceCircuitExpressionNode -> {
+                val referencedNode = try {
+                    netlistNodes[nodeExpression.identifier.value]!!
+                } catch (_: NullPointerException) {
+                    throw Exception("Unable to find node with identifier ${nodeExpression.identifier.value}")
+                }
+
+                val inputWireVectorGroup = referencedNode.inputWireVectorGroups.firstOrNull()
+                val inputProjectionInformation = getProjectionValues(nodeExpression.singleAccesses)
+
+                val outputWireVectorGroup = referencedNode.outputWireVectorGroups.firstOrNull()
+                val outputProjection = getProjectionValues(nodeExpression.singleAccesses)
+
+                IOGroups(
+                    inputs = inputWireVectorGroup?.let { listOf(getInputWireVectorGroupProjection(it, inputProjectionInformation)) } ?: emptyList(),
+                    outputs = outputWireVectorGroup?.let { listOf(getOutputWireVectorGroupProjection(it, outputProjection)) } ?: emptyList(),
+                )
+            }
+
+            // TODO
             is ProtocolAccessorCircuitExpressionNode -> TODO()
 
             is RecordInterfaceConstructorExpressionNode -> TODO()
@@ -298,5 +371,146 @@ class NodeBuilder(
         }
     }
 
+    data class CurrentProjection(
+        val identifier: List<String> = emptyList(),
+        val indices: List<Int> = emptyList(),
+        val range: IntRange? = null,
+    )
+
+    private fun getProjectionValues(
+        accessNode: List<SingleAccessOperationNode>
+    ) = accessNode.fold(CurrentProjection()) { current, accessNode ->
+        // TODO: Validation
+        when (accessNode) {
+            is MemberAccessOperationNode -> {
+                CurrentProjection(
+                    identifier = current.identifier + accessNode.memberIdentifier.value,
+                    indices = current.indices,
+                )
+            }
+            is SingleArrayAccessOperationNode -> {
+                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                    staticExpression = accessNode.index,
+                    context = parameterValuesContext,
+                )
+
+                CurrentProjection(
+                    identifier = current.identifier,
+                    indices = current.indices + index,
+                )
+            }
+        }
+    }
+
+    private fun getInputWireVectorGroupProjection(
+        wireVectorGroup: InputWireVectorGroup,
+        projection: CurrentProjection,
+    ): WireVectorGroup.Projection<InputWireVector> {
+        val dimensions = InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure).first().dimensions
+        val indices = projection.indices
+
+        return wireVectorGroup.projection(
+            identifier = projection.identifier,
+            range = getRange(dimensions, indices, projection.range)
+        )
+    }
+
+    private fun getOutputWireVectorGroupProjection(
+        wireVectorGroup: OutputWireVectorGroup,
+        projection: CurrentProjection,
+    ): WireVectorGroup.Projection<OutputWireVector> {
+        val dimensions = InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure).first().dimensions
+        val indices = projection.indices
+
+        return wireVectorGroup.projection(
+            identifier = projection.identifier,
+            range = getRange(dimensions, indices, projection.range)
+        )
+    }
+
+    private fun getRange(
+        dimensions: List<Int>,
+        indices: List<Int>,
+        finalRange: IntRange?,
+    ): IntRange {
+        val dimCount = dimensions.size
+        val indexCount = indices.size
+
+        require(indexCount < dimCount) { "Indices must specify fewer dimensions than the total." }
+
+        // Compute stride for each dimension
+        val strides = IntArray(dimCount) { 1 }
+        for (i in dimCount - 2 downTo 0) {
+            strides[i] = strides[i + 1] * dimensions[i + 1]
+        }
+
+        // Compute base offset from provided indices
+        var offset = 0
+        for (i in indices.indices) {
+            offset += indices[i] * strides[i]
+        }
+
+        // Handle remaining dimensions
+        return if (finalRange != null) {
+            // We only slice into the next dimension after indices
+            val nextDim = indexCount
+            val elementSize = strides.getOrElse(nextDim + 1) { 1 }
+            val start = offset + finalRange.first * strides[nextDim]
+            val endInclusive = offset + finalRange.last * strides[nextDim] + elementSize - 1
+            start..endInclusive
+        } else {
+            // We want the whole block starting at offset
+            val totalSize = dimensions.drop(indexCount).reduce(Int::times)
+            offset until offset + totalSize
+        }
+    }
+
+    private fun createNodeFromFunctionInvocation(
+        invocationName: String,
+        invocation: Module.Invocation,
+    ): BodyNode {
+        // Step 1: Search predefined functions. If there is no predefined function with this name, search defined functions
+        val matchingPredefinedFunction = PredefinedFunction.search(invocation)
+
+        // Step 2: Create the node
+        return if (matchingPredefinedFunction != null) {
+            createPredefinedFunctionNode(
+                identifier = invocationName,
+                inputWireVectorGroupsBuilder = { node ->
+                    matchingPredefinedFunction.inputs.map { it.toInputWireVectorGroup(node) }
+                },
+                outputWireVectorGroupsBuilder = { node ->
+                    matchingPredefinedFunction.outputs.map { it.toOutputWireVectorGroup(node) }
+                },
+                predefinedFunction = matchingPredefinedFunction,
+            )
+        } else {
+            // Find the matching defined function. This will also add it to the queue of modules to be built, if it hasn't been built yet.
+            val instantiation = moduleInstantiationTracker.visitModule(invocation)
+
+            createModuleInvocationNode(
+                identifier = invocationName,
+                inputWireVectorGroupsBuilder = { node ->
+                    instantiation.input.map { input ->
+                        InputWireVectorGroup(
+                            identifier = input.name,
+                            parentNode = node,
+                            structure = input.interfaceStructure,
+                        )
+                    }
+                },
+                outputWireVectorGroupsBuilder = { node ->
+                    instantiation.output.map { output ->
+                        OutputWireVectorGroup(
+                            identifier = output.name,
+                            parentNode = node,
+                            structure = output.interfaceStructure,
+                        )
+                    }
+                },
+                invocation = invocation,
+            )
+        }
+    }
 
 }

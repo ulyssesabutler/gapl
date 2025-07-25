@@ -2,40 +2,31 @@ package com.uabutler.netlistir.builder.util
 
 
 data class FlatInterfaceWireVector(
-    val name: String,
-    val width: Int,
-)
-
-class InterfaceFlattener(
-    val name: String,
-    val gaplInterfaceStructure: InterfaceStructure,
+    val identifier: List<String>,
+    val dimensions: List<Int>,
 ) {
+    val width: Int = dimensions.reduce { acc, i -> acc * i }
+}
 
-    companion object {
-        fun fromGAPLInterfaceStructure(
-            structure: InterfaceStructure,
-            name: String? = null,
-        ): List<FlatInterfaceWireVector> {
-            return when (structure) {
-                is WireInterfaceStructure -> {
-                    listOf(FlatInterfaceWireVector(name ?: "", 1))
+ object InterfaceFlattener {
+    fun fromInterfaceStructure(
+        structure: InterfaceStructure,
+        identifier: List<String> = emptyList(),
+    ): List<FlatInterfaceWireVector> {
+        return when (structure) {
+            is WireInterfaceStructure -> {
+                listOf(FlatInterfaceWireVector(identifier, listOf(1)))
+            }
+            is RecordInterfaceStructure -> {
+                structure.ports.flatMap {
+                    fromInterfaceStructure(identifier = identifier + it.key, structure = it.value)
                 }
-                is RecordInterfaceStructure -> {
-                    structure.ports.flatMap {
-                        if (name == null) {
-                            fromGAPLInterfaceStructure(name = it.key, structure = it.value)
-                        } else {
-                            fromGAPLInterfaceStructure(name = "${name}_${it.key}", structure = it.value)
-                        }
-                    }
-                }
-                is VectorInterfaceStructure -> {
-                    fromGAPLInterfaceStructure(name = name, structure = structure.vectoredInterface).map {
-                       FlatInterfaceWireVector(it.name, it.width * structure.size)
-                    }
+            }
+            is VectorInterfaceStructure -> {
+                fromInterfaceStructure(identifier = identifier, structure = structure.vectoredInterface).map {
+                   FlatInterfaceWireVector(it.identifier, listOf(structure.size) + it.dimensions)
                 }
             }
         }
     }
-
 }

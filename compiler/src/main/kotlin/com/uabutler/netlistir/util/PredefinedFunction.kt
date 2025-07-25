@@ -1,68 +1,174 @@
 package com.uabutler.netlistir.util
 
-import com.uabutler.gaplir.builder.util.AdditionFunction
-import com.uabutler.gaplir.builder.util.AndFunction
-import com.uabutler.gaplir.builder.util.BitwiseAndFunction
-import com.uabutler.gaplir.builder.util.BitwiseOrFunction
-import com.uabutler.gaplir.builder.util.BitwiseXorFunction
-import com.uabutler.gaplir.builder.util.EqualsFunction
-import com.uabutler.gaplir.builder.util.GreaterThanEqualsFunction
-import com.uabutler.gaplir.builder.util.LeftShiftFunction
-import com.uabutler.gaplir.builder.util.LessThanEqualsFunction
-import com.uabutler.gaplir.builder.util.LiteralFunction
-import com.uabutler.gaplir.builder.util.MultiplicationFunction
-import com.uabutler.gaplir.builder.util.NotEqualsFunction
-import com.uabutler.gaplir.builder.util.OrFunction
-import com.uabutler.gaplir.builder.util.RegisterFunction
-import com.uabutler.gaplir.builder.util.RightShiftFunction
-import com.uabutler.gaplir.builder.util.SubtractionFunction
-import com.uabutler.gaplir.builder.util.PredefinedFunction as NetlistPredefinedFunction
+import com.uabutler.netlistir.builder.util.IntegerParameterValue
+import com.uabutler.netlistir.builder.util.InterfaceStructure
+import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
+import com.uabutler.netlistir.builder.util.WireInterfaceStructure
+import com.uabutler.netlistir.netlist.*
 
-sealed class PredefinedFunction {
+sealed class PredefinedFunction(
+    val inputs: List<IO>,
+    val outputs: List<IO>,
+) {
+
+    data class IO(
+        val name: String,
+        val structure: InterfaceStructure,
+    ) {
+        fun toWireVectorGroup(
+            parent: Node,
+            wireType: WireType,
+        ) = when (wireType) {
+            WireType.INPUT -> toInputWireVectorGroup(parent)
+            WireType.OUTPUT -> toOutputWireVectorGroup(parent)
+        }
+
+        fun toInputWireVectorGroup(parent: Node) = InputWireVectorGroup(
+            identifier = name,
+            parentNode = parent,
+            structure = structure,
+        )
+
+        fun toOutputWireVectorGroup(parent: Node) = OutputWireVectorGroup(
+            identifier = name,
+            parentNode = parent,
+            structure = structure,
+        )
+    }
+
     companion object {
-        fun fromGapl(gaplPredefinedFunction: NetlistPredefinedFunction): PredefinedFunction {
-            return when (gaplPredefinedFunction) {
-                is AdditionFunction -> AdditionFunction
-                is BitwiseAndFunction -> BitwiseAndFunction
-                is BitwiseOrFunction -> BitwiseOrFunction
-                is BitwiseXorFunction -> BitwiseXorFunction
-                is LeftShiftFunction -> LeftShiftFunction
-                is MultiplicationFunction -> MultiplicationFunction
-                is RightShiftFunction -> RightShiftFunction
-                is SubtractionFunction -> SubtractionFunction
-                is GreaterThanEqualsFunction -> GreaterThanEqualsFunction
-                is LessThanEqualsFunction -> LessThanEqualsFunction
-                is EqualsFunction -> EqualsFunction
-                is NotEqualsFunction -> NotEqualsFunction
-                is AndFunction -> LogicalAndFunction
-                is OrFunction -> LogicalOrFunction
-                is LiteralFunction -> LiteralFunction(gaplPredefinedFunction.value)
-                is RegisterFunction -> RegisterFunction
+        fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
+        fun wire() = WireInterfaceStructure
+
+        fun search(invocation: Module.Invocation): PredefinedFunction? {
+            val size = invocation.parameters.firstOrNull()?.let {
+                if (it is IntegerParameterValue) it.value else null
+            }
+
+            val value = invocation.parameters.getOrNull(1)?.let {
+                if (it is IntegerParameterValue) it.value else null
+            }
+
+            val interfaceStructure = invocation.interfaces.firstOrNull()
+
+            return when (invocation.gaplFunctionName) {
+                "less_than_equals" -> LessThanEqualsFunction(size!!)
+                "greater_than_equals" -> GreaterThanEqualsFunction(size!!)
+                "equals" -> EqualsFunction(size!!)
+                "not_equals" -> NotEqualsFunction(size!!)
+                "and" -> LogicalAndFunction
+                "or" -> LogicalOrFunction
+                "bitwise_and" -> BitwiseAndFunction(size!!)
+                "bitwise_or" -> BitwiseOrFunction(size!!)
+                "bitwise_xor" -> BitwiseXorFunction(size!!)
+                "add" -> AdditionFunction(size!!)
+                "subtract" -> SubtractionFunction(size!!)
+                "multiply" -> MultiplicationFunction(size!!)
+                "left_shift" -> LeftShiftFunction(size!!)
+                "right_shift" -> RightShiftFunction(size!!)
+                "register" -> RegisterFunction(interfaceStructure!!)
+                "literal" -> LiteralFunction(size!!, value!!)
+                else -> null
             }
         }
     }
+
 }
 
-data object EqualsFunction: PredefinedFunction()
-data object NotEqualsFunction: PredefinedFunction()
+sealed class BinaryFunction(
+    val lhs: InterfaceStructure,
+    val rhs: InterfaceStructure,
+    val result: InterfaceStructure,
+): PredefinedFunction(
+    inputs = listOf(IO("lhs", lhs), IO("rhs", rhs)),
+    outputs = listOf(IO("result", result)),
+)
 
-data object LessThanEqualsFunction: PredefinedFunction()
-data object GreaterThanEqualsFunction: PredefinedFunction()
+sealed class BooleanComparison(
+    open val size: Int,
+): BinaryFunction(
+    lhs = wireVector(size),
+    rhs = wireVector(size),
+    result = wire(),
+)
 
-data object LogicalAndFunction: PredefinedFunction()
-data object LogicalOrFunction: PredefinedFunction()
+data class EqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
 
-data object BitwiseAndFunction: PredefinedFunction()
-data object BitwiseOrFunction: PredefinedFunction()
-data object BitwiseXorFunction: PredefinedFunction()
+data class NotEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
 
-data object AdditionFunction: PredefinedFunction()
-data object SubtractionFunction: PredefinedFunction()
-data object MultiplicationFunction: PredefinedFunction()
+data class LessThanEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
 
-data object RightShiftFunction: PredefinedFunction()
-data object LeftShiftFunction: PredefinedFunction()
+data class GreaterThanEqualsFunction(
+    override val size: Int,
+): BooleanComparison(size)
 
-data object RegisterFunction: PredefinedFunction()
+sealed class BooleanFunction: BinaryFunction(
+    lhs = wire(),
+    rhs = wire(),
+    result = wire(),
+)
 
-data class LiteralFunction(val value: Int): PredefinedFunction()
+data object LogicalAndFunction: BooleanFunction()
+
+data object LogicalOrFunction: BooleanFunction()
+
+sealed class BinaryArithmeticFunction(
+    open val size: Int,
+): BinaryFunction(
+    lhs = wireVector(size),
+    rhs = wireVector(size),
+    result = wireVector(size),
+)
+
+data class BitwiseAndFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class BitwiseOrFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class BitwiseXorFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class AdditionFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class SubtractionFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class MultiplicationFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class RightShiftFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class LeftShiftFunction(
+    override val size: Int,
+): BinaryArithmeticFunction(size)
+
+data class RegisterFunction(
+    val storageStructure: InterfaceStructure
+): PredefinedFunction(
+    inputs = listOf(IO("next", storageStructure)),
+    outputs = listOf(IO("current", storageStructure)),
+)
+
+data class LiteralFunction(
+    val size: Int,
+    val value: Int,
+): PredefinedFunction(
+    inputs = listOf(),
+    outputs = listOf(IO("value", wireVector(size))),
+)
