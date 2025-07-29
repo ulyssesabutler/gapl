@@ -12,8 +12,8 @@ sealed class Node(
     val inputWireVectorGroups: List<InputWireVectorGroup> = inputWireVectorGroupsBuilder(this)
     val outputWireVectorGroups: List<OutputWireVectorGroup> = outputWireVectorGroupsBuilder(this)
 
-    fun inputWires() = inputWireVectorGroups.flatMap { it.wires() }
-    fun outputWires() = outputWireVectorGroups.flatMap { it.wires() }
+    fun inputWires(): List<InputWire> = inputWireVectorGroups.flatMap { it.wires() }
+    fun outputWires(): List<OutputWire> = outputWireVectorGroups.flatMap { it.wires() }
 
     fun inputWireVectors() = inputWireVectorGroups.flatMap { it.wireVectors }
     fun outputWireVectors() = outputWireVectorGroups.flatMap { it.wireVectors }

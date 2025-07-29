@@ -47,6 +47,7 @@ class Module(
     fun getInputNodes() = inputNodes.toList()
     fun getOutputNodes() = outputNodes.toList()
     fun getBodyNodes() = bodyNodes.toList()
+    fun getNodes() = getInputNodes() + getOutputNodes() + getBodyNodes()
 
     fun getConnections() = connections.toSet()
     fun getConnectionsForOutputWire(outputWire: OutputWire) = connections.filter { it.outputWire == outputWire }.toSet()

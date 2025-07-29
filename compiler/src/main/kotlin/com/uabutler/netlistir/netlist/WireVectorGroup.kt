@@ -34,7 +34,7 @@ sealed class WireVectorGroup<T : WireVector<*>>(
         return Projection(this, identifier, range)
     }
 
-    fun wires() = wireVectors.flatMap { it.wires }
+    open fun wires(): List<Wire> = wireVectors.flatMap { it.wires }
 
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
@@ -86,6 +86,8 @@ class InputWireVectorGroup(
         )
     }
 
+    override fun wires(): List<InputWire> = wireVectors.flatMap { it.wires }
+
 }
 
 class OutputWireVectorGroup(
@@ -101,4 +103,6 @@ class OutputWireVectorGroup(
             size = it.width,
         )
     }
+
+    override fun wires(): List<OutputWire> = wireVectors.flatMap { it.wires }
 }

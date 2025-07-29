@@ -180,10 +180,17 @@ class NodeBuilder(
         val inputs: List<WireVectorGroup.Projection<InputWireVector>>,
         val outputs: List<WireVectorGroup.Projection<OutputWireVector>>,
     ) {
-        constructor(
-            inputs: List<InputWireVectorGroup>,
-            outputs: List<OutputWireVectorGroup>,
-        ): this(inputs.map { it.projection() }, outputs.map { it.projection() })
+
+        companion object {
+            fun fromWireVectorGroups(
+                inputs: List<InputWireVectorGroup>,
+                outputs: List<OutputWireVectorGroup>,
+            ) = IOGroups(
+                inputs = inputs.map { it.projection() },
+                outputs = outputs.map { it.projection() }
+            )
+        }
+
     }
 
     /* Each circuit connection expression will be a list of circuit groups separated by the connection operator.
@@ -273,7 +280,7 @@ class NodeBuilder(
                     },
                 )
 
-                IOGroups(
+                IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
                 )
@@ -288,7 +295,7 @@ class NodeBuilder(
 
                 val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
 
-                IOGroups(
+                IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
                 )
@@ -305,7 +312,7 @@ class NodeBuilder(
 
                 val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
 
-                IOGroups(
+                IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
                 )
@@ -320,7 +327,7 @@ class NodeBuilder(
 
                 val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
 
-                IOGroups(
+                IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
                 )
@@ -337,28 +344,27 @@ class NodeBuilder(
 
                 val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
 
-                IOGroups(
+                IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
                 )
             }
 
             is ReferenceCircuitExpressionNode -> {
+                println("NODE: ${nodeExpression.identifier.value}")
                 val referencedNode = try {
                     netlistNodes[nodeExpression.identifier.value]!!
                 } catch (_: NullPointerException) {
                     throw Exception("Unable to find node with identifier ${nodeExpression.identifier.value}")
                 }
 
+                val projectionInformation = getProjectionValues(nodeExpression.singleAccesses)
                 val inputWireVectorGroup = referencedNode.inputWireVectorGroups.firstOrNull()
-                val inputProjectionInformation = getProjectionValues(nodeExpression.singleAccesses)
-
                 val outputWireVectorGroup = referencedNode.outputWireVectorGroups.firstOrNull()
-                val outputProjection = getProjectionValues(nodeExpression.singleAccesses)
 
                 IOGroups(
-                    inputs = inputWireVectorGroup?.let { listOf(getInputWireVectorGroupProjection(it, inputProjectionInformation)) } ?: emptyList(),
-                    outputs = outputWireVectorGroup?.let { listOf(getOutputWireVectorGroupProjection(it, outputProjection)) } ?: emptyList(),
+                    inputs = inputWireVectorGroup?.let { listOf(getInputWireVectorGroupProjection(it, projectionInformation)) } ?: emptyList(),
+                    outputs = outputWireVectorGroup?.let { listOf(getOutputWireVectorGroupProjection(it, projectionInformation)) } ?: emptyList(),
                 )
             }
 
@@ -419,6 +425,10 @@ class NodeBuilder(
         wireVectorGroup: OutputWireVectorGroup,
         projection: CurrentProjection,
     ): WireVectorGroup.Projection<OutputWireVector> {
+        println("Projection: $projection")
+        println("Wire Vector Group: $wireVectorGroup")
+        println("Flattened Interface: ${InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure)}")
+
         val dimensions = InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure).first().dimensions
         val indices = projection.indices
 
@@ -436,7 +446,7 @@ class NodeBuilder(
         val dimCount = dimensions.size
         val indexCount = indices.size
 
-        require(indexCount < dimCount) { "Indices must specify fewer dimensions than the total." }
+        require(indexCount + (if (finalRange != null) 1 else 0) <= dimCount) { "Too many indices" }
 
         // Compute stride for each dimension
         val strides = IntArray(dimCount) { 1 }
