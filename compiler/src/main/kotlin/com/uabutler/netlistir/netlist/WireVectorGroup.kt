@@ -34,6 +34,8 @@ sealed class WireVectorGroup<T : WireVector<*>>(
         return Projection(this, identifier, range)
     }
 
+    fun wires() = wireVectors.flatMap { it.wires }
+
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,

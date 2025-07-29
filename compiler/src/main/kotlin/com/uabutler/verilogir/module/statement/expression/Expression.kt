@@ -9,8 +9,8 @@ sealed class Expression: VerilogSerialize
 
 data class Reference(
     val variableName: String,
-    val startIndex: Int?,
-    val endIndex: Int?,
+    val startIndex: Int? = null,
+    val endIndex: Int? = null,
 ): Expression() {
     init {
         if (startIndex != null && endIndex != null && startIndex < endIndex) {

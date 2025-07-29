@@ -3,7 +3,7 @@ package com.uabutler.verilogir.builder
 import com.uabutler.netlistir.netlist.WireVectorGroup
 import com.uabutler.netlistir.netlist.Module as NetlistModule
 import com.uabutler.util.VerilogInterface
-import com.uabutler.verilogir.builder.identifier.ModuleIdentifierGenerator
+import com.uabutler.verilogir.builder.creator.util.Identifier
 import com.uabutler.verilogir.module.ModuleIO
 import com.uabutler.verilogir.module.ModuleIODirection
 import com.uabutler.verilogir.util.DataType
@@ -40,7 +40,7 @@ object VerilogBuilder {
 
     fun verilogModuleFromGAPLModule(netlistModule: NetlistModule): VerilogModule {
         return VerilogModule(
-            name = ModuleIdentifierGenerator.genIdentifierFromInvocation(netlistModule.invocation),
+            name = Identifier.module(netlistModule.invocation),
             inputs = netlistModule.getInputNodes().flatMap {
                 moduleIOsFromInterfaceStructure(
                     name = it.identifier,

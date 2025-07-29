@@ -16,7 +16,6 @@ sealed class WireVector<T : Wire>(val identifier: List<String>, val parentGroup:
         return Projection(this, range)
     }
 
-
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,
