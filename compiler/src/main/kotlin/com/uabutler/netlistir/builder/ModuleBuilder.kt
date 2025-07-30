@@ -60,6 +60,9 @@ class ModuleBuilder(val program: ProgramNode) {
     ) = Module(
         invocation = instantiation.moduleInvocation,
     ).also { module ->
+        println("BUILDING MODULE: ${module.invocation.gaplFunctionName}")
+        println("  Using parameter values: ${instantiation.genericParameterValues}")
+
         NodeBuilder(
             programContext = programContext,
             moduleInstantiationTracker = moduleInstantiationTracker,

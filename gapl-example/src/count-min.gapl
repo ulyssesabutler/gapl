@@ -1,5 +1,4 @@
-/* INTERFACES */
-
+/*
 interface pair<T, U>() {
     first: T;
     second: U;
@@ -36,8 +35,6 @@ interface sketch(
 
 interface sketch3(parameter hash_function_depth: integer) sketch(3, hash_function_depth)
 interface sketch6(parameter hash_function_depth: integer) sketch(6, hash_function_depth)
-
-/* LIBRARY FUNCTIONS */
 
 function count_min_vector_zip<I, J>(
     parameter vector_size: integer,
@@ -76,14 +73,21 @@ function count_min_vector_map<I, O>(
         }
     }
 }
+*/
 
-function count_min_generate_index_list(parameter size: integer) null => out: sketch_column_index()[size] {
-    function literal(4, size - 1) => out[size - 1];
+function count_min_generate_index_list(parameter size: integer) null => out: wire[8][size] {
+    function literal(8, size - 1) => out[size - 1];
+
     if (size > 1) {
-        function count_min_generate_index_list(size - 1) => out[0:size - 2];
+        declare recursivefun: function count_min_generate_index_list(size - 1) => out[0:size - 2];
     }
 }
 
+function main() null => out: wire[8][10] {
+    function count_min_generate_index_list(10) => out;
+}
+
+/*
 function count_min_replicate<I>(parameter factor: integer) i: I => o: I[factor] {
     i => o[0];
     if (factor > 1) {
@@ -126,8 +130,6 @@ function count_min_fold<T, U>(
     in.last => function register<boolean()>() => out.valid;
 }
 
-/* SKETCH UPDATE FUNCTIONS */
-
 function count_min_increment_sketch_column(
     parameter depth: integer,
 ) index: sketch_column_index(), original: sketch_column(depth) => updated: sketch_column(depth) {
@@ -156,8 +158,6 @@ function count_min_increment_sketch_column(
 
 }
 
-/* HASH FUNCTIONS */
-
 function hash_with_op(parameter op: function wire[4], wire[4] => wire[4]) i: wire[8] => o: wire[4] {
     i[0:3], i[4:7] => function op => o;
 }
@@ -173,8 +173,6 @@ function count_min_int_hash1() i: wire[8] => o: sketch_column_index() {
 function count_min_int_hash2() i: wire[8] => o: sketch_column_index() {
     i => function hash_with_op(function multiply(4)) => o;
 }
-
-/* UPDATE FUNCTION */
 
 function count_min_update_sketch3<T>(
     parameter depth: integer,
@@ -223,8 +221,6 @@ function count_min_update_sketch6<T>(
 
 }
 
-/* MAIN FUNCTION */
-
 function count_min_main() i: last<wire[8][3]>() => o: valid<sketch3(16)>() {
     i
         => function count_min_fold<wire[8], sketch3(16)>(
@@ -242,3 +238,4 @@ function count_min_main() i: last<wire[8][3]>() => o: valid<sketch3(16)>() {
     updated_state.value => o.value;
     updated_state.valid => o.valid;
 }
+*/
