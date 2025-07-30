@@ -80,7 +80,7 @@ function count_min_vector_map<I, O>(
 function count_min_generate_index_list(parameter size: integer) null => out: sketch_column_index()[size] {
     function literal(4, size - 1) => out[size - 1];
     if (size > 1) {
-        function count_min_generate_index_list(size - 1) => out[0:size - 2];
+        declare recursivefun: function count_min_generate_index_list(size - 1) => out[0:size - 2];
     }
 }
 

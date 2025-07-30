@@ -232,25 +232,27 @@ class NodeBuilder(
         //   There are definition interface structures that will match here that shouldn't actually match.
         //   For example, wire[5][10] and wire[50].
 
-        fun mismatch(): Exception {
-            // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
-            println("Previous Outputs: $previousOutputs")
-            println("Previous Output Groups: ${previousOutputs.map { it.sourceGroup }}")
-            println("Previous Output Nodes: ${previousOutputs.map { it.sourceGroup.parentNode.identifier }}")
-            println("Current Inputs: $currentInputs")
-            println("Current Inputs Groups: ${currentInputs.map { it.sourceGroup }}")
-            println("Current Inputs Nodes: ${currentInputs.map { it.sourceGroup.parentNode.identifier }}")
+        fun checkForMismatch(s1: Int, s2: Int) {
+            if (s1 != s2) {
+                // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
+                println("Previous Outputs: $previousOutputs")
+                println("Previous Output Groups: ${previousOutputs.map { it.sourceGroup }}")
+                println("Previous Output Nodes: ${previousOutputs.map { it.sourceGroup.parentNode.identifier }}")
+                println("Current Inputs: $currentInputs")
+                println("Current Inputs Groups: ${currentInputs.map { it.sourceGroup }}")
+                println("Current Inputs Nodes: ${currentInputs.map { it.sourceGroup.parentNode.identifier }}")
 
-            return Exception("Mismatched")
+                throw Exception("Mismatch in ${currentInputs.first().sourceGroup.parentNode.parentModule.invocation.gaplFunctionName} of $s1 to $s2")
+            }
         }
 
-        if (previousOutputs.size != currentInputs.size) throw mismatch()
+        checkForMismatch(previousOutputs.size, currentInputs.size)
 
         val wirePairs = previousOutputs.zip(currentInputs).flatMap { (previous, current) ->
-            if (previous.wireVectors.size != current.wireVectors.size) throw mismatch()
+            checkForMismatch(previous.wireVectors.size, current.wireVectors.size)
             previous.wireVectors.zip(current.wireVectors)
         }.flatMap { (previous, current) ->
-            if (previous.wires.size != current.wires.size) throw mismatch()
+            checkForMismatch(previous.wires.size, current.wires.size)
             previous.wires.zip(current.wires)
         }
 

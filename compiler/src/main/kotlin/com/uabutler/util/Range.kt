@@ -56,6 +56,13 @@ object Range {
             baseOffset + subarraySize - 1
         }
 
+        println()
+        println("Dimensions: $dimensions")
+        println("Indices: $indices")
+        println("Range: $range")
+        println("Start offset: $startOffset")
+        println("End offset: $endOffset")
+
         return startOffset..endOffset
     }
 }
