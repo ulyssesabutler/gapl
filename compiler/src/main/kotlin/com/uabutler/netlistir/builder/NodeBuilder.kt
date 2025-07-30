@@ -217,11 +217,10 @@ class NodeBuilder(
     ): IOGroups {
         val ioGroups = groupExpression.expressions
             .map { processCircuitNodeExpressionNode(it) }
-            .flatMap { it.inputs.zip(it.outputs) }
 
         return IOGroups(
-            inputs = ioGroups.map { it.first },
-            outputs = ioGroups.map { it.second },
+            inputs = ioGroups.flatMap { it.inputs },
+            outputs = ioGroups.flatMap { it.outputs },
         )
     }
 
@@ -233,13 +232,25 @@ class NodeBuilder(
         //   There are definition interface structures that will match here that shouldn't actually match.
         //   For example, wire[5][10] and wire[50].
 
-        if (previousOutputs.size != currentInputs.size) throw Exception("Mismatched")
+        fun mismatch(): Exception {
+            // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
+            println("Previous Outputs: $previousOutputs")
+            println("Previous Output Groups: ${previousOutputs.map { it.sourceGroup }}")
+            println("Previous Output Nodes: ${previousOutputs.map { it.sourceGroup.parentNode.identifier }}")
+            println("Current Inputs: $currentInputs")
+            println("Current Inputs Groups: ${currentInputs.map { it.sourceGroup }}")
+            println("Current Inputs Nodes: ${currentInputs.map { it.sourceGroup.parentNode.identifier }}")
+
+            return Exception("Mismatched")
+        }
+
+        if (previousOutputs.size != currentInputs.size) throw mismatch()
 
         val wirePairs = previousOutputs.zip(currentInputs).flatMap { (previous, current) ->
-            if (previous.wireVectors.size != current.wireVectors.size) throw Exception("Mismatched")
+            if (previous.wireVectors.size != current.wireVectors.size) throw mismatch()
             previous.wireVectors.zip(current.wireVectors)
         }.flatMap { (previous, current) ->
-            if (previous.wires.size != current.wires.size) throw Exception("Mismatched")
+            if (previous.wires.size != current.wires.size) throw mismatch()
             previous.wires.zip(current.wires)
         }
 
@@ -351,14 +362,13 @@ class NodeBuilder(
             }
 
             is ReferenceCircuitExpressionNode -> {
-                println("NODE: ${nodeExpression.identifier.value}")
                 val referencedNode = try {
                     netlistNodes[nodeExpression.identifier.value]!!
                 } catch (_: NullPointerException) {
                     throw Exception("Unable to find node with identifier ${nodeExpression.identifier.value}")
                 }
 
-                val projectionInformation = getProjectionValues(nodeExpression.singleAccesses)
+                val projectionInformation = getProjectionValues(nodeExpression.singleAccesses, nodeExpression.multipleAccess)
                 val inputWireVectorGroup = referencedNode.inputWireVectorGroups.firstOrNull()
                 val outputWireVectorGroup = referencedNode.outputWireVectorGroups.firstOrNull()
 
@@ -384,26 +394,45 @@ class NodeBuilder(
     )
 
     private fun getProjectionValues(
-        accessNode: List<SingleAccessOperationNode>
-    ) = accessNode.fold(CurrentProjection()) { current, accessNode ->
-        // TODO: Validation
-        when (accessNode) {
-            is MemberAccessOperationNode -> {
-                CurrentProjection(
-                    identifier = current.identifier + accessNode.memberIdentifier.value,
-                    indices = current.indices,
-                )
-            }
-            is SingleArrayAccessOperationNode -> {
-                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
-                    staticExpression = accessNode.index,
-                    context = parameterValuesContext,
-                )
+        singleAccessNodes: List<SingleAccessOperationNode>,
+        multipleAccessNode: MultipleAccessOperationNode?,
+    ): CurrentProjection {
+        val initialProjection = if (multipleAccessNode != null) {
+            val start = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                staticExpression = multipleAccessNode.startIndex,
+                context = parameterValuesContext,
+            )
+            val end = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                staticExpression = multipleAccessNode.endIndex,
+                context = parameterValuesContext,
+            )
 
-                CurrentProjection(
-                    identifier = current.identifier,
-                    indices = current.indices + index,
-                )
+            CurrentProjection(range = start..end)
+        } else {
+            CurrentProjection()
+        }
+
+        return singleAccessNodes.fold(initialProjection) { current, accessNode ->
+            when (accessNode) {
+                is MemberAccessOperationNode -> {
+                    CurrentProjection(
+                        identifier = current.identifier + accessNode.memberIdentifier.value,
+                        indices = current.indices,
+                        range = current.range,
+                    )
+                }
+                is SingleArrayAccessOperationNode -> {
+                    val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                        staticExpression = accessNode.index,
+                        context = parameterValuesContext,
+                    )
+
+                    CurrentProjection(
+                        identifier = current.identifier,
+                        indices = current.indices + index,
+                        range = current.range,
+                    )
+                }
             }
         }
     }
@@ -412,12 +441,10 @@ class NodeBuilder(
         wireVectorGroup: InputWireVectorGroup,
         projection: CurrentProjection,
     ): WireVectorGroup.Projection<InputWireVector> {
-        val dimensions = InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure).first().dimensions
-        val indices = projection.indices
-
         return wireVectorGroup.projection(
-            identifier = projection.identifier,
-            range = getRange(dimensions, indices, projection.range)
+            members = projection.identifier,
+            indices = projection.indices,
+            range = projection.range
         )
     }
 
@@ -425,54 +452,11 @@ class NodeBuilder(
         wireVectorGroup: OutputWireVectorGroup,
         projection: CurrentProjection,
     ): WireVectorGroup.Projection<OutputWireVector> {
-        println("Projection: $projection")
-        println("Wire Vector Group: $wireVectorGroup")
-        println("Flattened Interface: ${InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure)}")
-
-        val dimensions = InterfaceFlattener.fromInterfaceStructure(wireVectorGroup.gaplStructure).first().dimensions
-        val indices = projection.indices
-
         return wireVectorGroup.projection(
-            identifier = projection.identifier,
-            range = getRange(dimensions, indices, projection.range)
+            members = projection.identifier,
+            indices = projection.indices,
+            range = projection.range
         )
-    }
-
-    private fun getRange(
-        dimensions: List<Int>,
-        indices: List<Int>,
-        finalRange: IntRange?,
-    ): IntRange {
-        val dimCount = dimensions.size
-        val indexCount = indices.size
-
-        require(indexCount + (if (finalRange != null) 1 else 0) <= dimCount) { "Too many indices" }
-
-        // Compute stride for each dimension
-        val strides = IntArray(dimCount) { 1 }
-        for (i in dimCount - 2 downTo 0) {
-            strides[i] = strides[i + 1] * dimensions[i + 1]
-        }
-
-        // Compute base offset from provided indices
-        var offset = 0
-        for (i in indices.indices) {
-            offset += indices[i] * strides[i]
-        }
-
-        // Handle remaining dimensions
-        return if (finalRange != null) {
-            // We only slice into the next dimension after indices
-            val nextDim = indexCount
-            val elementSize = strides.getOrElse(nextDim + 1) { 1 }
-            val start = offset + finalRange.first * strides[nextDim]
-            val endInclusive = offset + finalRange.last * strides[nextDim] + elementSize - 1
-            start..endInclusive
-        } else {
-            // We want the whole block starting at offset
-            val totalSize = dimensions.drop(indexCount).reduce(Int::times)
-            offset until offset + totalSize
-        }
     }
 
     private fun createNodeFromFunctionInvocation(

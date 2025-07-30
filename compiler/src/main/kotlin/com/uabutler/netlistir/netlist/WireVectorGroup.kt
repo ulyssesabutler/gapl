@@ -14,24 +14,31 @@ sealed class WireVectorGroup<T : WireVector<*>>(
 
     class Projection<T : WireVector<*>>(
         val sourceGroup: WireVectorGroup<T>,
-        val projectionIdentifier: List<String>?,
+        val members: List<String>?,
+        val indices: List<Int>?,
         val range: IntRange?,
     ) {
-        val wireVectors: List<WireVector.Projection<*>> = projectionIdentifier?.let {
-            sourceGroup.wireVectors
-                .filter { wireVector ->
-                    wireVector.identifier.size >= projectionIdentifier.size &&
-                            wireVector.identifier.subList(0, projectionIdentifier.size) == projectionIdentifier
-                }
-                .map { wireVector ->
-                    @Suppress("UNCHECKED_CAST")
-                    (wireVector as WireVector<Wire>).projection(range)
-                }
-        } ?: sourceGroup.wireVectors.map { it.projection(range) }
+        val wireVectors: List<WireVector.Projection<*>> = sourceGroup.wireVectors.mapNotNull { it.projection(members, indices, range) }
+
+        override fun toString(): String {
+            return ObjectUtils.toStringBuilder(
+                obj = this,
+                normalProps = mapOf(
+                    "wireVectors" to wireVectors,
+                ),
+                identityProps = mapOf(
+                    "sourceGroup" to sourceGroup,
+                )
+            )
+        }
     }
 
-    fun projection(identifier: List<String>? = null, range: IntRange? = null): Projection<T> {
-        return Projection(this, identifier, range)
+    fun projection(members: List<String>, indices: List<Int>, range: IntRange?): Projection<T> {
+        return Projection(this, members, indices, range)
+    }
+
+    fun projection(): Projection<T> {
+        return Projection(this, null, null, null)
     }
 
     open fun wires(): List<Wire> = wireVectors.flatMap { it.wires }
@@ -48,28 +55,6 @@ sealed class WireVectorGroup<T : WireVector<*>>(
             )
         )
     }
-
-    override fun equals(other: Any?): Boolean {
-        return ObjectUtils.equalsBuilder<WireVectorGroup<*>>(
-            self = this,
-            other = other,
-            { o -> identifier == o.identifier },
-            { o -> ObjectUtils.identifierEquals(
-                selfValue = parentNode,
-                otherValue = o.parentNode,
-                identifierAccessor = { it.identifier }
-            ) },
-            { o -> wireVectors == o.wireVectors }
-        )
-    }
-
-    override fun hashCode(): Int {
-        return ObjectUtils.hashCodeBuilder(
-            identifier,
-            parentNode.identifier,
-            wireVectors
-        )
-    }
 }
 
 class InputWireVectorGroup(
@@ -81,6 +66,7 @@ class InputWireVectorGroup(
     override val wireVectors: List<InputWireVector> = InterfaceFlattener.fromInterfaceStructure(structure).map {
         InputWireVector(
             identifier = it.identifier,
+            dimensions = it.dimensions,
             parentGroup = this,
             size = it.width,
         )
@@ -99,6 +85,7 @@ class OutputWireVectorGroup(
     override val wireVectors = InterfaceFlattener.fromInterfaceStructure(structure).map {
         OutputWireVector(
             identifier = it.identifier,
+            dimensions = it.dimensions,
             parentGroup = this,
             size = it.width,
         )

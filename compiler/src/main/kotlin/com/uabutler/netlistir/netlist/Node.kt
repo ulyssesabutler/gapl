@@ -31,26 +31,6 @@ sealed class Node(
             )
         )
     }
-
-    override fun equals(other: Any?): Boolean {
-        return ObjectUtils.equalsBuilder<Node>(
-            self = this,
-            other = other,
-            { o -> identifier == o.identifier },
-            { o -> parentModule == o.parentModule },
-            { o -> inputWireVectorGroups == o.inputWireVectorGroups },
-            { o -> outputWireVectorGroups == o.outputWireVectorGroups },
-        )
-    }
-
-    override fun hashCode(): Int {
-        return ObjectUtils.hashCodeBuilder(
-            identifier,
-            parentModule.invocation,
-            inputWireVectorGroups,
-            outputWireVectorGroups,
-        )
-    }
 }
 
 sealed class IONode(
