@@ -1,7 +1,7 @@
 package com.uabutler.netlistir.netlist
 
 import com.uabutler.netlistir.util.ObjectUtils
-import com.uabutler.util.Range
+import com.uabutler.netlistir.builder.util.Range
 
 sealed class WireVector<T : Wire>(
     val identifier: List<String>,
