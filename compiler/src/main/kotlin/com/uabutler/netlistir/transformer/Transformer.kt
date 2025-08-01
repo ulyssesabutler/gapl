@@ -8,6 +8,7 @@ interface Transformer {
     companion object {
         fun allTransformations(original: List<Module>): List<Module> {
             val transformers = listOf(
+                Flattener,
                 PassThroughRemover,
             )
 

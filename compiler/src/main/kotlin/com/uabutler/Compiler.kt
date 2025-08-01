@@ -10,7 +10,6 @@ object Compiler {
         val netlistModules = ModuleBuilder(ast).buildAllModules()
         val transformedModules = Transformer.allTransformations(netlistModules)
         val verilogirModules = transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
-
         return verilogirModules.joinToString("\n") { it.verilogSerialize() }
     }
 }
