@@ -32,17 +32,17 @@ object VerilogBuilder {
                 name = Identifier.module(netlistModule.invocation),
                 inputs = netlistModule.getInputNodes().flatMap {
                     moduleIOsFromInterfaceStructure(
-                        structure = it.inputWireVectorGroups,
+                        structure = it.outputWireVectorGroups,
                         direction = ModuleIODirection.INPUT,
                     )
                 },
                 outputs = netlistModule.getOutputNodes().flatMap {
                     moduleIOsFromInterfaceStructure(
-                        structure = it.outputWireVectorGroups,
+                        structure = it.inputWireVectorGroups,
                         direction = ModuleIODirection.OUTPUT,
                     )
                 },
-                statements = StatementBuilder.verilogStatementsFromNodes(netlistModule.getNodes())
+                statements = StatementBuilder.verilogStatementsFromNodes(netlistModule.getNodes()),
             )
         } catch (e: Exception) {
             throw Exception("Failed to create verilog module ${Identifier.module(netlistModule.invocation)} for netlist module ${netlistModule.invocation.gaplFunctionName}", e)

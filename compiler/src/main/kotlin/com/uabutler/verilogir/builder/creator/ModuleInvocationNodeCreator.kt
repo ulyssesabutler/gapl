@@ -19,12 +19,12 @@ object ModuleInvocationNodeCreator {
 
         // Inputs
         // TODO: Make sure this lines up with how IO ports are generated
-        val inputModulePortNames = node.inputWireVectors().map { Identifier.wire(it) }
+        val inputModulePortNames = node.inputWireVectors().map { Identifier.ioWire(it.parentGroup.identifier, it) }
         val inputOuterWirePortNames = node.inputWireVectors().map { Identifier.wire(it) }
 
         // Outputs
         // TODO: Make sure this lines up with how IO ports are generated
-        val outputModulePortNames = node.outputWireVectors().map { Identifier.wire(it) }
+        val outputModulePortNames = node.outputWireVectors().map { Identifier.ioWire(it.parentGroup.identifier, it) }
         val outputOuterWirePortNames = node.outputWireVectors().map { Identifier.wire(it) }
 
         // The actual port list

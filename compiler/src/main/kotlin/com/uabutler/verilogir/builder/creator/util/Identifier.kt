@@ -7,16 +7,41 @@ import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.builder.util.RecordInterfaceStructure
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
+import com.uabutler.netlistir.netlist.IONode
+import com.uabutler.netlistir.netlist.InputWireVector
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.OutputWireVector
 import com.uabutler.netlistir.netlist.WireVector
 
 object Identifier {
-    fun wire(wire: WireVector<*>) = buildString {
-        append(wire.parentGroup.parentNode.identifier)
-        append("$")
-        append(wire.parentGroup.identifier)
-        append("$")
-        append(wire.identifier.joinToString("$"))
+    fun ioWire(primaryIdentifier: String, wire: WireVector<*>): String {
+        return buildList {
+            add(primaryIdentifier)
+            addAll(wire.identifier)
+        }.joinToString("$")
+    }
+
+    fun bodyWire(wire: WireVector<*>): String {
+        val type = when (wire) {
+            is InputWireVector -> "input"
+            is OutputWireVector -> "output"
+        }
+
+        return buildList {
+            add(wire.parentGroup.parentNode.identifier)
+            add(wire.parentGroup.identifier)
+            addAll(wire.identifier)
+            add(type)
+        }.joinToString("$")
+    }
+
+    fun wire(wire: WireVector<*>): String {
+        val node = wire.parentGroup.parentNode
+
+        return when (node) {
+            is IONode -> ioWire(wire.parentGroup.parentNode.identifier, wire)
+            else -> bodyWire(wire)
+        }
     }
 
     fun module(invocation: Module.Invocation): String {
