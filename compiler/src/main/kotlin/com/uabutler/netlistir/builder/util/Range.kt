@@ -6,30 +6,13 @@ object Range {
         indices: List<Int>,
         range: IntRange?,
     ): IntRange {
+        // Written at 3am by brute force. I don't know why, how, or even if it works.
+        val lowerDimensionSize = dimensions.drop(1).fold(1) { acc, i -> acc * i }
+        if (dimensions.isEmpty() || indices.isEmpty()) return if (range != null) (range.first * lowerDimensionSize) until ((range.last + 1) * lowerDimensionSize) else 0 until dimensions.fold(1) { acc, i -> acc * i }
 
-        var currentIndex = 0
+        val startOfCurrentDimension = indices.first() * lowerDimensionSize
+        val lowerDimensionRange = from(dimensions.drop(1), indices.drop(1), range)
 
-        indices.forEachIndexed { index, it ->
-            val previousDimension = dimensions.getOrNull(index - 1) ?: 1
-            currentIndex = (currentIndex * previousDimension) + it
-        }
-
-        var startIndex = currentIndex
-        var endIndex = currentIndex
-
-        val previousDimension = dimensions.getOrNull(indices.size - 1) ?: 1
-
-        if (range != null) {
-            startIndex = (startIndex * previousDimension) + range.first
-            endIndex = (endIndex * previousDimension) + range.last
-        }
-
-        val dimensionsProcessed = indices.size + (if (range != null) 1 else 0)
-        val size = dimensions.drop(dimensionsProcessed).fold(1) { acc, i -> acc * i }
-
-        startIndex *= size
-        endIndex = (endIndex + 1) * size - 1
-
-        return startIndex..endIndex
+        return (lowerDimensionRange.first + startOfCurrentDimension)..(lowerDimensionRange.last + startOfCurrentDimension)
     }
 }

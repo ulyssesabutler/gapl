@@ -235,14 +235,11 @@ class NodeBuilder(
         fun checkForMismatch(s1: Int, s2: Int) {
             if (s1 != s2) {
                 // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
-                //println("Previous Outputs: $previousOutputs")
-                //println("Previous Output Groups: ${previousOutputs.map { it.sourceGroup }}")
-                println("Previous Output Nodes: ${previousOutputs.map { it.sourceGroup.parentNode.identifier }}")
-                //println("Current Inputs: $currentInputs")
-                //println("Current Inputs Groups: ${currentInputs.map { it.sourceGroup }}")
-                println("Current Inputs Nodes: ${currentInputs.map { it.sourceGroup.parentNode.identifier }}")
+                val gaplModuleName = currentInputs.first().sourceGroup.parentNode.parentModule.invocation.gaplFunctionName
+                val previousOutputNodeName = previousOutputs.first().sourceGroup.parentNode.identifier
+                val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.identifier
 
-                throw Exception("Mismatch in ${currentInputs.first().sourceGroup.parentNode.parentModule.invocation.gaplFunctionName} of $s1 to $s2")
+                throw Exception("Mismatch in $gaplModuleName of $previousOutputNodeName ($s1) to $currentInputNodeName ($s2)")
             }
         }
 

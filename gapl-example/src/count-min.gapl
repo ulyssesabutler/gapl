@@ -1,4 +1,3 @@
-/*
 interface pair<T, U>() {
     first: T;
     second: U;
@@ -73,21 +72,15 @@ function count_min_vector_map<I, O>(
         }
     }
 }
-*/
 
-function count_min_generate_index_list(parameter size: integer) null => out: wire[8][size] {
-    function literal(8, size - 1) => out[size - 1];
+function count_min_generate_index_list(parameter size: integer) null => out: sketch_column_index()[size] {
+    function literal(4, size - 1) => out[size - 1];
 
     if (size > 1) {
         declare recursivefun: function count_min_generate_index_list(size - 1) => out[0:size - 2];
     }
 }
 
-function main() null => out: wire[8][10] {
-    function count_min_generate_index_list(10) => out;
-}
-
-/*
 function count_min_replicate<I>(parameter factor: integer) i: I => o: I[factor] {
     i => o[0];
     if (factor > 1) {
@@ -238,4 +231,3 @@ function count_min_main() i: last<wire[8][3]>() => o: valid<sketch3(16)>() {
     updated_state.value => o.value;
     updated_state.valid => o.valid;
 }
-*/

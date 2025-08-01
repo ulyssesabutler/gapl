@@ -14,7 +14,7 @@ data class Reference(
 ): Expression() {
     init {
         if (startIndex != null && endIndex != null && startIndex < endIndex) {
-            throw IllegalArgumentException("The start index ($startIndex) must be greater than or equal to end index ($endIndex). [$startIndex:$endIndex]")
+            throw IllegalArgumentException("Failed to create reference for $variableName: start index ($startIndex) must be greater than or equal to end index ($endIndex).")
         }
     }
     override fun verilogSerialize() = buildString {

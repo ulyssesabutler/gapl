@@ -16,7 +16,7 @@ function vector_map<I, O>(
 
 function vector_map_double() i: data() => o: data()
 {
-    i, i => function add(32) => o;
+    i, i => function add(4) => o;
 }
 
 function vector_map_main() i: data()[5] => o: data()[5]
