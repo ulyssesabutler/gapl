@@ -3,12 +3,14 @@ package com.uabutler.verilogir.builder
 import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.InputWireVector
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWireVector
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.netlist.WireVector
 import com.uabutler.verilogir.builder.creator.ModuleInvocationNodeCreator
 import com.uabutler.verilogir.builder.creator.PassThroughNodeCreator
 import com.uabutler.verilogir.builder.creator.PredefinedFunctionNodeCreator
@@ -41,7 +43,22 @@ object StatementBuilder {
         val sourceRange: IntRange,
         val destination: InputWireVector,
         val destinationRange: IntRange,
-    )
+    ) {
+        override fun toString() = buildString {
+            fun component(wire: WireVector<*>, range: IntRange) = buildString {
+                append(Identifier.wire(wire).padEnd(25, ' '))
+                append("[")
+                append(range.first.toString().padStart(3, ' '))
+                append(":")
+                append(range.last.toString().padStart(3, ' '))
+                append("]")
+            }
+
+            append(component(source, sourceRange))
+            append(" -> ")
+            append(component(destination, destinationRange))
+        }
+    }
 
 
     private fun getVerilogConnectionsForWireVector(wireVector: InputWireVector): List<VerilogConnection> = buildList {
@@ -52,47 +69,62 @@ object StatementBuilder {
             val sourceIndex: Int,
             val destination: InputWireVector,
             val destinationIndex: Int,
-        )
-
-        fun createConnection(wire: InputWire): Connection {
-            val connection = module.getConnectionForInputWire(wire)
-            return Connection(
-                source = connection.outputWire.parentWireVector,
-                sourceIndex = connection.outputWire.index,
-                destination = connection.inputWire.parentWireVector,
-                destinationIndex = connection.inputWire.index,
+        ) {
+            constructor(precomputed: Module.Connection) : this(
+                source = precomputed.outputWire.parentWireVector,
+                sourceIndex = precomputed.outputWire.index,
+                destination = precomputed.inputWire.parentWireVector,
+                destinationIndex = precomputed.inputWire.index
             )
+
+            constructor(wire: InputWire) : this(
+                precomputed = module.getConnectionForInputWire(wire)
+            )
+
+            override fun toString() = buildString {
+                fun component(wire: WireVector<*>, index: Int) = buildString {
+                    append(Identifier.wire(wire).padEnd(25, ' '))
+                    append("[")
+                    append(index.toString().padStart(3, ' '))
+                    append("]")
+                }
+
+                append(component(source, sourceIndex))
+                append(" -> ")
+                append(component(destination, destinationIndex))
+            }
         }
 
-        val firstConnection = createConnection(wireVector.wires.first())
+        var previousConnection = Connection(wireVector.wires.first())
 
-        var previousSourceIndex = firstConnection.sourceIndex
-        var currentSourceStartIndex = firstConnection.sourceIndex
-        var currentDestinationStartIndex = 0
-        var previousSourceVector = firstConnection.source
+        var currentSourceStartIndex = previousConnection.sourceIndex
+        var currentDestinationStartIndex = previousConnection.destinationIndex // Always 0
+
+        fun addPrevious() {
+            val connection = VerilogConnection(
+                source = previousConnection.source,
+                sourceRange = currentSourceStartIndex..previousConnection.sourceIndex,
+                destination = previousConnection.destination,
+                destinationRange = currentDestinationStartIndex..previousConnection.destinationIndex,
+            )
+
+            add(connection)
+        }
 
         wireVector.wires.drop(1).forEach { wire ->
-            val connection = createConnection(wire)
-            val currentSourceIndex = connection.sourceIndex
-            val currentSourceVector = connection.source
+            val currentConnection = Connection(wire)
 
-            if (currentSourceVector != previousSourceVector || currentSourceIndex != previousSourceIndex + 1) {
-                add(
-                    VerilogConnection(
-                        source = connection.source,
-                        sourceRange = currentSourceStartIndex until currentSourceIndex,
-                        destination = connection.destination,
-                        destinationRange = currentDestinationStartIndex until connection.destinationIndex,
-                    )
-                )
+            if (currentConnection.source != previousConnection.source || currentConnection.sourceIndex != previousConnection.sourceIndex + 1) {
+                addPrevious()
 
-                currentSourceStartIndex = currentSourceIndex
-                currentDestinationStartIndex = connection.destinationIndex
+                currentSourceStartIndex = currentConnection.sourceIndex
+                currentDestinationStartIndex = currentConnection.destinationIndex
             }
 
-            previousSourceIndex = currentSourceIndex
-            previousSourceVector = currentSourceVector
+            previousConnection = currentConnection
         }
+
+        addPrevious()
     }
 
     private fun connectNodes(node: Node): List<Statement> {

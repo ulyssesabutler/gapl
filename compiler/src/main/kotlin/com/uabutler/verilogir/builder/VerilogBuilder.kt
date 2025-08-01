@@ -27,21 +27,25 @@ object VerilogBuilder {
     }
 
     fun verilogModuleFromGAPLModule(netlistModule: NetlistModule): VerilogModule {
-        return VerilogModule(
-            name = Identifier.module(netlistModule.invocation),
-            inputs = netlistModule.getInputNodes().flatMap {
-                moduleIOsFromInterfaceStructure(
-                    structure = it.inputWireVectorGroups,
-                    direction = ModuleIODirection.INPUT,
-                )
-            },
-            outputs = netlistModule.getOutputNodes().flatMap {
-                moduleIOsFromInterfaceStructure(
-                    structure = it.outputWireVectorGroups,
-                    direction = ModuleIODirection.OUTPUT,
-                )
-            },
-            statements = StatementBuilder.verilogStatementsFromNodes(netlistModule.getNodes())
-        )
+        try {
+            return VerilogModule(
+                name = Identifier.module(netlistModule.invocation),
+                inputs = netlistModule.getInputNodes().flatMap {
+                    moduleIOsFromInterfaceStructure(
+                        structure = it.inputWireVectorGroups,
+                        direction = ModuleIODirection.INPUT,
+                    )
+                },
+                outputs = netlistModule.getOutputNodes().flatMap {
+                    moduleIOsFromInterfaceStructure(
+                        structure = it.outputWireVectorGroups,
+                        direction = ModuleIODirection.OUTPUT,
+                    )
+                },
+                statements = StatementBuilder.verilogStatementsFromNodes(netlistModule.getNodes())
+            )
+        } catch (e: Exception) {
+            throw Exception("Failed to create verilog module ${Identifier.module(netlistModule.invocation)} for netlist module ${netlistModule.invocation.gaplFunctionName}", e)
+        }
     }
 }

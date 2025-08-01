@@ -80,7 +80,8 @@ class Module(
         // Validation: Each input wire should have exactly one source
         val testConnection = getConnectionForInputWireOrNull(inputWire)
         if (testConnection != null) {
-            throw IllegalArgumentException("Input wire $inputWire at ${inputWire.index} for ${Identifier.wire(inputWire.parentWireVector)} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} already connected")
+            // TODO: This error message should also, ideally, show the connection statement that's causing the error.
+            throw IllegalArgumentException("Input wire for ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} already connected")
         }
 
         connections.add(Connection(outputWire, inputWire))
