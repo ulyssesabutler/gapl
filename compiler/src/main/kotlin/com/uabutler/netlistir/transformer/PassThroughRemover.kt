@@ -36,13 +36,13 @@ object PassThroughRemover: Transformer {
          * remove the connection of the PassThrough Input to the Original Source.
          */
         passThroughWirePairs.forEach { (input, output) ->
-            val originalSource = module.getConnectionForInputWire(input).outputWire
+            val originalSource = module.getConnectionForInputWire(input).source
 
             val originalSinkConnection = module.getConnectionsForOutputWire(output)
 
             originalSinkConnection.forEach { connection ->
-                module.disconnect(connection.inputWire)
-                module.connect(connection.inputWire, originalSource)
+                module.disconnect(connection.sink)
+                module.connect(connection.sink, originalSource)
             }
 
             module.disconnect(input)

@@ -28,7 +28,7 @@ object Identifier {
         }
 
         return buildList {
-            add(wire.parentGroup.parentNode.identifier)
+            add(wire.parentGroup.parentNode.name())
             add(wire.parentGroup.identifier)
             addAll(wire.identifier)
             add(type)
@@ -39,7 +39,7 @@ object Identifier {
         val node = wire.parentGroup.parentNode
 
         return when (node) {
-            is IONode -> ioWire(wire.parentGroup.parentNode.identifier, wire)
+            is IONode -> ioWire(wire.parentGroup.parentNode.name(), wire)
             else -> bodyWire(wire)
         }
     }

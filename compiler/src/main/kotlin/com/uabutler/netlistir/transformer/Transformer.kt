@@ -10,6 +10,7 @@ interface Transformer {
             val transformers = listOf(
                 Flattener,
                 PassThroughRemover,
+                Renamer,
             )
 
             return transformers.fold(original) { acc, transformer -> transformer.transform(acc) }

@@ -28,7 +28,7 @@ class NodeBuilder(
         identifier = identifier,
         parentModule = module,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }.also { module.addInputNode(it) }
+    ).also { netlistNodes[it.name()] = it }.also { module.addInputNode(it) }
 
     private fun createOutputNode(
         identifier: String,
@@ -37,7 +37,7 @@ class NodeBuilder(
         identifier = identifier,
         parentModule = module,
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }.also { module.addOutputNode(it) }
+    ).also { netlistNodes[it.name()] = it }.also { module.addOutputNode(it) }
 
     private fun createModuleInvocationNode(
         identifier: String,
@@ -50,7 +50,7 @@ class NodeBuilder(
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
         invocation = invocation,
-    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
+    ).also { netlistNodes[it.name()] = it }.also { module.addBodyNode(it) }
 
     private fun createPredefinedFunctionNode(
         identifier: String,
@@ -63,7 +63,7 @@ class NodeBuilder(
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
         predefinedFunction = predefinedFunction,
-    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
+    ).also { netlistNodes[it.name()] = it }.also { module.addBodyNode(it) }
 
     private fun createPassThroughNode(
         identifier: String,
@@ -76,7 +76,7 @@ class NodeBuilder(
         parentModule = module,
         inputWireVectorGroupsBuilder = inputWireVectorGroupsBuilder,
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
-    ).also { netlistNodes[it.identifier] = it }.also { module.addBodyNode(it) }
+    ).also { netlistNodes[it.name()] = it }.also { module.addBodyNode(it) }
 
     private fun buildInputWireVectorGroups(
         structure: InterfaceStructure,
@@ -236,8 +236,8 @@ class NodeBuilder(
             if (s1 != s2) {
                 // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
                 val gaplModuleName = currentInputs.first().sourceGroup.parentNode.parentModule.invocation.gaplFunctionName
-                val previousOutputNodeName = previousOutputs.first().sourceGroup.parentNode.identifier
-                val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.identifier
+                val previousOutputNodeName = previousOutputs.first().sourceGroup.parentNode.name()
+                val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.name()
 
                 throw Exception("Mismatch in $gaplModuleName of $previousOutputNodeName ($s1) to $currentInputNodeName ($s2)")
             }

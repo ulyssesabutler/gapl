@@ -33,7 +33,7 @@ object ModuleInvocationNodeCreator {
         // Add the module invocation
         add(
             Invocation(
-                invocationName = node.identifier,
+                invocationName = node.name(),
                 moduleName = Identifier.module(node.invocation),
                 ports = ports.map { InvocationPort(modulePortName = it.first, variablePortName = it.second) }
             )

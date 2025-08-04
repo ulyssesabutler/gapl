@@ -4,11 +4,14 @@ import com.uabutler.netlistir.util.ObjectUtils
 import com.uabutler.netlistir.util.PredefinedFunction
 
 sealed class Node(
-    val identifier: String,
+    private var identifier: String,
     val parentModule: Module,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>
 ) {
+    fun name() = identifier
+    fun rename(newName: String) { identifier = newName }
+
     val inputWireVectorGroups: List<InputWireVectorGroup> = inputWireVectorGroupsBuilder(this)
     val outputWireVectorGroups: List<OutputWireVectorGroup> = outputWireVectorGroupsBuilder(this)
 
