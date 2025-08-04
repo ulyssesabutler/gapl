@@ -9,6 +9,7 @@ interface Transformer {
         fun allTransformations(original: List<Module>): List<Module> {
             val transformers = listOf(
                 Flattener,
+                LiteralSimplifier,
                 PassThroughRemover,
                 Renamer,
             )
