@@ -179,8 +179,9 @@ object Flattener: Transformer {
 
             // STEP 1b: Disconnect the ModuleInvocationNode and connect the new PassThroughNodes for each IO Node
             //  Note: These will have no equivalent in the "wire pairs" list
+            val inputGroupLookup = node.inputWireVectorGroups.associateBy { it.identifier }
             inputNodes.keys.forEach { variableName ->
-                val currentGroup = node.inputWireVectorGroups.first { it.identifier == variableName }
+                val currentGroup = inputGroupLookup[variableName]!!
                 val newNodeGroup = inputNodes[variableName]!!.inputWireVectorGroups.first()
 
                 currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
@@ -190,8 +191,9 @@ object Flattener: Transformer {
                 }
             }
 
+            val outputGroupLookup = node.outputWireVectorGroups.associateBy { it.identifier }
             outputNodes.keys.forEach { variableName ->
-                val currentGroup = node.outputWireVectorGroups.first { it.identifier == variableName }
+                val currentGroup = outputGroupLookup[variableName]!!
                 val newNodeGroup = outputNodes[variableName]!!.outputWireVectorGroups.first()
 
                 currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->

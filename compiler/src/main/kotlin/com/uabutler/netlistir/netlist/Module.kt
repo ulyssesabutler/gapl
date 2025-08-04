@@ -30,36 +30,38 @@ class Module(
     )
 
     // Nodes and Connections
-    private val inputNodes = mutableListOf<InputNode>()
-    private val outputNodes = mutableListOf<OutputNode>()
-    private val bodyNodes = mutableListOf<BodyNode>()
+    private val inputNodes = mutableMapOf<String, InputNode>()
+    private val outputNodes = mutableMapOf<String, OutputNode>()
+    private val bodyNodes = mutableMapOf<String, BodyNode>()
 
     private val connections = mutableSetOf<Connection>()
+    private val connectionByInput = mutableMapOf<InputWire, Connection>()
+    private val connectionsByOutput = mutableMapOf<OutputWire, List<Connection>>()
 
     // Single Getters
-    fun getInputNode(identifier: String) = inputNodes.first { it.identifier == identifier }
-    fun getOutputNode(identifier: String) = outputNodes.first { it.identifier == identifier }
-    fun getBodyNode(identifier: String) = bodyNodes.first { it.identifier == identifier }
+    fun getInputNode(identifier: String) = inputNodes[identifier]!!
+    fun getOutputNode(identifier: String) = outputNodes[identifier]!!
+    fun getBodyNode(identifier: String) = bodyNodes[identifier]!!
 
-    fun getConnectionForInputWireOrNull(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire }
-    fun getConnectionForInputWire(inputWire: InputWire) = connections.firstOrNull { it.inputWire == inputWire } ?: throw Exception("Input wire $inputWire of ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} not connected")
+    fun getConnectionForInputWireOrNull(inputWire: InputWire) = connectionByInput[inputWire]
+    fun getConnectionForInputWire(inputWire: InputWire) = getConnectionForInputWireOrNull(inputWire) ?: throw Exception("Input wire $inputWire of ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} not connected")
 
     // Multi Getters
-    fun getInputNodes() = inputNodes.toList()
-    fun getOutputNodes() = outputNodes.toList()
-    fun getBodyNodes() = bodyNodes.toList()
+    fun getInputNodes() = inputNodes.values.toList()
+    fun getOutputNodes() = outputNodes.values.toList()
+    fun getBodyNodes() = bodyNodes.values.toList()
     fun getNodes() = getInputNodes() + getOutputNodes() + getBodyNodes()
 
     fun getConnections() = connections.toSet()
-    fun getConnectionsForOutputWire(outputWire: OutputWire) = connections.filter { it.outputWire == outputWire }.toSet()
+    fun getConnectionsForOutputWire(outputWire: OutputWire) = connectionsByOutput[outputWire]?.toSet() ?: emptySet()
     fun getConnectionsForNodeInput(node: Node) = node.inputWires().mapNotNull { getConnectionForInputWireOrNull(it) }
     fun getConnectionsForNodeOutput(node: Node) = node.outputWires().flatMap { getConnectionsForOutputWire(it) }
     fun getConnectionsForNode(node: Node) = getConnectionsForNodeInput(node) + getConnectionsForNodeOutput(node)
 
     // Setters
-    fun addInputNode(node: InputNode) { inputNodes += node }
-    fun addOutputNode(node: OutputNode) { outputNodes += node }
-    fun addBodyNode(node: BodyNode) { bodyNodes += node }
+    fun addInputNode(node: InputNode) { inputNodes[node.identifier] = node }
+    fun addOutputNode(node: OutputNode) { outputNodes[node.identifier] = node }
+    fun addBodyNode(node: BodyNode) { bodyNodes[node.identifier] = node }
 
     fun removeNode(node: Node) {
         // Validation: The node must be disconnected
@@ -70,9 +72,9 @@ class Module(
         }
 
         when (node) {
-            is InputNode -> inputNodes.remove(node)
-            is OutputNode -> outputNodes.remove(node)
-            is BodyNode -> bodyNodes.remove(node)
+            is InputNode -> inputNodes.remove(node.identifier)
+            is OutputNode -> outputNodes.remove(node.identifier)
+            is BodyNode -> bodyNodes.remove(node.identifier)
         }
     }
 
@@ -84,11 +86,18 @@ class Module(
             throw IllegalArgumentException("Input wire for ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} already connected")
         }
 
-        connections.add(Connection(outputWire, inputWire))
+        val connection = Connection(outputWire, inputWire)
+
+        connections.add(connection)
+        connectionByInput[inputWire] = connection
+        connectionsByOutput[outputWire] = connectionsByOutput.getOrDefault(outputWire, emptyList()) + connection
     }
 
     fun disconnect(inputWire: InputWire) {
-        connections.remove(getConnectionForInputWire(inputWire))
+        val connection = getConnectionForInputWire(inputWire)
+        connections.remove(connection)
+        connectionByInput.remove(inputWire)
+        connectionsByOutput[connection.outputWire] = connectionsByOutput[connection.outputWire]!! - connection
     }
 
     //
