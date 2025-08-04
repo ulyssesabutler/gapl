@@ -38,7 +38,7 @@ object Flattener: Transformer {
             val wirePairs: WirePairs,
         )
 
-        fun inlinedIdentifier(invocationIdentifier: String, nodeIdentifier: String) = "INLINED$$invocationIdentifier$$nodeIdentifier"
+        fun inlinedIdentifier(invocationIdentifier: String, nodeName: String) = "INLINED$$invocationIdentifier$$nodeName"
 
         fun rootModules(): List<Module> {
             val couldBeRoot = original.associate { it.invocation to true }.toMutableMap()
@@ -69,7 +69,7 @@ object Flattener: Transformer {
 
         fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
             val node = PassThroughNode(
-                identifier = inlinedIdentifier(invocationIdentifier, inputNode.identifier),
+                identifier = inlinedIdentifier(invocationIdentifier, inputNode.name()),
                 parentModule = newParent,
                 inputWireVectorGroupsBuilder = { parentNode ->
                     inputNode.outputWireVectorGroups.map {
@@ -90,7 +90,7 @@ object Flattener: Transformer {
 
         fun copyOutputNodeToPassThroughNode(outputNode: OutputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
             val node = PassThroughNode(
-                identifier = inlinedIdentifier(invocationIdentifier, outputNode.identifier),
+                identifier = inlinedIdentifier(invocationIdentifier, outputNode.name()),
                 parentModule = newParent,
                 inputWireVectorGroupsBuilder = { parentNode ->
                     outputNode.inputWireVectorGroups.map {
@@ -115,7 +115,7 @@ object Flattener: Transformer {
                 is ModuleInvocationNode -> throw Exception("This is a bug in the compiler. Module invocation nodes should have been inlined")
                 is PassThroughNode -> {
                     val node = PassThroughNode(
-                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.identifier),
+                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.name()),
                         parentModule = newParent,
                         inputWireVectorGroupsBuilder = { parentNode ->
                             bodyNode.inputWireVectorGroups.map {
@@ -135,7 +135,7 @@ object Flattener: Transformer {
                 }
                 is PredefinedFunctionNode -> {
                     val node = PredefinedFunctionNode(
-                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.identifier),
+                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.name()),
                         parentModule = newParent,
                         inputWireVectorGroupsBuilder = { parentNode ->
                             bodyNode.inputWireVectorGroups.map {
@@ -158,7 +158,7 @@ object Flattener: Transformer {
         }
 
         fun inlineModuleInvocation(node: ModuleInvocationNode) {
-            val invocationIdentifier = node.identifier
+            val invocationIdentifier = node.name()
             val currentModule = node.parentModule
             val inliningModule = flattenModule(modules[node.invocation]!!)
 
@@ -168,13 +168,13 @@ object Flattener: Transformer {
             val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
                 val createdNode = copyInputNodeToPassThroughNode(inputNode, invocationIdentifier, currentModule)
                 wirePairs += createdNode.wirePairs
-                inputNode.identifier to createdNode.node
+                inputNode.name() to createdNode.node
             }
 
             val outputNodes = inliningModule.getOutputNodes().associate { outputNode ->
                 val createdNode = copyOutputNodeToPassThroughNode(outputNode, invocationIdentifier, currentModule)
                 wirePairs += createdNode.wirePairs
-                outputNode.identifier to createdNode.node
+                outputNode.name() to createdNode.node
             }
 
             // STEP 1b: Disconnect the ModuleInvocationNode and connect the new PassThroughNodes for each IO Node
@@ -185,7 +185,7 @@ object Flattener: Transformer {
                 val newNodeGroup = inputNodes[variableName]!!.inputWireVectorGroups.first()
 
                 currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
-                    val currentWireSource = currentModule.getConnectionForInputWire(currentWire).outputWire
+                    val currentWireSource = currentModule.getConnectionForInputWire(currentWire).source
                     currentModule.disconnect(currentWire)
                     currentModule.connect(newWire, currentWireSource)
                 }
@@ -200,8 +200,8 @@ object Flattener: Transformer {
                     val currentWireConnections = currentModule.getConnectionsForOutputWire(currentWire)
 
                     currentWireConnections.forEach { connection ->
-                        currentModule.disconnect(connection.inputWire)
-                        currentModule.connect(connection.inputWire, newWire)
+                        currentModule.disconnect(connection.sink)
+                        currentModule.connect(connection.sink, newWire)
                     }
                 }
             }
@@ -220,7 +220,7 @@ object Flattener: Transformer {
             (bodyNodes + outputNodes.values).forEach { node ->
                 node.inputWires().forEach { inputWire ->
                     val correspondingOfCurrentInput = inliningInput[inputWire]!!
-                    val sourceOfCorresponding = inliningModule.getConnectionForInputWire(correspondingOfCurrentInput).outputWire
+                    val sourceOfCorresponding = inliningModule.getConnectionForInputWire(correspondingOfCurrentInput).source
                     val correspondingOfSource = currentOutput[sourceOfCorresponding]!!
                     currentModule.connect(inputWire, correspondingOfSource)
                 }

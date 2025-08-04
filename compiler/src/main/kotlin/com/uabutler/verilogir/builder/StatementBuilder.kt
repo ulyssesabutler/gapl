@@ -64,61 +64,30 @@ object StatementBuilder {
     private fun getVerilogConnectionsForWireVector(wireVector: InputWireVector): List<VerilogConnection> = buildList {
         val module = wireVector.parentGroup.parentNode.parentModule
 
-        data class Connection(
-            val source: OutputWireVector,
-            val sourceIndex: Int,
-            val destination: InputWireVector,
-            val destinationIndex: Int,
-        ) {
-            constructor(precomputed: Module.Connection) : this(
-                source = precomputed.outputWire.parentWireVector,
-                sourceIndex = precomputed.outputWire.index,
-                destination = precomputed.inputWire.parentWireVector,
-                destinationIndex = precomputed.inputWire.index
-            )
+        var previousConnection = module.getConnectionForInputWire(wireVector.wires.first())
 
-            constructor(wire: InputWire) : this(
-                precomputed = module.getConnectionForInputWire(wire)
-            )
-
-            override fun toString() = buildString {
-                fun component(wire: WireVector<*>, index: Int) = buildString {
-                    append(Identifier.wire(wire).padEnd(25, ' '))
-                    append("[")
-                    append(index.toString().padStart(3, ' '))
-                    append("]")
-                }
-
-                append(component(source, sourceIndex))
-                append(" -> ")
-                append(component(destination, destinationIndex))
-            }
-        }
-
-        var previousConnection = Connection(wireVector.wires.first())
-
-        var currentSourceStartIndex = previousConnection.sourceIndex
-        var currentDestinationStartIndex = previousConnection.destinationIndex // Always 0
+        var currentSourceStartIndex = previousConnection.source.index
+        var currentDestinationStartIndex = previousConnection.sink.index // Always 0
 
         fun addPrevious() {
             val connection = VerilogConnection(
-                source = previousConnection.source,
-                sourceRange = currentSourceStartIndex..previousConnection.sourceIndex,
-                destination = previousConnection.destination,
-                destinationRange = currentDestinationStartIndex..previousConnection.destinationIndex,
+                source = previousConnection.source.parentWireVector,
+                sourceRange = currentSourceStartIndex..previousConnection.source.index,
+                destination = previousConnection.sink.parentWireVector,
+                destinationRange = currentDestinationStartIndex..previousConnection.sink.index,
             )
 
             add(connection)
         }
 
         wireVector.wires.drop(1).forEach { wire ->
-            val currentConnection = Connection(wire)
+            val currentConnection = module.getConnectionForInputWire(wire)
 
-            if (currentConnection.source != previousConnection.source || currentConnection.sourceIndex != previousConnection.sourceIndex + 1) {
+            if (currentConnection.source != previousConnection.source || currentConnection.source.index != previousConnection.source.index + 1) {
                 addPrevious()
 
-                currentSourceStartIndex = currentConnection.sourceIndex
-                currentDestinationStartIndex = currentConnection.destinationIndex
+                currentSourceStartIndex = currentConnection.source.index
+                currentDestinationStartIndex = currentConnection.sink.index
             }
 
             previousConnection = currentConnection

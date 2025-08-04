@@ -3,7 +3,6 @@ package com.uabutler.netlistir.netlist
 import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.util.ObjectUtils
-import com.uabutler.util.Named
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
 class Module(
@@ -25,9 +24,24 @@ class Module(
     )
 
     data class Connection(
-        val outputWire: OutputWire,
-        val inputWire: InputWire,
-    )
+        val source: OutputWire,
+        val sink: InputWire,
+    ) {
+        override fun toString() = buildString {
+            fun component(wire: Wire, index: Int) = buildString {
+                append(Identifier.wire(wire.parentWireVector).padEnd(25, ' '))
+                append("[")
+                append(index.toString().padStart(3, ' '))
+                append("]")
+            }
+
+            append(component(source, source.index))
+            append(" -> ")
+            append(component(sink, sink.index))
+        }
+    }
+
+    fun identifier() = Identifier.module(invocation)
 
     // Nodes and Connections
     private val inputNodes = mutableMapOf<String, InputNode>()
@@ -59,9 +73,9 @@ class Module(
     fun getConnectionsForNode(node: Node) = getConnectionsForNodeInput(node) + getConnectionsForNodeOutput(node)
 
     // Setters
-    fun addInputNode(node: InputNode) { inputNodes[node.identifier] = node }
-    fun addOutputNode(node: OutputNode) { outputNodes[node.identifier] = node }
-    fun addBodyNode(node: BodyNode) { bodyNodes[node.identifier] = node }
+    fun addInputNode(node: InputNode) { inputNodes[node.name()] = node }
+    fun addOutputNode(node: OutputNode) { outputNodes[node.name()] = node }
+    fun addBodyNode(node: BodyNode) { bodyNodes[node.name()] = node }
 
     fun removeNode(node: Node) {
         // Validation: The node must be disconnected
@@ -72,9 +86,9 @@ class Module(
         }
 
         when (node) {
-            is InputNode -> inputNodes.remove(node.identifier)
-            is OutputNode -> outputNodes.remove(node.identifier)
-            is BodyNode -> bodyNodes.remove(node.identifier)
+            is InputNode -> inputNodes.remove(node.name())
+            is OutputNode -> outputNodes.remove(node.name())
+            is BodyNode -> bodyNodes.remove(node.name())
         }
     }
 
@@ -97,7 +111,7 @@ class Module(
         val connection = getConnectionForInputWire(inputWire)
         connections.remove(connection)
         connectionByInput.remove(inputWire)
-        connectionsByOutput[connection.outputWire] = connectionsByOutput[connection.outputWire]!! - connection
+        connectionsByOutput[connection.source] = connectionsByOutput[connection.source]!! - connection
     }
 
     //
