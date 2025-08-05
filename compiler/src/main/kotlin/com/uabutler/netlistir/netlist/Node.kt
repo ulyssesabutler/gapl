@@ -86,3 +86,17 @@ class PassThroughNode(
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
 ): BodyNode(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
+
+class TransformerNode(
+    identifier: String,
+    parentModule: Module,
+    // TODO: We need some way to represent the interface that will be the same on both sides
+    //   For now, the user is just going to pinky promise they're the same
+    externalIngressWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
+    internalIngressWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
+    externalEgressWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
+    internalEgressWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
+): BodyNode(identifier, parentModule, externalIngressWireVectorGroupsBuilder, externalEgressWireVectorGroupsBuilder) {
+    val internalIngressWireVectorGroups: List<OutputWireVectorGroup> = internalIngressWireVectorGroupsBuilder(this)
+    val internalEgressWireVectorGroups: List<InputWireVectorGroup> = internalEgressWireVectorGroupsBuilder(this)
+}

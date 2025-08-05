@@ -1,11 +1,8 @@
 package com.uabutler.ast.visitor
 
+import com.sun.xml.internal.bind.v2.TODO
 import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.functions.*
-import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.SignalInterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.StreamInterfaceTypeNode
 import com.uabutler.parsers.generated.GAPLParser
 
 object FunctionVisitor: GAPLVisitor() {
@@ -33,7 +30,6 @@ object FunctionVisitor: GAPLVisitor() {
 
     override fun visitAbstractFunctionIO(ctx: GAPLParser.AbstractFunctionIOContext): AbstractFunctionIONode {
         return AbstractFunctionIONode(
-            interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
             interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
         )
     }
@@ -57,7 +53,6 @@ object FunctionVisitor: GAPLVisitor() {
     override fun visitFunctionIO(ctx: GAPLParser.FunctionIOContext): FunctionIONode {
         return FunctionIONode(
             identifier = TokenVisitor.visitId(ctx.Id()),
-            interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
             interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
         )
     }
@@ -75,6 +70,26 @@ object FunctionVisitor: GAPLVisitor() {
     override fun visitNonEmptyFunctionIOList(ctx: GAPLParser.NonEmptyFunctionIOListContext): NonEmptyFunctionIOListNode {
         return NonEmptyFunctionIOListNode(
             ctx.functionIO().map { visitFunctionIO(it) }
+        )
+    }
+
+    fun visitFunctionExpression(ctx: GAPLParser.FunctionExpressionContext): FunctionExpressionNode {
+        return when (ctx) {
+            is GAPLParser.FunctionExpressionInstantiationContext -> visitFunctionExpressionInstantiation(ctx)
+            is GAPLParser.FunctionExpressionReferenceContext -> visitFunctionExpressionReference(ctx)
+            else -> throw Exception("Unknown function expression type")
+        }
+    }
+
+    override fun visitFunctionExpressionInstantiation(ctx: GAPLParser.FunctionExpressionInstantiationContext): FunctionExpressionInstantiationNode {
+        return FunctionExpressionInstantiationNode(
+            instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
+        )
+    }
+
+    override fun visitFunctionExpressionReference(ctx: GAPLParser.FunctionExpressionReferenceContext): FunctionExpressionReferenceNode {
+        return FunctionExpressionReferenceNode(
+            identifier = TokenVisitor.visitId(ctx.Id())
         )
     }
 

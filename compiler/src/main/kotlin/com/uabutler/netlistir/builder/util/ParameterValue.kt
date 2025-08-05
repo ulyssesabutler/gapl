@@ -1,9 +1,10 @@
 package com.uabutler.netlistir.builder.util
 
-import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
-import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
+import com.uabutler.ast.node.FunctionExpressionParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
+import com.uabutler.ast.node.functions.FunctionExpressionInstantiationNode
+import com.uabutler.ast.node.functions.FunctionExpressionReferenceNode
 import com.uabutler.netlistir.netlist.Module
 
 
@@ -29,18 +30,21 @@ sealed interface ParameterValue<T> {
                     )
                 }
 
-                is FunctionInstantiationGenericParameterValueNode -> {
-                    FunctionInstantiationParameterValue(
-                        programContext.buildModuleInvocationDataWithContext(
-                            node = node.instantiation,
-                            interfaceValuesContext = interfaceValuesContext,
-                            parameterValuesContext = parameterValuesContext,
-                        )
-                    )
-                }
-
-                is FunctionReferenceGenericParameterValueNode -> {
-                    parameterValuesContext[node.functionIdentifier.value]!!
+                is FunctionExpressionParameterValueNode -> {
+                    when (node.functionExpression) {
+                        is FunctionExpressionInstantiationNode -> {
+                            FunctionInstantiationParameterValue(
+                                programContext.buildModuleInvocationDataWithContext(
+                                    node = node.functionExpression.instantiation,
+                                    interfaceValuesContext = interfaceValuesContext,
+                                    parameterValuesContext = parameterValuesContext,
+                                )
+                            )
+                        }
+                        is FunctionExpressionReferenceNode -> {
+                            parameterValuesContext[node.functionExpression.identifier.value]!!
+                        }
+                    }
                 }
             }
         }

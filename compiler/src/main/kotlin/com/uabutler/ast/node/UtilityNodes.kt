@@ -1,6 +1,7 @@
 package com.uabutler.ast.node
 
 import com.uabutler.ast.node.functions.AbstractFunctionIONode
+import com.uabutler.ast.node.functions.FunctionExpressionNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 
@@ -34,12 +35,8 @@ data class StaticExpressionGenericParameterValueNode(
     val value: StaticExpressionNode,
 ): GenericParameterValueNode
 
-data class FunctionInstantiationGenericParameterValueNode(
-    val instantiation: InstantiationNode,
-): GenericParameterValueNode
-
-data class FunctionReferenceGenericParameterValueNode(
-    val functionIdentifier: IdentifierNode,
+data class FunctionExpressionParameterValueNode(
+    val functionExpression: FunctionExpressionNode,
 ): GenericParameterValueNode
 
 data class GenericInterfaceValueListNode(val interfaces: List<GenericInterfaceValueNode>): TemporaryNode
@@ -59,3 +56,9 @@ data class FunctionGenericParameterTypeNode(
 data class VectorBoundsNode(
     val boundSpecifier: StaticExpressionNode,
 ): PersistentNode
+
+sealed interface TransformerModeNode: PersistentNode
+
+data object InTransformerModeNode: TransformerModeNode
+data object OutTransformerModeNode: TransformerModeNode
+data object InOutTransformerModeNode: TransformerModeNode

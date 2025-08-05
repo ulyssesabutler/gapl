@@ -81,8 +81,7 @@ object UtilityVisitor: GAPLVisitor() {
     fun visitGenericParameterValue(ctx: GAPLParser.GenericParameterValueContext): GenericParameterValueNode {
         return when (ctx) {
             is GAPLParser.StaticExpressionGenericParameterValueContext -> visitStaticExpressionGenericParameterValue(ctx)
-            is GAPLParser.FunctionInstantiationGenericParameterValueContext -> visitFunctionInstantiationGenericParameterValue(ctx)
-            is GAPLParser.FunctionReferenceGenericParamterValueContext -> visitFunctionReferenceGenericParamterValue(ctx)
+            is GAPLParser.FunctionExpressionParameterValueContext -> TODO()
             else -> throw Exception("Unexpected generic parameter value")
         }
     }
@@ -93,16 +92,19 @@ object UtilityVisitor: GAPLVisitor() {
         )
     }
 
-    override fun visitFunctionInstantiationGenericParameterValue(ctx: GAPLParser.FunctionInstantiationGenericParameterValueContext): FunctionInstantiationGenericParameterValueNode {
-        return FunctionInstantiationGenericParameterValueNode(
-            instantiation = visitInstantiation(ctx.instantiation())
+    override fun visitFunctionExpressionParameterValue(ctx: GAPLParser.FunctionExpressionParameterValueContext): FunctionExpressionParameterValueNode {
+        return FunctionExpressionParameterValueNode(
+            functionExpression = FunctionVisitor.visitFunctionExpression(ctx.functionExpression())
         )
     }
 
-    override fun visitFunctionReferenceGenericParamterValue(ctx: GAPLParser.FunctionReferenceGenericParamterValueContext): FunctionReferenceGenericParameterValueNode {
-        return FunctionReferenceGenericParameterValueNode(
-            functionIdentifier = TokenVisitor.visitId(ctx.Id()),
-        )
+    fun visitTransformerMode(ctx: GAPLParser.TransfomerModeContext): TransformerModeNode {
+        return when (ctx) {
+            is GAPLParser.InTransformerModeContext -> InTransformerModeNode
+            is GAPLParser.OutTransformerModeContext -> OutTransformerModeNode
+            is GAPLParser.InOutTransformerModeContext -> InOutTransformerModeNode
+            else -> throw Exception("Unexpected transformer mode")
+        }
     }
 
 }

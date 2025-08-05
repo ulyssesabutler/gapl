@@ -1,10 +1,8 @@
 package com.uabutler.ast.node.functions.circuits
 
 import com.uabutler.ast.node.IdentifierNode
-import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.PersistentNode
-import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
-import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
+import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 
 sealed interface CircuitExpressionNode: PersistentNode
 
@@ -18,45 +16,17 @@ data class CircuitGroupExpressionNode(
 
 sealed interface CircuitNodeExpressionNode: PersistentNode
 
-data class DeclaredInterfaceCircuitExpressionNode(
-    val identifier: IdentifierNode,
-    val interfaceType: InterfaceTypeNode,
-    val type: InterfaceExpressionNode,
+data class CircuitNodeCreationExpressionNode(
+    val identifier: IdentifierNode?,
+    val interior: CircuitNodeInteriorNode,
 ): CircuitNodeExpressionNode
 
-data class DeclaredFunctionCircuitExpressionNode(
-    val identifier: IdentifierNode,
-    val instantiation: InstantiationNode,
-): CircuitNodeExpressionNode
-
-data class DeclaredGenericFunctionCircuitExpressionNode(
-    val identifier: IdentifierNode,
-    val functionIdentifier: IdentifierNode,
-): CircuitNodeExpressionNode
-
-data class AnonymousFunctionCircuitExpressionNode(
-    val instantiation: InstantiationNode,
-): CircuitNodeExpressionNode
-
-data class AnonymousGenericFunctionCircuitExpressionNode(
-    val functionIdentifier: IdentifierNode,
-): CircuitNodeExpressionNode
-
-data class ReferenceCircuitExpressionNode(
+data class CircuitNodeReferenceExpressionNode(
     val identifier: IdentifierNode,
     val singleAccesses: List<SingleAccessOperationNode>,
     val multipleAccess: MultipleAccessOperationNode?,
 ): CircuitNodeExpressionNode
 
-data class ProtocolAccessorCircuitExpressionNode(
-    val identifier: IdentifierNode,
-    val memberIdentifier: IdentifierNode,
-): CircuitNodeExpressionNode
-
-data class RecordInterfaceConstructorExpressionNode(
-    val statements: List<CircuitStatementNode>,
-): CircuitNodeExpressionNode
-
-data class CircuitExpressionNodeCircuitExpression(
-    val expression: CircuitExpressionNode,
+data class CircuitNodeLiteralExpressionNode(
+    val literal: StaticExpressionNode,
 ): CircuitNodeExpressionNode

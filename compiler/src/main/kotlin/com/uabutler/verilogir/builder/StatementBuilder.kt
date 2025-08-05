@@ -32,9 +32,10 @@ object StatementBuilder {
         return when (node) {
             is InputNode -> emptyList() // Implicitly created
             is OutputNode -> emptyList() // Implicitly created
-            is ModuleInvocationNode -> ModuleInvocationNodeCreator.create(node)
-            is PassThroughNode -> PassThroughNodeCreator.create(node)
+            //is ModuleInvocationNode -> ModuleInvocationNodeCreator.create(node)
+            //is PassThroughNode -> PassThroughNodeCreator.create(node)
             is PredefinedFunctionNode -> PredefinedFunctionNodeCreator.create(node)
+            else -> error("Node of type ${node::class.simpleName} unsupported. Should be removed via optimization passes")
         }
     }
 

@@ -12,6 +12,7 @@ import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.netlist.TransformerNode
 import com.uabutler.netlistir.netlist.Wire
 
 object Flattener: Transformer {
@@ -148,6 +149,36 @@ object Flattener: Transformer {
                             }
                         },
                         predefinedFunction = bodyNode.predefinedFunction,
+                    ).also { newParent.addBodyNode(it) }
+
+                    val wirePairs = createWirePairs(node, bodyNode)
+
+                    CreatedNode(node, wirePairs)
+                }
+                is TransformerNode -> {
+                    val node = TransformerNode(
+                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.name()),
+                        parentModule = newParent,
+                        externalIngressWireVectorGroupsBuilder = { parentNode ->
+                            bodyNode.inputWireVectorGroups.map {
+                                InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                            }
+                        },
+                        internalIngressWireVectorGroupsBuilder = { parentNode ->
+                            bodyNode.internalIngressWireVectorGroups.map {
+                                OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                            }
+                        },
+                        externalEgressWireVectorGroupsBuilder = { parentNode ->
+                            bodyNode.outputWireVectorGroups.map {
+                                OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                            }
+                        },
+                        internalEgressWireVectorGroupsBuilder = { parentNode ->
+                            bodyNode.internalEgressWireVectorGroups.map {
+                                InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                            }
+                        },
                     ).also { newParent.addBodyNode(it) }
 
                     val wirePairs = createWirePairs(node, bodyNode)

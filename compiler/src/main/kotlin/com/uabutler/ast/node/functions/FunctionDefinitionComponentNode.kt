@@ -3,17 +3,14 @@ package com.uabutler.ast.node.functions
 import com.uabutler.ast.node.IdentifierNode
 import com.uabutler.ast.node.PersistentNode
 import com.uabutler.ast.node.TemporaryNode
-import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 
 data class AbstractFunctionIONode(
-    val interfaceType: InterfaceTypeNode,
     val interfaceExpression: InterfaceExpressionNode,
 ): PersistentNode
 
 data class FunctionIONode(
     val identifier: IdentifierNode,
-    val interfaceType: InterfaceTypeNode,
     val interfaceExpression: InterfaceExpressionNode,
 ): PersistentNode
 

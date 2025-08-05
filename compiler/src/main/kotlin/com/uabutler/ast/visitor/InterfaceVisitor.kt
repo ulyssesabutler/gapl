@@ -2,10 +2,6 @@ package com.uabutler.ast.visitor
 
 import com.uabutler.ast.node.interfaces.*
 import com.uabutler.ast.node.VectorBoundsNode
-import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.SignalInterfaceTypeNode
-import com.uabutler.ast.node.functions.interfaces.StreamInterfaceTypeNode
 import com.uabutler.parsers.generated.GAPLParser
 
 object InterfaceVisitor: GAPLVisitor() {
@@ -89,12 +85,6 @@ object InterfaceVisitor: GAPLVisitor() {
             identifier = TokenVisitor.visitId(ctx.Id()),
             type = visitInterfaceExpression(ctx.interfaceExpression()),
         )
-    }
-
-    override fun visitInterfaceType(ctx: GAPLParser.InterfaceTypeContext): InterfaceTypeNode {
-        return if (ctx.Stream() != null) StreamInterfaceTypeNode()
-        else if (ctx.Signal() != null) SignalInterfaceTypeNode()
-        else DefaultInterfaceTypeNode()
     }
 
 }

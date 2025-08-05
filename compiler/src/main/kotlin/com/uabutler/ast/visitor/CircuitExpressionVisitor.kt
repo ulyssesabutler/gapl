@@ -1,6 +1,5 @@
 package com.uabutler.ast.visitor
 
-import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.parsers.generated.GAPLParser
 
@@ -24,75 +23,29 @@ object CircuitExpressionVisitor: GAPLVisitor() {
 
     fun visitCircuitNodeExpression(ctx: GAPLParser.CircuitNodeExpressionContext): CircuitNodeExpressionNode {
         return when (ctx) {
-            is GAPLParser.DeclaredInterfaceCircuitExpressionContext -> visitDeclaredInterfaceCircuitExpression(ctx)
-            is GAPLParser.DeclaredFunctionCircuitExpressionContext -> visitDeclaredFunctionCircuitExpression(ctx)
-            is GAPLParser.DeclaredGenericFunctionCircuitExpressionContext -> visitDeclaredGenericFunctionCircuitExpression(ctx)
-            is GAPLParser.AnonymousFunctionCircuitExpressionContext -> visitAnonymousFunctionCircuitExpression(ctx)
-            is GAPLParser.AnonymousGenericFunctionCircuitExpressionContext -> visitAnonymousGenericFunctionCircuitExpression(ctx)
-            is GAPLParser.ReferenceCircuitExpressionContext -> visitReferenceCircuitExpression(ctx)
-            is GAPLParser.ProtocolAccessorCircuitExpressionContext -> visitProtocolAccessorCircuitExpression(ctx)
-            is GAPLParser.ParanCircuitExpressionContext -> visitParanCircuitExpression(ctx)
-            is GAPLParser.RecordInterfaceConstructorCircuitExpressionContext -> visitRecordInterfaceConstructorCircuitExpression(ctx)
+            is GAPLParser.CircuitNodeCreationExpressionContext -> visitCircuitNodeCreationExpression(ctx)
             else -> throw Exception("Unrecognized circuit expression")
         }
     }
 
-    override fun visitDeclaredInterfaceCircuitExpression(ctx: GAPLParser.DeclaredInterfaceCircuitExpressionContext): DeclaredInterfaceCircuitExpressionNode {
-         return DeclaredInterfaceCircuitExpressionNode(
-             identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
-             interfaceType = InterfaceVisitor.visitInterfaceType(ctx.interfaceType()),
-             type = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
+    override fun visitCircuitNodeCreationExpression(ctx: GAPLParser.CircuitNodeCreationExpressionContext): CircuitNodeCreationExpressionNode {
+        return CircuitNodeCreationExpressionNode(
+            identifier = ctx.nodeIdentifier?.let { TokenVisitor.visitId(it) },
+            interior = visitCircuitNodeInterior(ctx.circuitNodeInterior()),
         )
     }
 
-    override fun visitDeclaredFunctionCircuitExpression(ctx: GAPLParser.DeclaredFunctionCircuitExpressionContext): DeclaredFunctionCircuitExpressionNode {
-        return DeclaredFunctionCircuitExpressionNode(
+    override fun visitCircuitNodeReferenceExpression(ctx: GAPLParser.CircuitNodeReferenceExpressionContext): CircuitNodeReferenceExpressionNode {
+        return CircuitNodeReferenceExpressionNode(
             identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
-            instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
-        )
-    }
-
-    override fun visitDeclaredGenericFunctionCircuitExpression(ctx: GAPLParser.DeclaredGenericFunctionCircuitExpressionContext): DeclaredGenericFunctionCircuitExpressionNode {
-        return DeclaredGenericFunctionCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
-            functionIdentifier = TokenVisitor.visitId(ctx.functionIdentifier),
-        )
-    }
-
-    override fun visitAnonymousFunctionCircuitExpression(ctx: GAPLParser.AnonymousFunctionCircuitExpressionContext): AnonymousFunctionCircuitExpressionNode {
-        return AnonymousFunctionCircuitExpressionNode(
-            instantiation = UtilityVisitor.visitInstantiation(ctx.instantiation()),
-        )
-    }
-
-    override fun visitAnonymousGenericFunctionCircuitExpression(ctx: GAPLParser.AnonymousGenericFunctionCircuitExpressionContext): AnonymousGenericFunctionCircuitExpressionNode {
-        return AnonymousGenericFunctionCircuitExpressionNode(
-            functionIdentifier = TokenVisitor.visitId(ctx.functionIdentifier),
-        )
-    }
-
-    override fun visitReferenceCircuitExpression(ctx: GAPLParser.ReferenceCircuitExpressionContext): ReferenceCircuitExpressionNode {
-        return ReferenceCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.Id()),
             singleAccesses = ctx.singleAccessOperation().map { visitSingleAccessOperation(it) },
-            multipleAccess = ctx.multipleArrayAccessOperation()?.let { visitMultipleArrayAccessOperation(it) },
+            multipleAccess = ctx.multipleArrayAccessOperation()?.let { visitMultipleArrayAccessOperation(it) }
         )
     }
 
-    override fun visitProtocolAccessorCircuitExpression(ctx: GAPLParser.ProtocolAccessorCircuitExpressionContext): ProtocolAccessorCircuitExpressionNode {
-        return ProtocolAccessorCircuitExpressionNode(
-            identifier = TokenVisitor.visitId(ctx.nodeIdentifier),
-            memberIdentifier = TokenVisitor.visitId(ctx.protocolIdentifier)
-        )
-    }
-
-    override fun visitParanCircuitExpression(ctx: GAPLParser.ParanCircuitExpressionContext): CircuitExpressionNodeCircuitExpression {
-        return CircuitExpressionNodeCircuitExpression(visitCircuitExpression(ctx.circuitExpression()))
-    }
-
-    override fun visitRecordInterfaceConstructorCircuitExpression(ctx: GAPLParser.RecordInterfaceConstructorCircuitExpressionContext): RecordInterfaceConstructorExpressionNode {
-        return RecordInterfaceConstructorExpressionNode(
-            statements = ctx.circuitStatement().map { CircuitStatementVisitor.visitCircuitStatement(it) }
+    override fun visitCircuitNodeLiteralExpression(ctx: GAPLParser.CircuitNodeLiteralExpressionContext): CircuitNodeLiteralExpressionNode {
+        return CircuitNodeLiteralExpressionNode(
+            literal = StaticExpressionVisitor.visitStaticExpression(ctx.staticExpression())
         )
     }
 
@@ -116,6 +69,69 @@ object CircuitExpressionVisitor: GAPLVisitor() {
         return MultipleAccessOperationNode(
             startIndex = StaticExpressionVisitor.visitStaticExpression(ctx.startIndex!!),
             endIndex = StaticExpressionVisitor.visitStaticExpression(ctx.endIndex!!),
+        )
+    }
+
+    fun visitCircuitNodeInterior(ctx: GAPLParser.CircuitNodeInteriorContext): CircuitNodeInteriorNode {
+        return when (ctx) {
+            is GAPLParser.CircuitNodeFunctionInteriorContext -> visitCircuitNodeFunctionInterior(ctx)
+            is GAPLParser.CircuitNodeInterfaceInteriorContext -> visitCircuitNodeInterfaceInterior(ctx)
+            is GAPLParser.CircuitNodeInterfaceTransformerInteriorContext -> visitCircuitNodeInterfaceTransformerInterior(ctx)
+            else -> throw Exception("Unrecognized circuit node interior")
+        }
+    }
+
+    override fun visitCircuitNodeFunctionInterior(ctx: GAPLParser.CircuitNodeFunctionInteriorContext): CircuitNodeFunctionInteriorNode {
+        return CircuitNodeFunctionInteriorNode(
+            function = FunctionVisitor.visitFunctionExpression(ctx.functionExpression())
+        )
+    }
+
+    override fun visitCircuitNodeInterfaceInterior(ctx: GAPLParser.CircuitNodeInterfaceInteriorContext): CircuitNodeInterfaceInteriorNode {
+        return CircuitNodeInterfaceInteriorNode(
+            interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression())
+        )
+    }
+
+    override fun visitCircuitNodeInterfaceTransformerInterior(ctx: GAPLParser.CircuitNodeInterfaceTransformerInteriorContext): CircuitNodeInterfaceTransformerInteriorNode {
+        return CircuitNodeInterfaceTransformerInteriorNode(
+            interfaceExpression = InterfaceVisitor.visitInterfaceExpression(ctx.interfaceExpression()),
+            interfaceTransformer = visitCircuitNodeInterfaceTransformer(ctx.circuitNodeInterfaceTransformer()),
+            mode = UtilityVisitor.visitTransformerMode(ctx.transfomerMode()),
+        )
+    }
+
+    fun visitCircuitNodeInterfaceTransformer(ctx: GAPLParser.CircuitNodeInterfaceTransformerContext): CircuitNodeInterfaceTransformerNode {
+        return when (ctx) {
+            is GAPLParser.CircuitNodeInterfaceRecordTransformerContext -> visitCircuitNodeInterfaceRecordTransformer(ctx)
+            is GAPLParser.CircuitNodeInterfaceListTransformerContext -> visitCircuitNodeInterfaceListTransformer(ctx)
+            else -> throw Exception("Unrecognized interface transformer")
+        }
+    }
+
+    override fun visitCircuitNodeInterfaceRecordTransformer(ctx: GAPLParser.CircuitNodeInterfaceRecordTransformerContext): CircuitNodeInterfaceRecordTransformerNode {
+        return CircuitNodeInterfaceRecordTransformerNode(
+            expressions = ctx.circuitNodeRecordTransformerExpression().map { visitCircuitNodeRecordTransformerExpression(it) }
+        )
+    }
+
+    override fun visitCircuitNodeInterfaceListTransformer(ctx: GAPLParser.CircuitNodeInterfaceListTransformerContext): CircuitNodeInterfaceListTransformerNode {
+        return CircuitNodeInterfaceListTransformerNode(
+            expressions = ctx.circuitNodeListTransformerExpression().map { visitCircuitNodeListTransformerExpression(it) }
+        )
+    }
+
+    override fun visitCircuitNodeRecordTransformerExpression(ctx: GAPLParser.CircuitNodeRecordTransformerExpressionContext): CircuitNodeRecordTransformerExpressionNode {
+        return CircuitNodeRecordTransformerExpressionNode(
+            port = TokenVisitor.visitId(ctx.portIdentifier),
+            expression = visitCircuitExpression(ctx.circuitExpression()),
+        )
+    }
+
+    override fun visitCircuitNodeListTransformerExpression(ctx: GAPLParser.CircuitNodeListTransformerExpressionContext): CircuitNodeListTransformerExpressionNode {
+        return CircuitNodeListTransformerExpressionNode(
+            index = StaticExpressionVisitor.visitStaticExpression(ctx.staticExpression()),
+            expression = visitCircuitExpression(ctx.circuitExpression()),
         )
     }
 

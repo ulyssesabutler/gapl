@@ -2,7 +2,6 @@ package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.netlistir.netlist.Module
-import com.uabutler.util.InterfaceType
 
 class ModuleInstantiationTracker(
     private val functionNodes: Map<String, FunctionDefinitionNode>,
@@ -38,7 +37,7 @@ class ModuleInstantiationTracker(
 
         val astNode = try {
             functionNodes[instantiationData.gaplFunctionName]!!
-        } catch (e: NullPointerException) {
+        } catch (_: NullPointerException) {
             throw Exception("Unable to locate function: ${instantiationData.gaplFunctionName}")
         }
 
@@ -52,7 +51,6 @@ class ModuleInstantiationTracker(
             InterfaceDescription(
                 name = it.identifier.value,
                 interfaceStructure = programContext.buildInterfaceWithContext(it.interfaceExpression, interfaceValues, parameterValues),
-                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
             )
         }
 
@@ -60,7 +58,6 @@ class ModuleInstantiationTracker(
             InterfaceDescription(
                 name = it.identifier.value,
                 interfaceStructure = programContext.buildInterfaceWithContext(it.interfaceExpression, interfaceValues, parameterValues),
-                interfaceType = InterfaceType.fromInterfaceTypeNode(it.interfaceType)
             )
         }
 

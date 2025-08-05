@@ -17,6 +17,9 @@ Else: 'else';
 Null: 'null';
 True: 'true';
 False: 'false';
+In: 'in';
+Out: 'out';
+Inout: 'inout';
 
 // Punctuation
 ParanL: '(';
@@ -96,11 +99,21 @@ genericParameterValueList: (genericParameterValue Comma)* genericParameterValue?
 
 genericParameterValue:
       staticExpression #staticExpressionGenericParameterValue
-    | Function instantiation #functionInstantiationGenericParameterValue
-    | Function functionIdentifier=Id #functionReferenceGenericParamterValue
+    | functionExpression #functionExpressionParameterValue
 ;
 
 instantiation: Id (AngleL genericInterfaceValueList AngleR)? ParanL genericParameterValueList ParanR;
+
+functionExpression:
+      Function instantiation #functionExpressionInstantiation
+    | Function functionIdentifier=Id #functionExpressionReference
+;
+
+transfomerMode:
+      In #inTransformerMode // TODO: In is a bit special since it requires an expression for each item.
+    | Out #outTransformerMode
+    | Inout #inOutTransformerMode
+;
 
 /* INTERFACES */
 
@@ -159,11 +172,9 @@ functionIOList:
     | functionIO (Comma functionIO)* Comma? #nonEmptyFunctionIOList
 ;
 
-abstractFunctionIO: interfaceType interfaceExpression;
+abstractFunctionIO: interfaceExpression;
 
-functionIO: interfaceType Id Colon interfaceExpression;
-
-interfaceType: (Stream | Signal)?;
+functionIO: Id Colon interfaceExpression;
 
 // Circuit Statement
 circuitStatement:
@@ -184,19 +195,25 @@ circuitConnectorExpression: circuitGroupExpression (Connector circuitGroupExpres
 
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
-// TODO: We should break this up a bit. Perhaps, split declared off into its own rule. Ditto with function keyword
-// TODO: Add a static expression for literals (instead of using literal function)
+circuitNodeRecordTransformerExpression: portIdentifier=Id Colon circuitExpression SemiColon;
+circuitNodeListTransformerExpression: index=staticExpression Colon circuitExpression SemiColon;
+
+circuitNodeInterfaceTransformer:
+      CurlyL circuitNodeRecordTransformerExpression* CurlyR #circuitNodeInterfaceRecordTransformer
+    | SquareL circuitNodeListTransformerExpression* Comma? SquareR #circuitNodeInterfaceListTransformer
+;
+
+circuitNodeInterior:
+      functionExpression #circuitNodeFunctionInterior
+    | interfaceExpression #circuitNodeInterfaceInterior
+    | circuitNodeInterfaceTransformer Colon transfomerMode interfaceExpression #circuitNodeInterfaceTransformerInterior
+;
+
 circuitNodeExpression:
-      Declare interfaceType nodeIdentifier=Id Colon interfaceExpression #declaredInterfaceCircuitExpression
-    | Declare nodeIdentifier=Id Colon Function instantiation #declaredFunctionCircuitExpression
-    | Declare nodeIdentifier=Id Colon Function functionIdentifier=Id #declaredGenericFunctionCircuitExpression
-    | Function instantiation #anonymousFunctionCircuitExpression
-    | Function functionIdentifier=Id #anonymousGenericFunctionCircuitExpression
-    | nodeIdentifier=Id singleAccessOperation* multipleArrayAccessOperation? #referenceCircuitExpression
-    | nodeIdentifier=Id ProtocolAccessor protocolIdentifier=Id #protocolAccessorCircuitExpression
-    | ParanL circuitExpression ParanR #paranCircuitExpression
-    | CurlyL (circuitStatement)* CurlyR #recordInterfaceConstructorCircuitExpression
-    // TODO: vector interface constructor
+      (Declare nodeIdentifier=Id Colon)? circuitNodeInterior #circuitNodeCreationExpression
+    | nodeIdentifier=Id singleAccessOperation* multipleArrayAccessOperation? #circuitNodeReferenceExpression
+    // TODO: This will require some kind of type inference to determine the wire width
+    | staticExpression #circuitNodeLiteralExpression
 ;
 
 singleAccessOperation:

@@ -1,7 +1,15 @@
 package com.uabutler.netlistir.builder
 
+import com.uabutler.ast.node.InOutTransformerModeNode
+import com.uabutler.ast.node.InTransformerModeNode
+import com.uabutler.ast.node.OutTransformerModeNode
+import com.uabutler.ast.node.TransformerModeNode
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
+import com.uabutler.ast.node.functions.FunctionExpressionInstantiationNode
+import com.uabutler.ast.node.functions.FunctionExpressionNode
+import com.uabutler.ast.node.functions.FunctionExpressionReferenceNode
 import com.uabutler.ast.node.functions.circuits.*
+import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.netlistir.util.PredefinedFunction
@@ -78,6 +86,23 @@ class NodeBuilder(
         outputWireVectorGroupsBuilder = outputWireVectorGroupsBuilder,
     ).also { netlistNodes[it.name()] = it }.also { module.addBodyNode(it) }
 
+    private fun createTransformerNode(
+        identifier: String,
+        // TODO: We need some way to represent the interface that will be the same on both sides
+        //   For now, the user is just going to pinky promise they're the same
+        externalIngressWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
+        internalIngressWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
+        externalEgressWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
+        internalEgressWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
+    ) = TransformerNode(
+        identifier = identifier,
+        parentModule = module,
+        externalIngressWireVectorGroupsBuilder = externalIngressWireVectorGroupsBuilder,
+        internalIngressWireVectorGroupsBuilder = internalIngressWireVectorGroupsBuilder,
+        externalEgressWireVectorGroupsBuilder = externalEgressWireVectorGroupsBuilder,
+        internalEgressWireVectorGroupsBuilder = internalEgressWireVectorGroupsBuilder,
+    ).also { netlistNodes[it.name()] = it }.also { module.addBodyNode(it) }
+
     private fun buildInputWireVectorGroups(
         structure: InterfaceStructure,
         parent: Node,
@@ -151,9 +176,7 @@ class NodeBuilder(
         val circuitExpressions = bodyAstNodes.flatMap { getCircuitExpressionsFromCircuitStatement(it) }
 
         // Step 2: Process the expressions to create nodes and connect them
-        circuitExpressions
-            .map { it as CircuitConnectionExpressionNode } // TODO: This is currently the only supported type
-            .map { processCircuitConnectionExpressionNode(it) }
+        circuitExpressions.forEach { processCircuitExpressionNode(it) }
     }
 
     private fun getCircuitExpressionsFromCircuitStatement(
@@ -180,28 +203,32 @@ class NodeBuilder(
         val inputs: List<WireVectorGroup.Projection<InputWireVector>>,
         val outputs: List<WireVectorGroup.Projection<OutputWireVector>>,
     ) {
-
         companion object {
             fun fromWireVectorGroups(
                 inputs: List<InputWireVectorGroup>,
                 outputs: List<OutputWireVectorGroup>,
             ) = IOGroups(
                 inputs = inputs.map { it.projection() },
-                outputs = outputs.map { it.projection() }
+                outputs = outputs.map { it.projection() },
             )
         }
-
     }
 
-    /* Each circuit connection expression will be a list of circuit groups separated by the connection operator.
-     * For example, we might have groups "a,b,c", "d,e", and "f". Then, a connection expression "a,b,c => d,e => f"
-     *
-     */
+    private fun processCircuitExpressionNode(
+        expression: CircuitExpressionNode,
+    ): IOGroups {
+        return when (expression) {
+            is CircuitConnectionExpressionNode -> processCircuitConnectionExpressionNode(expression)
+        }
+    }
+
     private fun processCircuitConnectionExpressionNode(
-        connectionExpression: CircuitConnectionExpressionNode,
-    ) {
-        connectionExpression.connectedExpression
+        expression: CircuitConnectionExpressionNode,
+    ): IOGroups {
+        val connectedComponents = expression.connectedExpression
             .map { processCircuitGroupExpressionNode(it) }
+
+        connectedComponents
             .zipWithNext()
             .map { (previous, current) -> previous.outputs to current.inputs }
             .forEach { (previousOutputs, currentInputs) ->
@@ -210,6 +237,11 @@ class NodeBuilder(
                     currentInputs = currentInputs,
                 )
             }
+
+        return IOGroups(
+            inputs = connectedComponents.first().inputs,
+            outputs = connectedComponents.last().outputs,
+        )
     }
 
     private fun processCircuitGroupExpressionNode(
@@ -263,104 +295,26 @@ class NodeBuilder(
     ): IOGroups {
         return when (nodeExpression) {
 
-            is DeclaredInterfaceCircuitExpressionNode -> {
-                val structure = programContext.buildInterfaceWithContext(
-                    node = nodeExpression.type,
-                    interfaceValuesContext = interfaceValuesContext,
-                    parameterValuesContext = parameterValuesContext,
+            is CircuitNodeCreationExpressionNode -> {
+                val nodeIdentifier = nodeExpression.identifier?.value ?: AnonymousIdentifierGenerator.genIdentifier()
+
+                val node = createNodeFromNodeInteriorWithIdentifier(
+                    nodeIdentifier = nodeIdentifier,
+                    interior = nodeExpression.interior
                 )
 
-                val node = createPassThroughNode(
-                    identifier = nodeExpression.identifier.value,
-                    inputWireVectorGroupsBuilder = { node ->
-                        listOf(
-                            buildInputWireVectorGroups(
-                                structure = structure,
-                                parent = node,
-                            )
-                        )
-                    },
-                    outputWireVectorGroupsBuilder = { node ->
-                        listOf(
-                            buildOutputWireVectorGroups(
-                                structure = structure,
-                                parent = node,
-                            )
-                        )
-                    },
-                )
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
+                IOGroups(
+                    inputs = node.inputWireVectorGroups.map { it.projection() },
+                    outputs = node.outputWireVectorGroups.map { it.projection() },
                 )
             }
 
-            is DeclaredFunctionCircuitExpressionNode -> {
-                val instantiationData = programContext.buildModuleInvocationDataWithContext(
-                    node = nodeExpression.instantiation,
-                    interfaceValuesContext = interfaceValuesContext,
-                    parameterValuesContext = parameterValuesContext,
-                )
-
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
+            is CircuitNodeLiteralExpressionNode -> {
+                // TODO: This requires some kind of type inference, since we need to know the width of the literal
+                TODO()
             }
 
-            is DeclaredGenericFunctionCircuitExpressionNode -> {
-                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
-
-                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
-                    parameterValue.value
-                } else {
-                    throw Exception("Expected module instantiation")
-                }
-
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
-            }
-
-            is AnonymousFunctionCircuitExpressionNode -> {
-                val instantiationData = programContext.buildModuleInvocationDataWithContext(
-                    node = nodeExpression.instantiation,
-                    interfaceValuesContext = interfaceValuesContext,
-                    parameterValuesContext = parameterValuesContext,
-                )
-
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
-            }
-
-            is AnonymousGenericFunctionCircuitExpressionNode -> {
-                val parameterValue = parameterValuesContext[nodeExpression.functionIdentifier.value]!!
-
-                val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
-                    parameterValue.value
-                } else {
-                    throw Exception("Expected module instantiation")
-                }
-
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
-            }
-
-            is ReferenceCircuitExpressionNode -> {
+            is CircuitNodeReferenceExpressionNode -> {
                 val referencedNode = try {
                     netlistNodes[nodeExpression.identifier.value]!!
                 } catch (_: NullPointerException) {
@@ -377,12 +331,34 @@ class NodeBuilder(
                 )
             }
 
-            // TODO
-            is ProtocolAccessorCircuitExpressionNode -> TODO()
+        }
+    }
 
-            is RecordInterfaceConstructorExpressionNode -> TODO()
-
-            is CircuitExpressionNodeCircuitExpression -> TODO()
+    private fun createNodeFromNodeInteriorWithIdentifier(
+        nodeIdentifier: String,
+        interior: CircuitNodeInteriorNode,
+    ): BodyNode {
+        return when (interior) {
+            is CircuitNodeFunctionInteriorNode -> {
+                createNodeFromFunctionExpression(
+                    nodeIdentifier = nodeIdentifier,
+                    nodeExpression = interior.function,
+                )
+            }
+            is CircuitNodeInterfaceInteriorNode -> {
+                createNodeFromInterfaceExpression(
+                    nodeIdentifier = nodeIdentifier,
+                    nodeExpression = interior.interfaceExpression,
+                )
+            }
+            is CircuitNodeInterfaceTransformerInteriorNode -> {
+                createNodeFromTransformer(
+                    nodeIdentifier = nodeIdentifier,
+                    transformerModeNode = interior.mode,
+                    interfaceExpression = interior.interfaceExpression,
+                    circuitNodeInterfaceTransformerNode = interior.interfaceTransformer,
+                )
+            }
         }
     }
 
@@ -456,6 +432,222 @@ class NodeBuilder(
             indices = projection.indices,
             range = projection.range
         )
+    }
+
+    private fun createNodeFromTransformer(
+        nodeIdentifier: String,
+        transformerModeNode: TransformerModeNode,
+        interfaceExpression: InterfaceExpressionNode,
+        circuitNodeInterfaceTransformerNode: CircuitNodeInterfaceTransformerNode,
+    ): TransformerNode {
+        val structure = programContext.buildInterfaceWithContext(
+            node = interfaceExpression,
+            interfaceValuesContext = interfaceValuesContext,
+            parameterValuesContext = parameterValuesContext,
+        )
+
+        return when (circuitNodeInterfaceTransformerNode) {
+            is CircuitNodeInterfaceListTransformerNode -> {
+                if (structure !is VectorInterfaceStructure) throw Exception("Expected list interface structure for list transformer")
+                createNodeFromListTransformer(
+                    nodeIdentifier = nodeIdentifier,
+                    transformerModeNode = transformerModeNode,
+                    interfaceStructure = structure,
+                    circuitNodeInterfaceTransformerNode = circuitNodeInterfaceTransformerNode,
+                )
+            }
+            is CircuitNodeInterfaceRecordTransformerNode -> {
+                if (structure !is RecordInterfaceStructure) throw Exception("Expected record interface structure for record transformer")
+                createNodeFromRecordTransformer(
+                    nodeIdentifier = nodeIdentifier,
+                    transformerModeNode = transformerModeNode,
+                    interfaceStructure = structure,
+                    circuitNodeInterfaceTransformerNode = circuitNodeInterfaceTransformerNode,
+                )
+            }
+        }
+    }
+
+    private fun createNodeFromRecordTransformer(
+        nodeIdentifier: String,
+        transformerModeNode: TransformerModeNode,
+        interfaceStructure: RecordInterfaceStructure,
+        circuitNodeInterfaceTransformerNode: CircuitNodeInterfaceRecordTransformerNode,
+    ): TransformerNode {
+        return createNodesFromTransformerExpressions(
+            nodeIdentifier = nodeIdentifier,
+            transformerModeNode = transformerModeNode,
+            interfaceStructure = interfaceStructure,
+            subItemsToTransform = interfaceStructure.ports.map { it.key to it.value },
+            subItemsTransformers = circuitNodeInterfaceTransformerNode.expressions.map { it.port.value to it.expression }
+        )
+    }
+
+    private fun createNodeFromListTransformer(
+        nodeIdentifier: String,
+        transformerModeNode: TransformerModeNode,
+        interfaceStructure: VectorInterfaceStructure,
+        circuitNodeInterfaceTransformerNode: CircuitNodeInterfaceListTransformerNode,
+    ): TransformerNode {
+        return createNodesFromTransformerExpressions(
+            nodeIdentifier = nodeIdentifier,
+            transformerModeNode = transformerModeNode,
+            interfaceStructure = interfaceStructure,
+            subItemsToTransform = List(interfaceStructure.size) { index -> index.toString() to interfaceStructure.vectoredInterface },
+            subItemsTransformers = circuitNodeInterfaceTransformerNode.expressions.map {
+                val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
+                    staticExpression = it.index,
+                    context = parameterValuesContext,
+                ).toString()
+
+                index to it.expression
+            }
+        )
+    }
+
+    private fun createNodesFromTransformerExpressions(
+        nodeIdentifier: String,
+        transformerModeNode: TransformerModeNode,
+        interfaceStructure: InterfaceStructure,
+        subItemsToTransform: List<Pair<String, InterfaceStructure>>,
+        subItemsTransformers: List<Pair<String, CircuitExpressionNode>>,
+    ): TransformerNode {
+        // Step 1: Validation
+        val providedTransformers = subItemsTransformers.map { it.first }
+
+        val duplicate = providedTransformers.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.firstOrNull()
+        if (duplicate != null) throw Exception("Duplicate transformation rule: $duplicate")
+
+        val subItemsToTransformSet = subItemsToTransform.map { it.first }.toSet()
+        val nonExistent = providedTransformers.firstOrNull { it !in subItemsToTransformSet }
+        if (nonExistent != null) throw Exception("Nonexistent transformation rule: $nonExistent")
+
+        // Step 2: Create the transformation nodes
+        val transformers = subItemsTransformers.associate { it.first to it.second }
+        val transformerIOGroups = subItemsToTransform.map { (subItemToTransform, interfaceStructure) ->
+            val transformer = transformers[subItemToTransform]
+
+            if (transformer == null) {
+                val node = createNodeFromInterfaceStructure(
+                    nodeIdentifier = subItemToTransform,
+                    structure = interfaceStructure,
+                )
+
+                IOGroups.fromWireVectorGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            } else {
+                processCircuitExpressionNode(transformer)
+            }
+        }
+
+        val interiorIOGroup = IOGroups(
+            inputs = transformerIOGroups.flatMap { it.inputs },
+            outputs = transformerIOGroups.flatMap { it.outputs },
+        )
+
+        // Step 3: Create the transformer node
+        val externalIngressBuilder = { node: Node -> listOf(buildInputWireVectorGroups(interfaceStructure, node)) }
+        val internalIngressBuilder = { node: Node -> listOf(buildOutputWireVectorGroups(interfaceStructure, node)) }
+
+        val externalEgressBuilder = { node: Node -> listOf(buildOutputWireVectorGroups(interfaceStructure, node)) }
+        val internalEgressBuilder = { node: Node -> listOf(buildInputWireVectorGroups(interfaceStructure, node)) }
+
+        val node = createTransformerNode(
+            identifier = nodeIdentifier,
+            externalIngressWireVectorGroupsBuilder = externalIngressBuilder,
+            internalIngressWireVectorGroupsBuilder = internalIngressBuilder,
+            externalEgressWireVectorGroupsBuilder = externalEgressBuilder,
+            internalEgressWireVectorGroupsBuilder = internalEgressBuilder,
+        )
+
+        // Step 4: Connect the transformer node
+        val hasIngress = transformerModeNode is InTransformerModeNode || transformerModeNode is InOutTransformerModeNode
+        val hasEgress = transformerModeNode is OutTransformerModeNode || transformerModeNode is InOutTransformerModeNode
+
+        if (hasIngress) {
+            createOutputWireVectorGroupConnections(
+                previousOutputs = node.internalIngressWireVectorGroups.map { it.projection() },
+                currentInputs = interiorIOGroup.inputs,
+            )
+        }
+
+        if (hasEgress) {
+            createOutputWireVectorGroupConnections(
+                previousOutputs = interiorIOGroup.outputs,
+                currentInputs = node.internalEgressWireVectorGroups.map { it.projection() },
+            )
+        }
+
+        return node
+    }
+
+    private fun createNodeFromInterfaceExpression(
+        nodeIdentifier: String,
+        nodeExpression: InterfaceExpressionNode,
+    ): PassThroughNode {
+        val structure = programContext.buildInterfaceWithContext(
+            node = nodeExpression,
+            interfaceValuesContext = interfaceValuesContext,
+            parameterValuesContext = parameterValuesContext,
+        )
+
+        return createNodeFromInterfaceStructure(
+            nodeIdentifier = nodeIdentifier,
+            structure = structure,
+        )
+    }
+
+    fun createNodeFromInterfaceStructure(
+        nodeIdentifier: String,
+        structure: InterfaceStructure,
+    ): PassThroughNode {
+        return createPassThroughNode(
+            identifier = nodeIdentifier,
+            inputWireVectorGroupsBuilder = { node ->
+                listOf(
+                    buildInputWireVectorGroups(
+                        structure = structure,
+                        parent = node,
+                    )
+                )
+            },
+            outputWireVectorGroupsBuilder = { node ->
+                listOf(
+                    buildOutputWireVectorGroups(
+                        structure = structure,
+                        parent = node,
+                    )
+                )
+            },
+        )
+    }
+
+    private fun createNodeFromFunctionExpression(
+        nodeIdentifier: String,
+        nodeExpression: FunctionExpressionNode,
+    ): BodyNode {
+        val instantiationData = when (nodeExpression) {
+            is FunctionExpressionInstantiationNode -> {
+                programContext.buildModuleInvocationDataWithContext(
+                    node = nodeExpression.instantiation,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
+            }
+            is FunctionExpressionReferenceNode -> {
+                val parameterValue = parameterValuesContext[nodeExpression.identifier.value]!!
+
+                if (parameterValue is FunctionInstantiationParameterValue) {
+                    parameterValue.value
+                } else {
+                    throw Exception("Expected module instantiation")
+                }
+            }
+        }
+
+        return createNodeFromFunctionInvocation(nodeIdentifier, instantiationData)
     }
 
     private fun createNodeFromFunctionInvocation(
