@@ -82,8 +82,8 @@ object StatementBuilder {
 
         wireVector.wires.drop(1).forEach { wire ->
             val currentConnection = module.getConnectionForInputWire(wire)
+            if (currentConnection.source.parentWireVector != previousConnection.source.parentWireVector || currentConnection.source.index != previousConnection.source.index + 1) {
 
-            if (currentConnection.source != previousConnection.source || currentConnection.source.index != previousConnection.source.index + 1) {
                 addPrevious()
 
                 currentSourceStartIndex = currentConnection.source.index
