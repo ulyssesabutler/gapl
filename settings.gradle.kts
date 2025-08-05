@@ -20,4 +20,5 @@ include(
     "compiler", // Use generated parser to build gapl compiler
     "gapl-example", // Use compiler to convert this gapl code into verilog
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
+    "scripts", // FPGA test automation scripts
 )
