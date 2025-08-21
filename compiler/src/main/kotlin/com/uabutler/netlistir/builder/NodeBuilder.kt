@@ -296,6 +296,39 @@ class NodeBuilder(
                 )
             }
 
+            is AnonymousInterfaceCircuitExpressionNode -> {
+                val structure = programContext.buildInterfaceWithContext(
+                    node = nodeExpression.type,
+                    interfaceValuesContext = interfaceValuesContext,
+                    parameterValuesContext = parameterValuesContext,
+                )
+
+                val node = createPassThroughNode(
+                    identifier = AnonymousIdentifierGenerator.genIdentifier(),
+                    inputWireVectorGroupsBuilder = { node ->
+                        listOf(
+                            buildInputWireVectorGroups(
+                                structure = structure,
+                                parent = node,
+                            )
+                        )
+                    },
+                    outputWireVectorGroupsBuilder = { node ->
+                        listOf(
+                            buildOutputWireVectorGroups(
+                                structure = structure,
+                                parent = node,
+                            )
+                        )
+                    },
+                )
+
+                IOGroups.fromWireVectorGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+
             is DeclaredFunctionCircuitExpressionNode -> {
                 val instantiationData = programContext.buildModuleInvocationDataWithContext(
                     node = nodeExpression.instantiation,

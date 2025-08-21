@@ -1,0 +1,75 @@
+package com.uabutler.resolver.scope.functions
+
+import com.uabutler.ast.node.functions.FunctionDefinitionNode
+import com.uabutler.cst.node.CSTPersistent
+import com.uabutler.cst.node.expression.CSTCircuitExpression
+import com.uabutler.cst.node.expression.CSTDeclaredCircuitNodeExpression
+import com.uabutler.cst.node.functions.CSTFunctionDefinition
+import com.uabutler.cst.node.functions.CSTNonConditionalCircuitStatement
+import com.uabutler.resolver.scope.ProgramScope
+import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
+import com.uabutler.resolver.scope.functions.circuits.CircuitStatementScope
+import com.uabutler.resolver.scope.util.GenericInterfaceDefinitionScope
+import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
+
+class FunctionDefinitionScope(
+    override val parentScope: ProgramScope,
+    val functionDefinition: CSTFunctionDefinition,
+): Scope {
+
+    companion object {
+        fun declarationsFromCircuitExpression(expression: CSTCircuitExpression): List<CSTDeclaredCircuitNodeExpression> {
+            return expression.connectedGroups.flatMap { it.groupedNodes }
+                .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
+        }
+    }
+
+    private val genericInterfaces = functionDefinition.interfaceDefinitions.associateBy { it.declaredIdentifier }
+    private val genericParameters = functionDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
+    // TODO: Conditional statements will need their own scope
+    private val declaredNodes = functionDefinition.statements
+        .filterIsInstance<CSTNonConditionalCircuitStatement>()
+        .map { it.statement }
+        .flatMap { it.connectedGroups }
+        .flatMap { it.groupedNodes }
+        .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
+    private val nodes = declaredNodes.associateBy { it.declaredIdentifier }
+
+    val localSymbolTable = genericInterfaces + genericParameters + nodes
+
+    override fun resolveLocal(name: String): CSTPersistent? {
+        return localSymbolTable[name]
+    }
+
+    override fun resolveGlobal(name: String): CSTPersistent? {
+        return resolveLocal(name) ?: parentScope.resolveGlobal(name)
+    }
+
+    override fun symbols(): List<String> {
+        return buildList {
+            functionDefinition.interfaceDefinitions.mapTo(this) { it.declaredIdentifier }
+            functionDefinition.parameterDefinitions.mapTo(this) { it.declaredIdentifier }
+            declaredNodes.mapTo(this) { it.declaredIdentifier }
+        }
+    }
+
+    fun ast(): FunctionDefinitionNode {
+        validateSymbols()
+
+
+        return FunctionDefinitionNode(
+            identifier = functionDefinition.declaredIdentifier.toIdentifier(),
+            genericInterfaces = functionDefinition.interfaceDefinitions
+                .map { GenericInterfaceDefinitionScope(this, it).ast() },
+            genericParameters = functionDefinition.parameterDefinitions
+                .map { GenericParameterDefinitionScope(this, it).ast() },
+            inputFunctionIO = functionDefinition.inputs
+                .map { FunctionIOScope(this, it).ast() },
+            outputFunctionIO = functionDefinition.outputs
+                .map { FunctionIOScope(this, it).ast() },
+            statements = functionDefinition.statements
+                .map { CircuitStatementScope(this, it).ast() },
+        )
+    }
+}

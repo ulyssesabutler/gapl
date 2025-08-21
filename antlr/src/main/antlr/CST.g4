@@ -14,10 +14,13 @@ Else: 'else';
 Null: 'null';
 True: 'true';
 False: 'false';
+In: 'in';
+Out: 'out';
+Inout: 'inout';
 
 // Punctuation
-ParanL: '(';
-ParanR: ')';
+ParenL: '(';
+ParenR: ')';
 CurlyL: '{';
 CurlyR: '}';
 SquareL: '[';
@@ -52,56 +55,65 @@ Id: [a-zA-Z_] [a-zA-Z0-9_]*;
 
 program: (interfaceDefinition | functionDefinition)+;
 
+atom: identifier=Id genericInterfaceValues? genericParameterValues?;
+
 accessor:
-      SquareL expression SquareR #vectorItemAccessor
-    | SquareL expression Colon expression SquareR #vectorSliceAccessor
+      SquareL index=expression SquareR #vectorItemAccessor
+    | SquareL startIndex=expression Colon endIndex=expression SquareR #vectorSliceAccessor
     | Dot portIdentifier=Id #memberAccessor
 ;
 
 expression:
       atom #atomExpression
     | Wire #wireExpression
-    | False #trueExpression
     | True #trueExpression
-    | IntLiteral #literalExpression
+    | False #falseExpression
+    | value=IntLiteral #literalExpression
     | expression accessor #accessorExpression
-    | ParanL expression ParanR #paranExpression
-    | expression op=(Multiply|Divide) expression #multiplicaitonExpression
-    | expression op=(Add|Subtract) expression #additionExpression
-    | expression op=(AngleR|AngleL|GreaterThanEquals|LessThanEquals) expression #relationOperator
-    | expression op=(Equals|NotEquals) expression #equalityOperator
-    | expression LogicalAnd expression #andOperator
-    | expression LogicalOr expression #orOperator
+    | ParenL expression ParenR #parenExpression
+    | lhs=expression op=(Multiply|Divide) rhs=expression #multiplicaitonExpression
+    | lhs=expression op=(Add|Subtract) rhs=expression #additionExpression
+    | lhs=expression op=(AngleR|AngleL|GreaterThanEquals|LessThanEquals) rhs=expression #relationalExpression
+    | lhs=expression op=(Equals|NotEquals) rhs=expression #equalityExpression
+    | lhs=expression LogicalAnd rhs=expression #logicalAndExpression
+    | lhs=expression LogicalOr rhs=expression #logicalOrExpression
 ;
 
 recordTransformerEntry: portIdentifier=Id Colon circuitExpression;
 vectorTransformerEntry: index=expression Colon circuitExpression;
 
-recordTransformer: CurlyL recordTransformerEntry* CurlyR;
-vectorTransformer: SquareL vectorTransformerEntry* SquareR;
-
-transformer: recordTransformer | vectorTransformer;
-
-circuitExpressionType: transformer? interfaceType=expression;
-
-circuitExpression:
-      expression #loneCircuitExpression
-    | Declare identifier=Id Colon circuitExpressionType #declaredCircuitExpression
-    | expression Comma expression #commaExpression
-    | expression Connector expression #connectorExpression
+transformer:
+      CurlyL recordTransformerEntry* CurlyR #recordTransformer
+    | SquareL vectorTransformerEntry* SquareR #vectorTransformer
 ;
 
-interfaceValues: AngleL (expression Comma)* expression? AngleR;
-parameterValues: ParanL (expression Comma)* expression ParanR;
+circuitExpressionType:
+      type=expression #basicCircuitExpressionType
+    | transformer transformerType=(In|Out|Inout) interfaceType=expression #transformerCircuitExpressionType
+;
 
-atom: identifier=Id interfaceValues? parameterValues?;
+circuitExpression: circuitGroupExpression (Connector circuitGroupExpression)*;
+
+circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
+
+circuitNodeExpression:
+      expression #loneCircuitExpression
+    | Declare declaredIdentifier=Id Colon circuitExpressionType #declaredCircuitExpression
+    | ParenL circuitExpression ParenL #parenCircuitExpression
+;
+
+genericInterfaceValues: AngleL (expression Comma)* expression? AngleR;
+genericParameterValues: ParenL (expression Comma)* expression ParenR;
 
 genericInterfaceDefinition: declaredIdentifier=Id;
 genericInterfaceDefinitions: AngleL (genericInterfaceDefinition Comma)* genericInterfaceDefinition? AngleR;
 genericParameterDefinitionTypeInterfaceList: (expression Comma)* expression?;
-genericParameterDefinitionType: Id | genericParameterDefinitionTypeInterfaceList Connector genericParameterDefinitionTypeInterfaceList;
+genericParameterDefinitionType:
+      typeName=Id #namedGenericParameterDefinitionType
+    | inputs=genericParameterDefinitionTypeInterfaceList Connector outputs=genericParameterDefinitionTypeInterfaceList #functionGenericParameterDefinitionType
+;
 genericParameterDefinition: declaredIdenfier=Id Colon type=genericParameterDefinitionType;
-genericParameterDefinitions: ParanL (genericParameterDefinition Comma)* genericParameterDefinition ParanR;
+genericParameterDefinitions: ParenL (genericParameterDefinition Comma)* genericParameterDefinition ParenR;
 
 aliasInterfaceDefinition:
     Interface declaredIdentifer=Id
@@ -110,29 +122,30 @@ aliasInterfaceDefinition:
     expression
 ;
 
-portDefinition: declaredIdentifier=Id Colon expression SemiColon;
+portDefinition: declaredIdentifier=Id Colon interfaceType=expression SemiColon;
 
 recordInterfaceDefinition:
     Interface declaredIdentifer=Id
     genericInterfaceDefinitions?
     genericParameterDefinitions?
+    // TODO: Inherits
     CurlyL portDefinition* CurlyR
 ;
 
 interfaceDefinition: aliasInterfaceDefinition | recordInterfaceDefinition;
 
-functionIO: declaredIdentifier=Id Colon expression;
+functionIO: declaredIdentifier=Id Colon interfaceType=expression;
 functionIOList: (functionIO Comma)* functionIO?;
 
 conditionalCircuitBody: circuitStatement | CurlyL circuitStatement* CurlyR;
 
-conditionalCircuit:
-    If ParanL predicate=expression ParanR ifBody=conditionalCircuitBody
+conditional:
+    If ParenL predicate=expression ParenR ifBody=conditionalCircuitBody
     (Else elseBody=conditionalCircuitBody)?
 ;
 
 circuitStatement:
-      conditionalCircuit #conditionalCircuitStatement
+      conditional #conditionalCircuitStatement
     | circuitExpression SemiColon #nonConditionalCircuitStatement
 ;
 

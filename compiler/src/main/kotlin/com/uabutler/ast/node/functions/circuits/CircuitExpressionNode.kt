@@ -34,6 +34,11 @@ data class DeclaredGenericFunctionCircuitExpressionNode(
     val functionIdentifier: IdentifierNode,
 ): CircuitNodeExpressionNode
 
+data class AnonymousInterfaceCircuitExpressionNode(
+    val interfaceType: InterfaceTypeNode,
+    val type: InterfaceExpressionNode,
+): CircuitNodeExpressionNode
+
 data class AnonymousFunctionCircuitExpressionNode(
     val instantiation: InstantiationNode,
 ): CircuitNodeExpressionNode
