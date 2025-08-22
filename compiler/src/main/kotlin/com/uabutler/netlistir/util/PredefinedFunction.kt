@@ -5,6 +5,7 @@ import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
 import com.uabutler.netlistir.netlist.*
+import com.uabutler.util.PredefinedFunctionNames
 
 sealed class PredefinedFunction(
     val inputs: List<IO>,
@@ -51,24 +52,24 @@ sealed class PredefinedFunction(
 
             val interfaceStructure = invocation.interfaces.firstOrNull()
 
-            return when (invocation.gaplFunctionName) {
-                "less_than_equals" -> LessThanEqualsFunction(size!!)
-                "greater_than_equals" -> GreaterThanEqualsFunction(size!!)
-                "equals" -> EqualsFunction(size!!)
-                "not_equals" -> NotEqualsFunction(size!!)
-                "and" -> LogicalAndFunction
-                "or" -> LogicalOrFunction
-                "bitwise_and" -> BitwiseAndFunction(size!!)
-                "bitwise_or" -> BitwiseOrFunction(size!!)
-                "bitwise_xor" -> BitwiseXorFunction(size!!)
-                "add" -> AdditionFunction(size!!)
-                "subtract" -> SubtractionFunction(size!!)
-                "multiply" -> MultiplicationFunction(size!!)
-                "left_shift" -> LeftShiftFunction(size!!)
-                "right_shift" -> RightShiftFunction(size!!)
-                "register" -> RegisterFunction(interfaceStructure!!)
-                "literal" -> LiteralFunction(size!!, value!!)
-                else -> null
+            return when (PredefinedFunctionNames.from(invocation.gaplFunctionName)) {
+                PredefinedFunctionNames.LESS_THAN_EQUALS -> LessThanEqualsFunction(size!!)
+                PredefinedFunctionNames.GREATER_THAN_EQUALS -> GreaterThanEqualsFunction(size!!)
+                PredefinedFunctionNames.EQUALS -> EqualsFunction(size!!)
+                PredefinedFunctionNames.NOT_EQUALS -> NotEqualsFunction(size!!)
+                PredefinedFunctionNames.AND -> LogicalAndFunction
+                PredefinedFunctionNames.OR -> LogicalOrFunction
+                PredefinedFunctionNames.BITWISE_AND -> BitwiseAndFunction(size!!)
+                PredefinedFunctionNames.BITWISE_OR -> BitwiseOrFunction(size!!)
+                PredefinedFunctionNames.BITWISE_XOR -> BitwiseXorFunction(size!!)
+                PredefinedFunctionNames.ADD -> AdditionFunction(size!!)
+                PredefinedFunctionNames.SUBTRACT -> SubtractionFunction(size!!)
+                PredefinedFunctionNames.MULTIPLY -> MultiplicationFunction(size!!)
+                PredefinedFunctionNames.LEFT_SHIFT -> LeftShiftFunction(size!!)
+                PredefinedFunctionNames.RIGHT_SHIFT -> RightShiftFunction(size!!)
+                PredefinedFunctionNames.REGISTER -> RegisterFunction(interfaceStructure!!)
+                PredefinedFunctionNames.LITERAL -> LiteralFunction(size!!, value!!)
+                null -> null
             }
         }
     }

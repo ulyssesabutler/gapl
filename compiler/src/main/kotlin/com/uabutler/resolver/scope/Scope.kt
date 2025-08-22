@@ -2,6 +2,8 @@ package com.uabutler.resolver.scope
 
 import com.uabutler.ast.node.IdentifierNode
 import com.uabutler.cst.node.CSTPersistent
+import com.uabutler.cst.node.functions.CSTFunctionDefinition
+import com.uabutler.util.PredefinedFunctionNames
 
 interface Scope {
 
@@ -14,6 +16,17 @@ interface Scope {
     }
 
     fun resolve(name: String): CSTPersistent {
+        if (name in predefinedFunctionNames) {
+            return CSTFunctionDefinition(
+                declaredIdentifier = name,
+                interfaceDefinitions = emptyList(),
+                parameterDefinitions = emptyList(),
+                inputs = emptyList(),
+                outputs = emptyList(),
+                statements = emptyList(),
+            )
+        }
+
         return try {
             resolveGlobal(name)!!
         } catch (e: NullPointerException) {
@@ -26,10 +39,12 @@ interface Scope {
     fun validateSymbols() = validateSymbols(symbols())
 
     companion object {
+        private val predefinedFunctionNames = PredefinedFunctionNames.entries.map { it.gaplName }.toSet()
+
         fun validateSymbols(symbols: List<String>) {
             val symbolSet = mutableSetOf<String>()
             symbols.forEach { symbol ->
-                if (symbolSet.contains(symbol)) {
+                if (symbolSet.contains(symbol) || symbol in predefinedFunctionNames) {
                     throw Exception("Redeclaration of $symbol")
                 }
 

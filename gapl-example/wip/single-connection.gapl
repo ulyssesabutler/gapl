@@ -1,0 +1,3 @@
+function test() i: wire => o: wire {
+    i => o;
+}

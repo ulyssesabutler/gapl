@@ -1,23 +1,23 @@
 // An alias interface
-interface byte() wire[8]
+interface byte wire[8]
 
 // An alias with a generic and a parameter
-interface array<T>(parameter size: integer) T[size]
+interface array<T>(size: integer) T[size]
 
 // A record interface
-interface pair() {
+interface pair {
     first: wire;
     second: wire;
 }
 
 // A nested interface
-interface protocol() {
+interface protocol {
     data1: wire;
     data2: wire[10];
-    data3: pair()[8][10];
+    data3: pair[8][10];
 }
 
-function accessors() i: protocol() => o: protocol() {
+function accessors() i: protocol => o: protocol {
     // This is a basic record accessor
     i.data1 => o.data1;
 
@@ -35,7 +35,7 @@ function accessors() i: protocol() => o: protocol() {
 }
 
 function predefined_functions() i: wire => o: wire {
-    declare booleanvliteral: function literal(1, 0);
+    declare booleanvliteral: literal(1, 0);
     booleanvliteral[0] => declare booleanvalue: wire;
 
     booleanvalue => declare a: wire;
@@ -43,41 +43,41 @@ function predefined_functions() i: wire => o: wire {
 
     // The literal function just produces a value. It produces a vector of wires.
     // The first value indicates the width of the vector, the second indicates the value on those wires.
-    declare xliteralnode: function literal(8, 5) => declare x: wire[8];
-    declare yliteralnode: function literal(8, 10) => declare y: wire[8];
+    declare xliteralnode: literal(8, 5) => declare x: wire[8];
+    declare yliteralnode: literal(8, 10) => declare y: wire[8];
 
     // Registers can also be created using a function. It can store values from any interface.
-    declare register_in: wire => declare registernode: function register<wire>() => declare register_out: wire;
+    declare register_in: wire => declare registernode: register<wire>() => declare register_out: wire;
 
     booleanvalue => register_in;
 
     // Comparators take two arrays and return a wire
-    x, y => function equals(8) => declare equals_result: wire;
-    x, y => function not_equals(8) => declare not_equals_result: wire;
-    x, y => function less_than_equals(8) => declare less_than_equals_result: wire;
-    x, y => function greater_than_equals(8) => declare greater_than_equals_result: wire;
+    x, y => equals(8) => declare equals_result: wire;
+    x, y => not_equals(8) => declare not_equals_result: wire;
+    x, y => less_than_equals(8) => declare less_than_equals_result: wire;
+    x, y => greater_than_equals(8) => declare greater_than_equals_result: wire;
 
     // Binary operations take two wires and return a wire
-    a, b => function and() => declare and_result: wire;
-    a, b => function or() => declare or_result: wire;
+    a, b => and() => declare and_result: wire;
+    a, b => or() => declare or_result: wire;
 
     // Finally, all other operations accept and produce arrays of equal size
-    x, y => function add(8) => declare add_result: wire[8];
-    x, y => function subtract(8) => declare subtract_result: wire[8];
-    x, y => function multiply(8) => declare multiply_result: wire[8];
-    x, y => function left_shift(8) => declare left_shift_result: wire[8];
-    x, y => function right_shift(8) => declare right_shift_result: wire[8];
+    x, y => add(8) => declare add_result: wire[8];
+    x, y => subtract(8) => declare subtract_result: wire[8];
+    x, y => multiply(8) => declare multiply_result: wire[8];
+    x, y => left_shift(8) => declare left_shift_result: wire[8];
+    x, y => right_shift(8) => declare right_shift_result: wire[8];
 
     and_result => o;
 }
 
 // This is a function that takes another function as a parameter
-function functional_example(parameter op: function wire, wire => wire) i1: wire, i2: wire => o: wire {
+function functional_example(op: wire, wire => wire) i1: wire, i2: wire => o: wire {
     // The "function" keyword is still required
-    i1, i2 => function op => o;
+    i1, i2 => op => o;
 }
 
 function another_functional_example() i1: wire, i2: wire => o: wire {
     // Function parameter are passed using the same syntax to invoke the function
-    i1, i2 => function functional_example(function and()) => o;
+    i1, i2 => functional_example(and()) => o;
 }

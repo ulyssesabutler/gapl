@@ -28,13 +28,15 @@ class FunctionDefinitionScope(
     private val genericInterfaces = functionDefinition.interfaceDefinitions.associateBy { it.declaredIdentifier }
     private val genericParameters = functionDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
     // TODO: Conditional statements will need their own scope
-    private val declaredNodes = functionDefinition.statements
+    private val inputNodes = functionDefinition.inputs
+    private val outputNodes = functionDefinition.outputs
+    private val bodyNodes = functionDefinition.statements
         .filterIsInstance<CSTNonConditionalCircuitStatement>()
         .map { it.statement }
         .flatMap { it.connectedGroups }
         .flatMap { it.groupedNodes }
         .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
-    private val nodes = declaredNodes.associateBy { it.declaredIdentifier }
+    private val nodes = bodyNodes.associateBy { it.declaredIdentifier } + inputNodes.associateBy { it.declaredIdentifier } + outputNodes.associateBy { it.declaredIdentifier }
 
     val localSymbolTable = genericInterfaces + genericParameters + nodes
 
@@ -50,7 +52,9 @@ class FunctionDefinitionScope(
         return buildList {
             functionDefinition.interfaceDefinitions.mapTo(this) { it.declaredIdentifier }
             functionDefinition.parameterDefinitions.mapTo(this) { it.declaredIdentifier }
-            declaredNodes.mapTo(this) { it.declaredIdentifier }
+            inputNodes.mapTo(this) { it.declaredIdentifier }
+            outputNodes.mapTo(this) { it.declaredIdentifier }
+            bodyNodes.mapTo(this) { it.declaredIdentifier }
         }
     }
 

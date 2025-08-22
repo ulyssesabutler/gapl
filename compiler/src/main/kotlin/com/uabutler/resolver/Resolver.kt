@@ -1,11 +1,13 @@
 package com.uabutler.resolver
 
+import com.uabutler.ast.node.ProgramNode
 import com.uabutler.cst.node.CSTProgram
+import com.uabutler.resolver.scope.ProgramScope
 
 object Resolver {
 
-    fun cst(program: CSTProgram) {
-
+    fun cstToAst(program: CSTProgram): ProgramNode {
+        return ProgramScope(program).ast()
     }
 
 }

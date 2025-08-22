@@ -27,6 +27,7 @@ import com.uabutler.cst.node.expression.CSTSubtractionExpression
 import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
 import com.uabutler.cst.node.functions.CSTFunctionDefinition
+import com.uabutler.cst.node.interfaces.CSTAliasInterfaceDefinition
 import com.uabutler.cst.node.util.CSTFunctionGenericParameterDefinitionType
 import com.uabutler.cst.node.util.CSTGenericParameterDefinition
 import com.uabutler.cst.node.util.CSTNamedGenericParameterDefinitionType
@@ -81,6 +82,9 @@ class GenericParameterValueScope(
                             }
                         }
                     }
+
+                    // TODO: Remove
+                    is CSTAliasInterfaceDefinition -> throw Exception("${declaration.declaredIdentifier}")
 
                     else -> throw Exception("Declaration of type ${declaration.let { it::class.simpleName }} not allowed in generic parameter values")
                 }

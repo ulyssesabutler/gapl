@@ -103,7 +103,7 @@ circuitNodeExpression:
 ;
 
 genericInterfaceValues: AngleL (expression Comma)* expression? AngleR;
-genericParameterValues: ParenL (expression Comma)* expression ParenR;
+genericParameterValues: ParenL (expression Comma)* expression? ParenR;
 
 genericInterfaceDefinition: declaredIdentifier=Id;
 genericInterfaceDefinitions: AngleL (genericInterfaceDefinition Comma)* genericInterfaceDefinition? AngleR;
@@ -113,7 +113,7 @@ genericParameterDefinitionType:
     | inputs=genericParameterDefinitionTypeInterfaceList Connector outputs=genericParameterDefinitionTypeInterfaceList #functionGenericParameterDefinitionType
 ;
 genericParameterDefinition: declaredIdenfier=Id Colon type=genericParameterDefinitionType;
-genericParameterDefinitions: ParenL (genericParameterDefinition Comma)* genericParameterDefinition ParenR;
+genericParameterDefinitions: ParenL (genericParameterDefinition Comma)* genericParameterDefinition? ParenR;
 
 aliasInterfaceDefinition:
     Interface declaredIdentifer=Id
@@ -135,7 +135,11 @@ recordInterfaceDefinition:
 interfaceDefinition: aliasInterfaceDefinition | recordInterfaceDefinition;
 
 functionIO: declaredIdentifier=Id Colon interfaceType=expression;
-functionIOList: (functionIO Comma)* functionIO?;
+// TODO: Add null
+functionIOList:
+      Null
+    | (functionIO Comma)* functionIO Comma?
+;
 
 conditionalCircuitBody: circuitStatement | CurlyL circuitStatement* CurlyR;
 

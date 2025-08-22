@@ -53,6 +53,7 @@ import com.uabutler.cst.node.expression.util.CSTMemberAccessor
 import com.uabutler.cst.node.expression.util.CSTVectorItemAccessor
 import com.uabutler.cst.node.expression.util.CSTVectorSliceAccessor
 import com.uabutler.cst.node.functions.CSTFunctionDefinition
+import com.uabutler.cst.node.functions.CSTFunctionIO
 import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
 import com.uabutler.cst.node.util.CSTGenericInterfaceDefinition
 import com.uabutler.cst.node.util.CSTGenericParameterDefinition
@@ -226,7 +227,7 @@ class LoneCircuitExpressionScope(
                 val referencedNode = resolve(body.atom.identifier)
 
                 when (referencedNode) {
-                    is CSTDeclaredCircuitNodeExpression -> {
+                    is CSTDeclaredCircuitNodeExpression, is CSTFunctionIO -> {
                         if (body.atom.interfaceValues.isNotEmpty() || body.atom.parameterValues.isNotEmpty())
                             throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
 

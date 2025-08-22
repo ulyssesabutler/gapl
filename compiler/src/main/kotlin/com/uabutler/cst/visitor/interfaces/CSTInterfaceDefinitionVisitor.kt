@@ -27,8 +27,8 @@ object CSTInterfaceDefinitionVisitor: CSTVisitor() {
     override fun visitAliasInterfaceDefinition(ctx: CSTParser.AliasInterfaceDefinitionContext): CSTAliasInterfaceDefinition {
         return CSTAliasInterfaceDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifer),
-            interfaceDefinitions = CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(ctx.genericInterfaceDefinitions()!!).definitions,
-            parameterDefinitions = CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(ctx.genericParameterDefinitions()!!).definitions,
+            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
             aliasedInterface = CSTExpressionVisitor.visitExpression(ctx.expression()),
         )
     }
@@ -36,8 +36,8 @@ object CSTInterfaceDefinitionVisitor: CSTVisitor() {
     override fun visitRecordInterfaceDefinition(ctx: CSTParser.RecordInterfaceDefinitionContext): CSTRecordInterfaceDefinition {
         return CSTRecordInterfaceDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifer),
-            interfaceDefinitions = CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(ctx.genericInterfaceDefinitions()!!).definitions,
-            parameterDefinitions = CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(ctx.genericParameterDefinitions()!!).definitions,
+            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
             ports = ctx.portDefinition().map { visitPortDefinition(it) },
         )
     }

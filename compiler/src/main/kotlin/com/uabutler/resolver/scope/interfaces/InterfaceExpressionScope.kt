@@ -48,7 +48,7 @@ class InterfaceExpressionScope(
                 val vector = interfaceExpression.accessor
                 if (vector !is CSTVectorItemAccessor) throw IllegalArgumentException("Unexpected accessor $vector")
 
-                val vectorSizeExpression = StaticExpressionScope(this, interfaceExpression.accessed).ast()
+                val vectorSizeExpression = StaticExpressionScope(this, interfaceExpression.accessor.index).ast()
 
                 val vectoredInterface = InterfaceExpressionScope(parentScope, interfaceExpression.accessed).ast()
                 val boundsSpecifier = VectorBoundsNode(vectorSizeExpression)

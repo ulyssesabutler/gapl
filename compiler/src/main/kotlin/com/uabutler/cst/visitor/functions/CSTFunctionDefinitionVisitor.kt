@@ -26,8 +26,8 @@ object CSTFunctionDefinitionVisitor: CSTVisitor() {
     override fun visitFunctionDefinition(ctx: CSTParser.FunctionDefinitionContext): CSTFunctionDefinition {
         return CSTFunctionDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifier),
-            interfaceDefinitions = CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(ctx.genericInterfaceDefinitions()!!).definitions,
-            parameterDefinitions = CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(ctx.genericParameterDefinitions()!!).definitions,
+            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
             inputs = visitFunctionIOList(ctx.input!!).ioList,
             outputs = visitFunctionIOList(ctx.output!!).ioList,
             statements = ctx.circuitStatement().map { CSTCircuitStatementVisitor.visitCircuitStatement(it) },
