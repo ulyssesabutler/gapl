@@ -16,7 +16,6 @@ import com.uabutler.ast.node.staticexpressions.NotEqualsStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.SubtractionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.TrueStaticExpressionNode
-import com.uabutler.cst.node.CSTPersistent
 import com.uabutler.cst.node.expression.CSTAccessorExpression
 import com.uabutler.cst.node.expression.CSTAdditionExpression
 import com.uabutler.cst.node.expression.CSTAtomExpression
@@ -48,7 +47,7 @@ class StaticExpressionScope(
     fun ast(): StaticExpressionNode {
         return when (staticExpression) {
             is CSTAtomExpression -> {
-                if (staticExpression.atom.interfaceValues.isNotEmpty() || staticExpression.atom.parameterValues.isNotEmpty())
+                if (staticExpression.atom.parameterValues.isNotEmpty())
                     throw IllegalArgumentException("Unexpected use of ${staticExpression.atom.identifier} in static expression")
 
                 IdentifierStaticExpressionNode(staticExpression.atom.identifier.toIdentifier())

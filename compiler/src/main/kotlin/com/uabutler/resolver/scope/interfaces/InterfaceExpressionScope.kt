@@ -28,11 +28,11 @@ import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
 import com.uabutler.cst.node.expression.util.CSTVectorItemAccessor
 import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
-import com.uabutler.cst.node.util.CSTGenericInterfaceDefinition
+import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
+import com.uabutler.cst.node.util.CSTParameterDefinition
 import com.uabutler.resolver.scope.Scope
 import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
-import com.uabutler.resolver.scope.util.GenericInterfaceValueScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
 
 class InterfaceExpressionScope(
@@ -61,8 +61,11 @@ class InterfaceExpressionScope(
 
                 when (val declarationNode = resolve(atom.identifier)) {
 
-                    is CSTGenericInterfaceDefinition -> {
-                        if (atom.interfaceValues.isNotEmpty() || atom.parameterValues.isNotEmpty())
+                    is CSTParameterDefinition -> {
+                        if (declarationNode.type !is CSTInterfaceParameterDefinitionType)
+                            throw Exception("Unexpected type for interface expression, got ${declarationNode.type::class.simpleName}")
+
+                        if (atom.parameterValues.isNotEmpty())
                             throw Exception("Unexpected parameters for generic interface")
 
                         IdentifierInterfaceExpressionNode(atom.identifier.toIdentifier())
@@ -70,10 +73,9 @@ class InterfaceExpressionScope(
 
                     is CSTInterfaceDefinition -> {
                         val interfaceIdentifier = atom.identifier.toIdentifier()
-                        val genericInterfaces = atom.interfaceValues.map { GenericInterfaceValueScope(parentScope, it).ast() }
-                        val genericParameters = atom.parameterValues.map { GenericParameterValueScope(parentScope, it).ast() }
+                        val parameters = GenericParameterValueScope(parentScope, atom.parameterValues).ast()
 
-                        DefinedInterfaceExpressionNode(interfaceIdentifier, genericInterfaces, genericParameters)
+                        DefinedInterfaceExpressionNode(interfaceIdentifier, parameters.interfaces, parameters.parameters)
                     }
 
                     else -> throw Exception("Cannot use identifier for ${declarationNode::class.simpleName} in interface expression")

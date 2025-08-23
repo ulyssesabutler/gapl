@@ -114,7 +114,6 @@ class Module(
         connectionsByOutput[connection.source] = connectionsByOutput[connection.source]!! - connection
     }
 
-    //
     override fun toString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,

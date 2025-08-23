@@ -55,13 +55,12 @@ import com.uabutler.cst.node.expression.util.CSTVectorSliceAccessor
 import com.uabutler.cst.node.functions.CSTFunctionDefinition
 import com.uabutler.cst.node.functions.CSTFunctionIO
 import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
-import com.uabutler.cst.node.util.CSTGenericInterfaceDefinition
-import com.uabutler.cst.node.util.CSTGenericParameterDefinition
+import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
+import com.uabutler.cst.node.util.CSTParameterDefinition
 import com.uabutler.resolver.scope.Scope
 import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
-import com.uabutler.resolver.scope.util.GenericInterfaceValueScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
 
 class CircuitExpressionScope(
@@ -228,7 +227,7 @@ class LoneCircuitExpressionScope(
 
                 when (referencedNode) {
                     is CSTDeclaredCircuitNodeExpression, is CSTFunctionIO -> {
-                        if (body.atom.interfaceValues.isNotEmpty() || body.atom.parameterValues.isNotEmpty())
+                        if (body.atom.parameterValues.isNotEmpty())
                             throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
 
                         ReferenceCircuitExpressionNode(
@@ -237,28 +236,37 @@ class LoneCircuitExpressionScope(
                             multipleAccess = null,
                         )
                     }
-                    is CSTGenericInterfaceDefinition, is CSTInterfaceDefinition -> {
+                    is CSTInterfaceDefinition -> {
                         AnonymousInterfaceCircuitExpressionNode(
                             interfaceType = DefaultInterfaceTypeNode(),
                             type = InterfaceExpressionScope(this, body).ast(),
                         )
                     }
                     is CSTFunctionDefinition -> {
+                        val parameters = GenericParameterValueScope(this, body.atom.parameterValues).ast()
                         AnonymousFunctionCircuitExpressionNode(
                             instantiation = InstantiationNode(
                                 definitionIdentifier = body.atom.identifier.toIdentifier(),
-                                genericInterfaces = body.atom.interfaceValues.map { GenericInterfaceValueScope(this, it).ast() },
-                                genericParameters = body.atom.parameterValues.map { GenericParameterValueScope(this, it).ast() },
+                                genericInterfaces = parameters.interfaces,
+                                genericParameters = parameters.parameters,
                             )
                         )
                     }
-                    is CSTGenericParameterDefinition -> {
-                        if (body.atom.interfaceValues.isNotEmpty() || body.atom.parameterValues.isNotEmpty())
-                            throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
+                    is CSTParameterDefinition -> {
+                        if (referencedNode.type is CSTInterfaceParameterDefinitionType) {
+                            AnonymousInterfaceCircuitExpressionNode(
+                                interfaceType = DefaultInterfaceTypeNode(),
+                                type = InterfaceExpressionScope(this, body).ast(),
+                            )
+                        } else {
+                            if (body.atom.parameterValues.isNotEmpty())
+                                throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
 
-                        AnonymousGenericFunctionCircuitExpressionNode(
-                            functionIdentifier = body.atom.identifier.toIdentifier()
-                        )
+                            AnonymousGenericFunctionCircuitExpressionNode(
+                                functionIdentifier = body.atom.identifier.toIdentifier()
+                            )
+                        }
+
                     }
                     else -> throw Exception("Unexpected identifier ${body.atom.identifier} as circuit node expression, ${referencedNode::class.simpleName} found")
                 }

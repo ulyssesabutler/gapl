@@ -6,11 +6,11 @@ import com.uabutler.cst.node.expression.CSTCircuitExpression
 import com.uabutler.cst.node.expression.CSTDeclaredCircuitNodeExpression
 import com.uabutler.cst.node.functions.CSTFunctionDefinition
 import com.uabutler.cst.node.functions.CSTNonConditionalCircuitStatement
+import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
 import com.uabutler.resolver.scope.ProgramScope
 import com.uabutler.resolver.scope.Scope
 import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.functions.circuits.CircuitStatementScope
-import com.uabutler.resolver.scope.util.GenericInterfaceDefinitionScope
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
 
 class FunctionDefinitionScope(
@@ -25,8 +25,7 @@ class FunctionDefinitionScope(
         }
     }
 
-    private val genericInterfaces = functionDefinition.interfaceDefinitions.associateBy { it.declaredIdentifier }
-    private val genericParameters = functionDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
+    private val parameters = functionDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
     // TODO: Conditional statements will need their own scope
     private val inputNodes = functionDefinition.inputs
     private val outputNodes = functionDefinition.outputs
@@ -38,7 +37,7 @@ class FunctionDefinitionScope(
         .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
     private val nodes = bodyNodes.associateBy { it.declaredIdentifier } + inputNodes.associateBy { it.declaredIdentifier } + outputNodes.associateBy { it.declaredIdentifier }
 
-    val localSymbolTable = genericInterfaces + genericParameters + nodes
+    val localSymbolTable = parameters + nodes
 
     override fun resolveLocal(name: String): CSTPersistent? {
         return localSymbolTable[name]
@@ -50,7 +49,6 @@ class FunctionDefinitionScope(
 
     override fun symbols(): List<String> {
         return buildList {
-            functionDefinition.interfaceDefinitions.mapTo(this) { it.declaredIdentifier }
             functionDefinition.parameterDefinitions.mapTo(this) { it.declaredIdentifier }
             inputNodes.mapTo(this) { it.declaredIdentifier }
             outputNodes.mapTo(this) { it.declaredIdentifier }
@@ -61,13 +59,12 @@ class FunctionDefinitionScope(
     fun ast(): FunctionDefinitionNode {
         validateSymbols()
 
+        val definitions = GenericParameterDefinitionScope(this, functionDefinition.parameterDefinitions).ast()
 
         return FunctionDefinitionNode(
             identifier = functionDefinition.declaredIdentifier.toIdentifier(),
-            genericInterfaces = functionDefinition.interfaceDefinitions
-                .map { GenericInterfaceDefinitionScope(this, it).ast() },
-            genericParameters = functionDefinition.parameterDefinitions
-                .map { GenericParameterDefinitionScope(this, it).ast() },
+            genericInterfaces = definitions.interfaceDefinitions,
+            genericParameters = definitions.parameterDefinitions,
             inputFunctionIO = functionDefinition.inputs
                 .map { FunctionIOScope(this, it).ast() },
             outputFunctionIO = functionDefinition.outputs

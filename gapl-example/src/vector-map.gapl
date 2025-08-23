@@ -1,0 +1,27 @@
+interface data wire
+
+function vector_map(
+    I: interface,
+    O: interface,
+    size: integer,
+    operation: I => O,
+) i: I[size] => o: O[size]
+{
+    if (size > 0) {
+        i[size - 1] => operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => vector_map(I, O, size - 1, operation) => o[0:size - 2];
+        }
+    }
+}
+
+function vector_map_double() i: data => o: data
+{
+    i, i => and() => o;
+}
+
+function vector_map_main() i: data[2] => o: data[2]
+{
+    i => vector_map(data, data, 2, vector_map_double) => o;
+}

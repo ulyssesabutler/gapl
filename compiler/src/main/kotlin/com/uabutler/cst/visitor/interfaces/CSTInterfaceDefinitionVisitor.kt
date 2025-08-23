@@ -6,7 +6,7 @@ import com.uabutler.cst.node.interfaces.CSTPortDefinition
 import com.uabutler.cst.node.interfaces.CSTRecordInterfaceDefinition
 import com.uabutler.cst.visitor.CSTVisitor
 import com.uabutler.cst.visitor.expression.CSTExpressionVisitor
-import com.uabutler.cst.visitor.util.CSTGenericDefinitionsVisitor
+import com.uabutler.cst.visitor.util.CSTParameterDefinitionListVisitor
 import com.uabutler.parsers.generated.CSTParser
 
 object CSTInterfaceDefinitionVisitor: CSTVisitor() {
@@ -27,8 +27,7 @@ object CSTInterfaceDefinitionVisitor: CSTVisitor() {
     override fun visitAliasInterfaceDefinition(ctx: CSTParser.AliasInterfaceDefinitionContext): CSTAliasInterfaceDefinition {
         return CSTAliasInterfaceDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifer),
-            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
-            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.parameterDefinitionList()?.let { CSTParameterDefinitionListVisitor.visitParameterDefinitionList(it).definitions } ?: emptyList(),
             aliasedInterface = CSTExpressionVisitor.visitExpression(ctx.expression()),
         )
     }
@@ -36,8 +35,7 @@ object CSTInterfaceDefinitionVisitor: CSTVisitor() {
     override fun visitRecordInterfaceDefinition(ctx: CSTParser.RecordInterfaceDefinitionContext): CSTRecordInterfaceDefinition {
         return CSTRecordInterfaceDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifer),
-            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
-            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.parameterDefinitionList()?.let { CSTParameterDefinitionListVisitor.visitParameterDefinitionList(it).definitions } ?: emptyList(),
             ports = ctx.portDefinition().map { visitPortDefinition(it) },
         )
     }

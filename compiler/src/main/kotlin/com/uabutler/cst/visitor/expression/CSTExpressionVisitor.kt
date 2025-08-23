@@ -16,6 +16,7 @@ import com.uabutler.cst.node.expression.CSTLogicalAndExpression
 import com.uabutler.cst.node.expression.CSTLogicalOrExpression
 import com.uabutler.cst.node.expression.CSTMultiplicationExpression
 import com.uabutler.cst.node.expression.CSTNotEqualsExpression
+import com.uabutler.cst.node.expression.CSTSubtractionExpression
 import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
 import com.uabutler.cst.visitor.CSTVisitor
@@ -93,7 +94,7 @@ object CSTExpressionVisitor: CSTVisitor() {
                 lhs = visitExpression(ctx.lhs!!),
                 rhs = visitExpression(ctx.rhs!!),
             )
-            Companion.Operator.SUBTRACT -> CSTDivisionExpression(
+            Companion.Operator.SUBTRACT -> CSTSubtractionExpression(
                 lhs = visitExpression(ctx.lhs!!),
                 rhs = visitExpression(ctx.rhs!!),
             )

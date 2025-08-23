@@ -5,6 +5,5 @@ import com.uabutler.cst.node.expression.CSTExpression
 
 data class CSTAtom(
     val identifier: String,
-    val interfaceValues: List<CSTExpression>,
     val parameterValues: List<CSTExpression>,
 ): CSTPersistent

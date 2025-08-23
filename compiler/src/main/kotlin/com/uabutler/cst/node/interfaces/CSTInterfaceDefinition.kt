@@ -2,21 +2,18 @@ package com.uabutler.cst.node.interfaces
 
 import com.uabutler.cst.node.CSTPersistent
 import com.uabutler.cst.node.expression.CSTExpression
-import com.uabutler.cst.node.util.CSTGenericInterfaceDefinition
-import com.uabutler.cst.node.util.CSTGenericParameterDefinition
+import com.uabutler.cst.node.util.CSTParameterDefinition
 
 sealed class CSTInterfaceDefinition(
     open val declaredIdentifier: String,
-    open val interfaceDefinitions: List<CSTGenericInterfaceDefinition>,
-    open val parameterDefinitions: List<CSTGenericParameterDefinition>,
+    open val parameterDefinitions: List<CSTParameterDefinition>,
 ): CSTPersistent
 
 data class CSTAliasInterfaceDefinition(
     override val declaredIdentifier: String,
-    override val interfaceDefinitions: List<CSTGenericInterfaceDefinition>,
-    override val parameterDefinitions: List<CSTGenericParameterDefinition>,
+    override val parameterDefinitions: List<CSTParameterDefinition>,
     val aliasedInterface: CSTExpression,
-): CSTInterfaceDefinition(declaredIdentifier, interfaceDefinitions, parameterDefinitions)
+): CSTInterfaceDefinition(declaredIdentifier, parameterDefinitions)
 
 data class CSTPortDefinition(
     val declaredIdentifier: String,
@@ -25,7 +22,6 @@ data class CSTPortDefinition(
 
 data class CSTRecordInterfaceDefinition(
     override val declaredIdentifier: String,
-    override val interfaceDefinitions: List<CSTGenericInterfaceDefinition>,
-    override val parameterDefinitions: List<CSTGenericParameterDefinition>,
+    override val parameterDefinitions: List<CSTParameterDefinition>,
     val ports: List<CSTPortDefinition>,
-): CSTInterfaceDefinition(declaredIdentifier, interfaceDefinitions, parameterDefinitions)
+): CSTInterfaceDefinition(declaredIdentifier, parameterDefinitions)

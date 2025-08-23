@@ -11,20 +11,16 @@ import com.uabutler.cst.node.interfaces.CSTRecordInterfaceDefinition
 import com.uabutler.resolver.scope.ProgramScope
 import com.uabutler.resolver.scope.Scope
 import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
-import com.uabutler.resolver.scope.util.GenericInterfaceDefinitionScope
-import com.uabutler.resolver.scope.util.GenericInterfaceValueScope
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
-import com.uabutler.resolver.scope.util.GenericParameterValueScope
 
 class InterfaceDefinitionScope(
     override val parentScope: ProgramScope,
     val interfaceDefinition: CSTInterfaceDefinition,
 ): Scope {
 
-    private val genericInterfaces = interfaceDefinition.interfaceDefinitions.associateBy { it.declaredIdentifier }
     private val genericParameters = interfaceDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
 
-    private val localSymbolTable = genericInterfaces + genericParameters
+    private val localSymbolTable = genericParameters
 
     override fun resolveLocal(name: String): CSTPersistent? {
         return localSymbolTable[name]
@@ -32,7 +28,6 @@ class InterfaceDefinitionScope(
 
     override fun symbols(): List<String> {
         return buildList {
-            interfaceDefinition.interfaceDefinitions.mapTo(this) { it.declaredIdentifier }
             interfaceDefinition.parameterDefinitions.mapTo(this) { it.declaredIdentifier }
         }
     }
@@ -41,22 +36,20 @@ class InterfaceDefinitionScope(
         return when (interfaceDefinition) {
             is CSTAliasInterfaceDefinition -> {
                 val identifier = interfaceDefinition.declaredIdentifier.toIdentifier()
-                val interfaces = interfaceDefinition.interfaceDefinitions.map { GenericInterfaceDefinitionScope(this, it).ast() }
-                val parameters = interfaceDefinition.parameterDefinitions.map { GenericParameterDefinitionScope(this, it).ast() }
+                val parameters = GenericParameterDefinitionScope(this, interfaceDefinition.parameterDefinitions).ast()
                 val aliasedInterface = InterfaceExpressionScope(this, interfaceDefinition.aliasedInterface).ast()
 
                 AliasInterfaceDefinitionNode(
                     identifier = identifier,
-                    genericInterfaces = interfaces,
-                    genericParameters = parameters,
+                    genericInterfaces = parameters.interfaceDefinitions,
+                    genericParameters = parameters.parameterDefinitions,
                     aliasedInterface = aliasedInterface,
                 )
             }
 
             is CSTRecordInterfaceDefinition -> {
                 val identifier = interfaceDefinition.declaredIdentifier.toIdentifier()
-                val interfaces = interfaceDefinition.interfaceDefinitions.map { GenericInterfaceDefinitionScope(this, it).ast() }
-                val parameters = interfaceDefinition.parameterDefinitions.map { GenericParameterDefinitionScope(this, it).ast() }
+                val parameters = GenericParameterDefinitionScope(this, interfaceDefinition.parameterDefinitions).ast()
                 val ports = interfaceDefinition.ports.map { port ->
                     RecordInterfacePortNode(
                         identifier = port.declaredIdentifier.toIdentifier(),
@@ -66,8 +59,8 @@ class InterfaceDefinitionScope(
 
                 RecordInterfaceDefinitionNode(
                     identifier = identifier,
-                    genericInterfaces = interfaces,
-                    genericParameters = parameters,
+                    genericInterfaces = parameters.interfaceDefinitions,
+                    genericParameters = parameters.parameterDefinitions,
                     inherits = emptyList(), // TODO: We don't really support this yet
                     ports = ports,
                 )

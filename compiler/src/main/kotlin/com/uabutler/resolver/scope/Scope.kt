@@ -19,7 +19,6 @@ interface Scope {
         if (name in predefinedFunctionNames) {
             return CSTFunctionDefinition(
                 declaredIdentifier = name,
-                interfaceDefinitions = emptyList(),
                 parameterDefinitions = emptyList(),
                 inputs = emptyList(),
                 outputs = emptyList(),

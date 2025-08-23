@@ -5,7 +5,7 @@ import com.uabutler.cst.node.functions.CSTFunctionIO
 import com.uabutler.cst.node.functions.CSTFunctionIOList
 import com.uabutler.cst.visitor.CSTVisitor
 import com.uabutler.cst.visitor.expression.CSTExpressionVisitor
-import com.uabutler.cst.visitor.util.CSTGenericDefinitionsVisitor
+import com.uabutler.cst.visitor.util.CSTParameterDefinitionListVisitor
 import com.uabutler.parsers.generated.CSTParser
 
 object CSTFunctionDefinitionVisitor: CSTVisitor() {
@@ -26,8 +26,7 @@ object CSTFunctionDefinitionVisitor: CSTVisitor() {
     override fun visitFunctionDefinition(ctx: CSTParser.FunctionDefinitionContext): CSTFunctionDefinition {
         return CSTFunctionDefinition(
             declaredIdentifier = visitId(ctx.declaredIdentifier),
-            interfaceDefinitions = ctx.genericInterfaceDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericInterfaceDefinitions(it).definitions } ?: emptyList(),
-            parameterDefinitions = ctx.genericParameterDefinitions()?.let { CSTGenericDefinitionsVisitor.visitGenericParameterDefinitions(it).definitions } ?: emptyList(),
+            parameterDefinitions = ctx.parameterDefinitionList()?.let { CSTParameterDefinitionListVisitor.visitParameterDefinitionList(it).definitions } ?: emptyList(),
             inputs = visitFunctionIOList(ctx.input!!).ioList,
             outputs = visitFunctionIOList(ctx.output!!).ioList,
             statements = ctx.circuitStatement().map { CSTCircuitStatementVisitor.visitCircuitStatement(it) },

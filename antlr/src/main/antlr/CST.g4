@@ -17,6 +17,7 @@ False: 'false';
 In: 'in';
 Out: 'out';
 Inout: 'inout';
+Integer: 'integer';
 
 // Punctuation
 ParenL: '(';
@@ -55,7 +56,7 @@ Id: [a-zA-Z_] [a-zA-Z0-9_]*;
 
 program: (interfaceDefinition | functionDefinition)+;
 
-atom: identifier=Id genericInterfaceValues? genericParameterValues?;
+atom: identifier=Id parameterValues?;
 
 accessor:
       SquareL index=expression SquareR #vectorItemAccessor
@@ -102,23 +103,21 @@ circuitNodeExpression:
     | ParenL circuitExpression ParenL #parenCircuitExpression
 ;
 
-genericInterfaceValues: AngleL (expression Comma)* expression? AngleR;
-genericParameterValues: ParenL (expression Comma)* expression? ParenR;
+parameterValues: ParenL (expression Comma)* expression? ParenR;
 
-genericInterfaceDefinition: declaredIdentifier=Id;
-genericInterfaceDefinitions: AngleL (genericInterfaceDefinition Comma)* genericInterfaceDefinition? AngleR;
-genericParameterDefinitionTypeInterfaceList: (expression Comma)* expression?;
-genericParameterDefinitionType:
-      typeName=Id #namedGenericParameterDefinitionType
-    | inputs=genericParameterDefinitionTypeInterfaceList Connector outputs=genericParameterDefinitionTypeInterfaceList #functionGenericParameterDefinitionType
+// TODO: Support null
+parameterDefinitionTypeInterfaceList: (expression Comma)* expression?;
+parameterDefinitionType:
+      Integer #integerParameterDefinitionType
+    | Interface #interfaceParameterDefinitionType
+    | inputs=parameterDefinitionTypeInterfaceList Connector outputs=parameterDefinitionTypeInterfaceList #functionParameterDefinitionType
 ;
-genericParameterDefinition: declaredIdenfier=Id Colon type=genericParameterDefinitionType;
-genericParameterDefinitions: ParenL (genericParameterDefinition Comma)* genericParameterDefinition? ParenR;
+parameterDefinition: declaredIdenfier=Id Colon type=parameterDefinitionType;
+parameterDefinitionList: ParenL (parameterDefinition Comma)* parameterDefinition? ParenR;
 
 aliasInterfaceDefinition:
     Interface declaredIdentifer=Id
-    genericInterfaceDefinitions?
-    genericParameterDefinitions?
+    parameterDefinitionList?
     expression
 ;
 
@@ -126,8 +125,7 @@ portDefinition: declaredIdentifier=Id Colon interfaceType=expression SemiColon;
 
 recordInterfaceDefinition:
     Interface declaredIdentifer=Id
-    genericInterfaceDefinitions?
-    genericParameterDefinitions?
+    parameterDefinitionList?
     // TODO: Inherits
     CurlyL portDefinition* CurlyR
 ;
@@ -155,8 +153,7 @@ circuitStatement:
 
 functionDefinition:
     Function declaredIdentifier=Id
-    genericInterfaceDefinitions?
-    genericParameterDefinitions?
+    parameterDefinitionList?
     input=functionIOList Connector output=functionIOList
     CurlyL (circuitStatement)* CurlyR
 ;

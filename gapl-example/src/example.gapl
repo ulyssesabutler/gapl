@@ -2,7 +2,7 @@
 interface byte wire[8]
 
 // An alias with a generic and a parameter
-interface array<T>(size: integer) T[size]
+interface array(T: interface, size: integer) T[size]
 
 // A record interface
 interface pair {
@@ -47,7 +47,7 @@ function predefined_functions() i: wire => o: wire {
     declare yliteralnode: literal(8, 10) => declare y: wire[8];
 
     // Registers can also be created using a function. It can store values from any interface.
-    declare register_in: wire => declare registernode: register<wire>() => declare register_out: wire;
+    declare register_in: wire => declare registernode: register(wire) => declare register_out: wire;
 
     booleanvalue => register_in;
 

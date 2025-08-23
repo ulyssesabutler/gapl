@@ -1,16 +1,16 @@
-interface pair<T, U> {
+interface pair(T: interface, U: interface) {
     first: T;
     second: U;
 }
 
 interface boolean wire
 
-interface valid<T> {
+interface valid(T: interface) {
     value: T;
     valid: boolean;
 }
 
-interface last<T> {
+interface last(T: interface) {
     value: T;
     last: boolean;
 }
@@ -35,20 +35,24 @@ interface sketch(
 interface sketch3(hash_function_depth: integer) sketch(3, hash_function_depth)
 interface sketch6(hash_function_depth: integer) sketch(6, hash_function_depth)
 
-function count_min_vector_zip<I, J>(
+function count_min_vector_zip(
+    I: interface,
+    J: interface,
     vector_size: integer,
-) i1: I[vector_size], i2: J[vector_size] => o: pair<I, J>[vector_size] {
+) i1: I[vector_size], i2: J[vector_size] => o: pair(I, J)[vector_size] {
     i1[0] => o[0].first;
     i2[0] => o[0].second;
 
     if (vector_size > 1) {
         i1[1:vector_size - 1], i2[1:vector_size - 1]
-            => count_min_vector_zip<I, J>(vector_size - 1)
+            => count_min_vector_zip(I, J, vector_size - 1)
             => o[1:vector_size - 1];
     }
 }
 
-function count_min_combinational_vector_fold<T, U>(
+function count_min_combinational_vector_fold(
+    T: interface,
+    U: interface,
     size: integer,
     operation: T, U => U,
 ) i: T[size], init: U => o: U {
@@ -56,11 +60,13 @@ function count_min_combinational_vector_fold<T, U>(
         i[0], init => operation => o;
     } else {
         i[0], init => operation => declare updated_state: U;
-        i[1:size - 1], updated_state => count_min_combinational_vector_fold<T, U>(size - 1, operation) => o;
+        i[1:size - 1], updated_state => count_min_combinational_vector_fold(T, U, size - 1, operation) => o;
     }
 }
 
-function count_min_vector_map<I, O>(
+function count_min_vector_map(
+    I: interface,
+    O: interface,
     size: integer,
     operation: I => O,
 ) i: I[size] => o: O[size] {
@@ -68,7 +74,7 @@ function count_min_vector_map<I, O>(
         i[size - 1] => operation => o[size - 1];
 
         if (size > 1) {
-            i[0:size - 2] => count_min_vector_map<I, O>(size - 1, operation) => o[0:size - 2];
+            i[0:size - 2] => count_min_vector_map(I, O, size - 1, operation) => o[0:size - 2];
         }
     }
 }
@@ -81,16 +87,19 @@ function count_min_generate_index_list(size: integer) null => o: sketch_column_i
     }
 }
 
-function count_min_replicate<I>(factor: integer) i: I => o: I[factor] {
+function count_min_replicate(I: interface, factor: integer) i: I => o: I[factor] {
     i => o[0];
     if (factor > 1) {
-        i => count_min_replicate<I>(factor - 1) => o[1:factor - 1];
+        i => count_min_replicate(I, factor - 1) => o[1:factor - 1];
     }
 }
 
-function count_min_unpair<T, U, V>(
+function count_min_unpair(
+    T: interface,
+    U: interface,
+    V: interface,
     operation: T, U => V
-) i: pair<T, U> => o: V {
+) i: pair(T, U) => o: V {
     i.first, i.second => operation => o;
 }
 
@@ -110,17 +119,19 @@ function count_min_boolean_to_int(size: integer) i: wire => o: wire[size] {
     i => count_min_wire_to_vector() => count_min_left_pad(1, size - 1) => o;
 }
 
-function count_min_fold<T, U>(
+function count_min_fold(
+    T: interface,
+    U: interface,
     replication_factor: integer,
     operation: T, U => U,
-) i: last<T[replication_factor]> => o: valid<U> {
-    declare state: register<U>();
+) i: last(T[replication_factor]) => o: valid(U) {
+    declare state: register(U);
     i.value, state
-        => count_min_combinational_vector_fold<T, U>(replication_factor, operation)
+        => count_min_combinational_vector_fold(T, U, replication_factor, operation)
         => state
         => o.value;
 
-    i.last => register<boolean>() => o.valid;
+    i.last => register(boolean) => o.valid;
 }
 
 function count_min_increment_sketch_column(
@@ -128,24 +139,28 @@ function count_min_increment_sketch_column(
 ) index: sketch_column_index, original: sketch_column(depth) => updated: sketch_column(depth) {
 
     // First, let's generate the increment vector. This will be a vector where a single value is 1, all others are 0
-    index => count_min_replicate<sketch_column_index>(depth) => declare replicated_index: sketch_column_index[depth];
+    index => count_min_replicate(sketch_column_index, depth) => declare replicated_index: sketch_column_index[depth];
     count_min_generate_index_list(depth) => declare index_list: sketch_column_index[depth];
 
     replicated_index, index_list
-        => count_min_vector_zip<sketch_column_index, sketch_column_index>(depth)
-        => count_min_vector_map<pair<sketch_column_index, sketch_column_index>, boolean>(
+        => count_min_vector_zip(sketch_column_index, sketch_column_index, depth)
+        => count_min_vector_map(
+            pair(sketch_column_index, sketch_column_index),
+            boolean,
             depth,
-            count_min_unpair<sketch_column_index, sketch_column_index, boolean>(equals(4)),
+            count_min_unpair(sketch_column_index, sketch_column_index, boolean, equals(4)),
         )
-        => count_min_vector_map<boolean, count>(depth, count_min_boolean_to_int(8))
+        => count_min_vector_map(boolean, count, depth, count_min_boolean_to_int(8))
         => declare increment_vector: sketch_column(depth);
 
     // Now, let's add the increment vector to the input column
     original, increment_vector
-        => count_min_vector_zip<count, count>(depth)
-        => count_min_vector_map<pair<count, count>, count>(
+        => count_min_vector_zip(count, count, depth)
+        => count_min_vector_map(
+            pair(count, count),
+            count,
             depth,
-            count_min_unpair<count, count, count>(add(8))
+            count_min_unpair(count, count, count, add(8))
         )
         => updated;
 
@@ -167,7 +182,8 @@ function count_min_int_hash2() i: wire[8] => o: sketch_column_index {
     i => hash_with_op(multiply(4)) => o;
 }
 
-function count_min_update_sketch3<T>(
+function count_min_update_sketch3(
+    T: interface,
     depth: integer,
     hash0: T => sketch_column_index,
     hash1: T => sketch_column_index,
@@ -186,7 +202,8 @@ function count_min_update_sketch3<T>(
 
 }
 
-function count_min_update_sketch6<T>(
+function count_min_update_sketch6(
+    T: interface,
     depth: integer,
     hash0: T => sketch_column_index,
     hash1: T => sketch_column_index,
@@ -214,18 +231,21 @@ function count_min_update_sketch6<T>(
 
 }
 
-function count_min_main() i: last<wire[8][3]> => o: valid<sketch3(16)> {
+function count_min_main() i: last(wire[8][3]) => o: valid(sketch3(16)) {
     i
-        => count_min_fold<wire[8], sketch3(16)>(
+        => count_min_fold(
+            wire[8],
+            sketch3(16),
             3,
-            count_min_update_sketch3<wire[8]>(
+            count_min_update_sketch3(
+                wire[8],
                 16,
                 count_min_int_hash0,
                 count_min_int_hash1,
                 count_min_int_hash2,
             ),
         )
-        => declare updated_state: valid<sketch3(16)>;
+        => declare updated_state: valid(sketch3(16));
 
     // updated_state.value[0][0][0:7] => o.value;
     updated_state.value => o.value;
