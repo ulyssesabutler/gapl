@@ -13,32 +13,15 @@ import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.Wire
+import com.uabutler.netlistir.transformer.util.NodeCopier
+import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
+import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNodeToPassThroughNode
+import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNodeToPassThroughNode
 
 object Flattener: Transformer {
     private class Helper(val original: List<Module>) {
         val modules = original.associateBy { it.invocation }
         val flattenedModules = mutableMapOf<Module.Invocation, Module>()
-
-        data class WirePair<T: Wire>(
-            val current: T,
-            val inlining: T,
-        )
-
-        data class WirePairs(
-            val input: List<WirePair<InputWire>>,
-            val output: List<WirePair<OutputWire>>,
-        ) {
-            operator fun plus(other: WirePairs): WirePairs {
-                return WirePairs(input + other.input, output + other.output)
-            }
-        }
-
-        data class CreatedNode<T: Node>(
-            val node: T,
-            val wirePairs: WirePairs,
-        )
-
-        fun inlinedIdentifier(invocationIdentifier: String, nodeName: String) = "INLINED$$invocationIdentifier$$nodeName"
 
         fun rootModules(): List<Module> {
             val couldBeRoot = original.associate { it.invocation to true }.toMutableMap()
@@ -53,116 +36,12 @@ object Flattener: Transformer {
             return couldBeRoot.filterValues { it }.keys.map { modules[it]!! }
         }
 
-        fun createWirePairs(current: Node, inlining: Node): WirePairs {
-            val inputWirePairs = current.inputWires().zip(inlining.inputWires()).map { (currentWire, inliningWire) ->
-                WirePair(current = currentWire, inlining = inliningWire)
-            }
-            val outputWirePairs = current.outputWires().zip(inlining.outputWires()).map { (currentWire, inliningWire) ->
-                WirePair(current = currentWire, inlining = inliningWire)
-            }
-
-            return WirePairs(
-                input = inputWirePairs,
-                output = outputWirePairs,
-            )
-        }
-
-        fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
-            val node = PassThroughNode(
-                identifier = inlinedIdentifier(invocationIdentifier, inputNode.name()),
-                parentModule = newParent,
-                inputWireVectorGroupsBuilder = { parentNode ->
-                    inputNode.outputWireVectorGroups.map {
-                        InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                    }
-                },
-                outputWireVectorGroupsBuilder = { parentNode ->
-                    inputNode.outputWireVectorGroups.map {
-                        OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                    }
-                },
-            ).also { newParent.addBodyNode(it) }
-
-            val wirePairs = createWirePairs(node, inputNode)
-
-            return CreatedNode(node, wirePairs)
-        }
-
-        fun copyOutputNodeToPassThroughNode(outputNode: OutputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
-            val node = PassThroughNode(
-                identifier = inlinedIdentifier(invocationIdentifier, outputNode.name()),
-                parentModule = newParent,
-                inputWireVectorGroupsBuilder = { parentNode ->
-                    outputNode.inputWireVectorGroups.map {
-                        InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                    }
-                },
-                outputWireVectorGroupsBuilder = { parentNode ->
-                    outputNode.inputWireVectorGroups.map {
-                        OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                    }
-                },
-            ).also { newParent.addBodyNode(it) }
-
-            val wirePairs = createWirePairs(node, outputNode)
-
-            return CreatedNode(node, wirePairs)
-        }
-
-
-        fun copyBodyNode(bodyNode: BodyNode, invocationIdentifier: String, newParent: Module): CreatedNode<BodyNode> {
-            return when (bodyNode) {
-                is ModuleInvocationNode -> throw Exception("This is a bug in the compiler. Module invocation nodes should have been inlined")
-                is PassThroughNode -> {
-                    val node = PassThroughNode(
-                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.name()),
-                        parentModule = newParent,
-                        inputWireVectorGroupsBuilder = { parentNode ->
-                            bodyNode.inputWireVectorGroups.map {
-                                InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                            }
-                        },
-                        outputWireVectorGroupsBuilder = { parentNode ->
-                            bodyNode.outputWireVectorGroups.map {
-                                OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                            }
-                        }
-                    ).also { newParent.addBodyNode(it) }
-
-                    val wirePairs = createWirePairs(node, bodyNode)
-
-                    CreatedNode(node, wirePairs)
-                }
-                is PredefinedFunctionNode -> {
-                    val node = PredefinedFunctionNode(
-                        identifier = inlinedIdentifier(invocationIdentifier, bodyNode.name()),
-                        parentModule = newParent,
-                        inputWireVectorGroupsBuilder = { parentNode ->
-                            bodyNode.inputWireVectorGroups.map {
-                                InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                            }
-                        },
-                        outputWireVectorGroupsBuilder = { parentNode ->
-                            bodyNode.outputWireVectorGroups.map {
-                                OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
-                            }
-                        },
-                        predefinedFunction = bodyNode.predefinedFunction,
-                    ).also { newParent.addBodyNode(it) }
-
-                    val wirePairs = createWirePairs(node, bodyNode)
-
-                    CreatedNode(node, wirePairs)
-                }
-            }
-        }
-
         fun inlineModuleInvocation(node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
             val currentModule = node.parentModule
             val inliningModule = flattenModule(modules[node.invocation]!!)
 
-            var wirePairs = WirePairs(emptyList(), emptyList())
+            var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
 
             // STEP 1a: Create the IO Nodes. We create a PassThrough node for each IO Node in the inlining module
             val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
