@@ -138,7 +138,7 @@ tasks.register("generateVerilog") {
                     isIgnoreExitValue = true
                     commandLine(createGaplCompileCommand(gapl, outV, loadTestProperties()))
                     errorOutput = err
-                    standardOutput = System.out
+                    standardOutput = err
                 }
                 if (result.exitValue != 0) {
                     hasFailure = true
@@ -192,7 +192,7 @@ tasks.register("runSimulation") {
                 isIgnoreExitValue = true
                 commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, loadTestProperties()))
                 errorOutput = buildErr
-                standardOutput = System.out
+                standardOutput = buildErr
             }
             if (buildRes.exitValue != 0) {
                 hasFailure = true
@@ -219,7 +219,7 @@ tasks.register("runSimulation") {
                 isIgnoreExitValue = true
                 commandLine(exe.absolutePath)
                 errorOutput = runErr
-                standardOutput = System.out
+                standardOutput = runErr
             }
             if (runRes.exitValue != 0) {
                 hasFailure = true

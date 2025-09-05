@@ -31,6 +31,9 @@ val generateKotlinGrammarSource = tasks.register<AntlrKotlinTask>("generateKotli
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     dependsOn(generateKotlinGrammarSource)
+    compilerOptions {
+        suppressWarnings.set(true)
+    }
 }
 
 sourceSets.main {
