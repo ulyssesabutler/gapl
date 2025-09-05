@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
 
     bool all_ok = true;
     const int cycles = 10;
+    uint8_t prev = 0;
 
     for (int t = 0; t < cycles; ++t) {
         uint8_t in = static_cast<uint8_t>(dist(rng));
@@ -54,11 +55,11 @@ int main(int argc, char** argv) {
         uint8_t out = static_cast<uint8_t>(top->o);
         uint8_t exp = expected(in);
 
-        if (out != exp) {
+        if (out != prev) {
             std::cerr << "FAIL cycle " << t
                       << ": in=" << static_cast<int>(in)
                       << " out=" << static_cast<int>(out)
-                      << " expected=" << static_cast<int>(exp) << std::endl;
+                      << " expected=" << static_cast<int>(prev) << std::endl;
             all_ok = false;
         }
 
@@ -75,6 +76,8 @@ int main(int argc, char** argv) {
                       << " expected=" << static_cast<int>(exp) << std::endl;
             all_ok = false;
         }
+
+        prev = exp;
     }
 
     top->final();

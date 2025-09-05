@@ -1,17 +1,42 @@
 package com.uabutler
 
 import com.uabutler.netlistir.builder.ModuleBuilder
-import com.uabutler.netlistir.transformer.Transformer
+import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.transformer.Flattener
+import com.uabutler.netlistir.transformer.LiteralSimplifier
+import com.uabutler.netlistir.transformer.Retimer
+import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
 import com.uabutler.resolver.Resolver
 import com.uabutler.verilogir.builder.VerilogBuilder
 
 object Compiler {
-    fun compile(gapl: String): String {
-        val cst = Parser.fromString(gapl).program()
-        val ast = Resolver.cstToAst(cst)
-        val netlistModules = ModuleBuilder(ast).buildAllModules()
-        val transformedModules = Transformer.allTransformations(netlistModules)
-        val verilogirModules = transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
-        return verilogirModules.joinToString("\n") { it.verilogSerialize() }
+
+    data class Options(
+        val flatten: Boolean,
+        val literalSimplification: Boolean,
+        val retime: PropagationDelay?,
+    )
+
+    fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
+        val transformers = buildList {
+            if (options.flatten) add(Flattener)
+            if (options.literalSimplification) add(LiteralSimplifier)
+            if (options.retime != null) add(Retimer(options.retime))
+        }
+
+        return transformers.fold(inputNetlist) { acc, transformer -> transformer.transform(acc) }
     }
+
+    fun compile(gapl: String, options: Options): String {
+        val initialNetlistModules = gapl
+            .let { Parser.fromString(it).program() }
+            .let { Resolver.cstToAst(it) }
+            .let { ModuleBuilder(it).buildAllModules() }
+
+        val transformedModules = runNetlistTransformers(initialNetlistModules, options)
+
+        val verilogIrModules = transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
+        return verilogIrModules.joinToString("\n") { it.verilogSerialize() }
+    }
+
 }

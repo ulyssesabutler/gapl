@@ -11,9 +11,9 @@ import com.uabutler.netlistir.util.RegisterFunction
 
 object WeightedModuleFromModule {
 
-    fun convert(module: Module): WeightedModule {
+    fun convert(module: Module, delay: PropagationDelay): WeightedModule {
         return module
-            .let { buildSimpleWeightedModule(it) }
+            .let { buildSimpleWeightedModule(it, delay) }
             .let { WeightedModuleCondenser.condenseWeightedModule(it) }
     }
 
@@ -35,7 +35,7 @@ object WeightedModuleFromModule {
         return getNonRegisterSource(module, sourceRegisterInput, registerSourceConnections, currentWeight + 1)
     }
 
-    private fun buildSimpleWeightedModule(module: Module): WeightedModule {
+    private fun buildSimpleWeightedModule(module: Module, delay: PropagationDelay): WeightedModule {
         val registerSourceConnections = module.getNodes()
             .filterIsInstance<PredefinedFunctionNode>()
             .filter { it.predefinedFunction is RegisterFunction }
@@ -44,7 +44,7 @@ object WeightedModuleFromModule {
 
         val nonRegisterNodes = module.getNodes()
             .filter { it !is PredefinedFunctionNode || it.predefinedFunction !is RegisterFunction }
-            .map { WeightedModule.WeightedNode(it, PropagationDelay.forNode(it)) }
+            .map { WeightedModule.WeightedNode(it, delay.forNode(it)) }
             .associateBy { it.node }
 
         val weightedConnections = nonRegisterNodes.keys

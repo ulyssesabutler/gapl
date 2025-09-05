@@ -11,67 +11,43 @@ fun parseArgs(args: Array<String>): Map<String, List<String>> {
     }.first
 }
 
-fun compile(inputFiles: List<String>, outputFile: String) {
+fun compile(inputFiles: List<String>, outputFile: String, options: Compiler.Options) {
     val gapl = inputFiles.joinToString("\n") { File(it).readText() }
-    val verilog = Compiler.compile(gapl)
+    val verilog = Compiler.compile(gapl, options)
 
     File(outputFile).writeText(verilog)
 }
 
-fun test(inputDirectory: String) {
-    File(inputDirectory).listFiles()?.forEach { file ->
-        val name = file.name
-
-        val gapl = file.readText()
-
-        print("\u001b[31m")
-        println("############################")
-        print("#### TEST: ")
-        print("\u001b[0m")
-
-        print("\u001b[35m")
-        println(name)
-        print("\u001b[0m")
-
-        print("\u001b[32m")
-        println("## GAPL ##\n")
-        print("\u001b[0m")
-
-        print("\u001b[36m")
-        println(gapl)
-        print("\u001b[0m")
-
-        val verilog = Compiler.compile(gapl)
-
-        print("\u001b[32m")
-        println("\n## VERILOG ##\n")
-        print("\u001b[0m")
-
-        print("\u001b[34m")
-        println(verilog)
-        print("\u001b[0m")
-    }
+fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
+    return Compiler.Options(
+        flatten = !parsedArgs.containsKey("-ono-flatten"),
+        literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
+        retime = null, // TODO
+    )
 }
 
-fun cli(args: Array<String>) {
+fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
 
     if (parsedArgs.containsKey("-i") && parsedArgs.containsKey("-o")) {
         val inputFiles = parsedArgs["-i"]!!
         val outputFile = parsedArgs["-o"]!!.first()
 
-        compile(inputFiles, outputFile)
-    } else if (parsedArgs.containsKey("--test")) {
-        val input = parsedArgs["--test"]!!.first()
-
-        test(input)
+        compile(inputFiles, outputFile, compilerOptions(parsedArgs))
     } else {
-        println("Usage:")
-        println("  gapl -i INPUT_FILENAME[...] -o OUTPUT_FILENAME")
-        println("  gapl --test INPUT_DIRECTORY")
+        println("Options:")
+        println("  Input Files (REQUIRED)")
+        println("    Usage:       -i INPUT_FILENAME[...]")
+        println("    Description: A list of the input gapl files")
+        println("  Output File (REQUIRED)")
+        println("    Usage:       -o OUTPUT_FILENAME")
+        println("    Description: The output verilog file")
+        println("  Flatten")
+        println("    Usage:       [-ono-flatten]")
+        println("    Description: Defaults to true. Providing this option disables function inlining.")
+        println("  Literal Simplification")
+        println("    Usage:       [-ono-literal-simplification]")
+        println("    Description: Defaults to true. Providing this option disables function inlining.")
         exitProcess(1)
     }
 }
-
-fun main(args : Array<String>) = cli(args)
-// fun main(args : Array<String>) = test()

@@ -1,0 +1,3 @@
+function test() i: wire[8] => o: wire[8] {
+    i => register(wire[8]) => o;
+}
