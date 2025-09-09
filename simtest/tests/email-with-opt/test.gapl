@@ -273,7 +273,7 @@ function email_regex_fold(
     i.last => o.valid;
 }
 
-function email_regex_main() i: last(character[3]) => o: valid(boolean) {
+function test() i: last(character[3]) => o: valid(boolean) {
     i => email_regex_fold(character, state, 3, email_regex_update_nfa()) => declare updated_state: valid(state);
 
     updated_state.value.result => o.value;

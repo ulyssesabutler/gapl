@@ -48,6 +48,9 @@ fun main(args : Array<String>) {
         println("  Literal Simplification")
         println("    Usage:       [-ono-literal-simplification]")
         println("    Description: Defaults to true. Providing this option disables function inlining.")
+        println("  Retime")
+        println("    Usage:       -retime DELAY_MODEL_FILENAME")
+        println("    Description: Provide a YAML file that specifies the delay model to be used.")
         exitProcess(1)
     }
 }

@@ -13,17 +13,19 @@ data class TestProperties(
     var flatten: Boolean = true,
     var literalSimplication: Boolean = true,
     var topModule: String? = null,
+    var retimeDelayModel: String? = null,
     val additionalCompilerFlags: MutableList<String> = mutableListOf(),
     val removeCompilerFlags: MutableList<String> = mutableListOf(),
     val additionalVerilatorFlags: MutableList<String> = mutableListOf(),
     val removeVerilatorFlags: MutableList<String> = mutableListOf(),
 )
 
-fun loadTestProperties(): TestProperties {
+fun loadTestProperties(testDirectory: File): TestProperties {
     val props = Properties()
-    val propsFile = File("simtest/test.properties")
-    if (propsFile.exists()) {
-        propsFile.inputStream().use {
+    val propertiesFile = testDirectory.listFiles()!!.firstOrNull { it.isFile && it.name == "test.properties" }
+
+    if (propertiesFile != null && propertiesFile.exists()) {
+        propertiesFile.inputStream().use {
             props.load(it)
         }
     }
@@ -35,6 +37,7 @@ fun loadTestProperties(): TestProperties {
             "flatten" -> testProperties.flatten = value.toString().toBoolean()
             "literalSimplication" -> testProperties.literalSimplication = value.toString().toBoolean()
             "topModule" -> testProperties.topModule = value.toString()
+            "retime" -> if (value.toString().toBoolean()) testProperties.retimeDelayModel = testDirectory.listFiles()!!.first { it.isFile && it.name == "delay.yaml" }.absolutePath
             "additionalCompilerFlags" -> testProperties.additionalCompilerFlags += value.toString().split(",")
             "additionalVerilatorFlags" -> testProperties.additionalVerilatorFlags += value.toString().split(",")
             "removeCompilerFlags" -> testProperties.removeCompilerFlags += value.toString().split(",")
@@ -61,7 +64,13 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
         add(outputVerilogFile.absolutePath)
 
         if (!properties.literalSimplication) { add("-ono-literal-simplication") }
+
         if (!properties.flatten) { add("-ono-flatten") }
+
+        if (properties.retimeDelayModel != null) {
+            add("-retime")
+            add(properties.retimeDelayModel!!)
+        }
 
         addAll(properties.additionalCompilerFlags)
         removeAll(properties.removeCompilerFlags)
@@ -84,7 +93,7 @@ fun createVerilatorSimCommand(testDir: File, verilogFiles: List<File>, cppFiles:
     val exeName = createVerilatorExeName(testDir)
 
     return buildList {
-        addAll(listOf("verilator", "-Wall", "-Wno-UNUSEDSIGNAL", "-cc"))
+        addAll(listOf("verilator", "-Wall", "-Wno-UNUSEDSIGNAL", "-Wno-DECLFILENAME", "-cc"))
         addAll(verilogFiles.map { it.absolutePath })
         addAll(listOf("--top-module", top, "-Mdir", objDir.absolutePath))
         add("--exe")
@@ -136,7 +145,7 @@ tasks.register("generateVerilog") {
                 val err = ByteArrayOutputStream()
                 val result = exec {
                     isIgnoreExitValue = true
-                    commandLine(createGaplCompileCommand(gapl, outV, loadTestProperties()))
+                    commandLine(createGaplCompileCommand(gapl, outV, loadTestProperties(testDir)))
                     errorOutput = err
                     standardOutput = err
                 }
@@ -190,7 +199,7 @@ tasks.register("runSimulation") {
             val buildErr = ByteArrayOutputStream()
             val buildRes = exec {
                 isIgnoreExitValue = true
-                commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, loadTestProperties()))
+                commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, loadTestProperties(testDir)))
                 errorOutput = buildErr
                 standardOutput = buildErr
             }

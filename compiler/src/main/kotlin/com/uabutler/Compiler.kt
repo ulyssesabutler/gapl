@@ -4,6 +4,8 @@ import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.transformer.Flattener
 import com.uabutler.netlistir.transformer.LiteralSimplifier
+import com.uabutler.netlistir.transformer.PassThroughRemover
+import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
 import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
 import com.uabutler.resolver.Resolver
@@ -20,8 +22,14 @@ object Compiler {
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
         val transformers = buildList {
             if (options.flatten) add(Flattener)
+
             if (options.literalSimplification) add(LiteralSimplifier)
+
+            add(PassThroughRemover)
+
             if (options.retime != null) add(Retimer(options.retime))
+
+            add(Renamer)
         }
 
         return transformers.fold(inputNetlist) { acc, transformer -> transformer.transform(acc) }

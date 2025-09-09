@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":antlr"))
     testImplementation(kotlin("test"))
     implementation("com.strumenta:antlr-kotlin-runtime:1.0.0")
+    implementation("org.yaml:snakeyaml:2.0")
 }
 
 tasks.test {
