@@ -1,0 +1,31 @@
+interface io_type wire[8]
+
+interface input_type {
+    lhs: io_type;
+    rhs: io_type;
+}
+
+interface output_type {
+    output: io_type;
+}
+
+function test() selector: wire[2], i1: wire[8], i2: wire[8] => o: wire[8] {
+    selector,
+    declare demux_input: input_type
+        => demux(input_type, 4, 2)
+        => declare demux_output: input_type[4];
+
+    selector,
+    declare mux_input: output_type[4]
+        => mux(output_type, 4, 2)
+        => declare mux_output: output_type;
+
+    i1 => demux_input.lhs;
+    i2 => demux_input.rhs;
+    mux_output.output => o;
+
+    demux_output[0].lhs, demux_output[0].rhs => add(8)         => mux_input[0].output;
+    demux_output[1].lhs, demux_output[1].rhs => multiply(8)    => mux_input[1].output;
+    demux_output[2].lhs, demux_output[2].rhs => subtract(8)    => mux_input[2].output;
+    demux_output[3].lhs, demux_output[3].rhs => bitwise_and(8) => mux_input[3].output;
+}

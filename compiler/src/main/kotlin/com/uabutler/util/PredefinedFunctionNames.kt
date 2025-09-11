@@ -16,7 +16,10 @@ enum class PredefinedFunctionNames(val gaplName: String) {
     LEFT_SHIFT("left_shift"),
     RIGHT_SHIFT("right_shift"),
     REGISTER("register"),
-    LITERAL("literal");
+    LITERAL("literal"),
+    MUX("mux"),
+    DEMUX("demux"),
+    ;
 
     companion object {
         fun from(name: String): PredefinedFunctionNames? =

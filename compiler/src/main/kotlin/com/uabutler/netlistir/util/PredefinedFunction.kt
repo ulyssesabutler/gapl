@@ -40,6 +40,7 @@ sealed class PredefinedFunction(
     companion object {
         fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
         fun wire() = WireInterfaceStructure
+        fun vector(structure: InterfaceStructure, size: Int) = VectorInterfaceStructure(structure, size)
 
         fun search(invocation: Module.Invocation): PredefinedFunction? {
             val size = invocation.parameters.firstOrNull()?.let {
@@ -69,6 +70,20 @@ sealed class PredefinedFunction(
                 PredefinedFunctionNames.RIGHT_SHIFT -> RightShiftFunction(size!!)
                 PredefinedFunctionNames.REGISTER -> RegisterFunction(interfaceStructure!!)
                 PredefinedFunctionNames.LITERAL -> LiteralFunction(size!!, value!!)
+                PredefinedFunctionNames.MUX -> {
+                    val outputStructure = invocation.interfaces[0]
+                    val inputCount = (invocation.parameters[0] as IntegerParameterValue).value
+                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value
+
+                    MuxFunction(outputStructure, inputCount, selectorSize)
+                }
+                PredefinedFunctionNames.DEMUX -> {
+                    val inputStructure = invocation.interfaces[0]
+                    val outputCount = (invocation.parameters[0] as IntegerParameterValue).value
+                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value
+
+                    DemuxFunction(inputStructure, outputCount, selectorSize)
+                }
                 null -> null
             }
         }
@@ -160,10 +175,28 @@ data class LeftShiftFunction(
 ): BinaryArithmeticFunction(size)
 
 data class RegisterFunction(
-    val storageStructure: InterfaceStructure
+    val storageStructure: InterfaceStructure,
 ): PredefinedFunction(
     inputs = listOf(IO("next", storageStructure)),
     outputs = listOf(IO("current", storageStructure)),
+)
+
+data class MuxFunction(
+    val outputStructure: InterfaceStructure,
+    val inputCount: Int,
+    val selectorSize: Int,
+): PredefinedFunction(
+    inputs = listOf(IO("selector", wireVector(selectorSize)), IO("inputs", vector(outputStructure, inputCount))),
+    outputs = listOf(IO("output", outputStructure)),
+)
+
+data class DemuxFunction(
+    val inputStructure: InterfaceStructure,
+    val outputCount: Int,
+    val selectorSize: Int,
+): PredefinedFunction(
+    inputs = listOf(IO("selector", wireVector(selectorSize)), IO("input", inputStructure)),
+    outputs = listOf(IO("outputs", vector(inputStructure, outputCount))),
 )
 
 data class LiteralFunction(

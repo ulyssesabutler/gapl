@@ -6,6 +6,7 @@ import com.uabutler.netlistir.util.BinaryFunction
 import com.uabutler.netlistir.util.BitwiseAndFunction
 import com.uabutler.netlistir.util.BitwiseOrFunction
 import com.uabutler.netlistir.util.BitwiseXorFunction
+import com.uabutler.netlistir.util.DemuxFunction
 import com.uabutler.netlistir.util.EqualsFunction
 import com.uabutler.netlistir.util.GreaterThanEqualsFunction
 import com.uabutler.netlistir.util.LeftShiftFunction
@@ -14,6 +15,7 @@ import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.LogicalAndFunction
 import com.uabutler.netlistir.util.LogicalOrFunction
 import com.uabutler.netlistir.util.MultiplicationFunction
+import com.uabutler.netlistir.util.MuxFunction
 import com.uabutler.netlistir.util.NotEqualsFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
@@ -24,7 +26,11 @@ import com.uabutler.verilogir.module.statement.Always
 import com.uabutler.verilogir.module.statement.Assignment
 import com.uabutler.verilogir.module.statement.Declaration
 import com.uabutler.verilogir.module.statement.Statement
+import com.uabutler.verilogir.module.statement.always.BlockingAssignment
+import com.uabutler.verilogir.module.statement.always.CaseEntry
+import com.uabutler.verilogir.module.statement.always.CaseStatement
 import com.uabutler.verilogir.module.statement.always.Clocked
+import com.uabutler.verilogir.module.statement.always.Combinational
 import com.uabutler.verilogir.module.statement.always.IfBranch
 import com.uabutler.verilogir.module.statement.always.IfStatement
 import com.uabutler.verilogir.module.statement.always.NonBlockingAssignment
@@ -90,7 +96,7 @@ object PredefinedFunctionNodeCreator {
         data class RegisterWires(
             val input: String,
             val output: String,
-            val regsiter: String,
+            val register: String,
             val size: Int,
         )
 
@@ -98,7 +104,7 @@ object PredefinedFunctionNodeCreator {
             RegisterWires(
                 input = Identifier.wire(input),
                 output = Identifier.wire(output),
-                regsiter = "${Identifier.wire(input)}_register",
+                register = "${Identifier.wire(input)}_register",
                 size = input.wires.size,
             )
         }
@@ -106,7 +112,7 @@ object PredefinedFunctionNodeCreator {
         registers.forEach {
             add(
                 Declaration(
-                    name = it.regsiter,
+                    name = it.register,
                     type = DataType.REG,
                     startIndex = it.size - 1,
                     endIndex = 0,
@@ -116,7 +122,7 @@ object PredefinedFunctionNodeCreator {
             add(
                 Assignment(
                     destReference = Reference(it.output),
-                    expression = Reference(it.regsiter)
+                    expression = Reference(it.register)
                 )
             )
 
@@ -129,7 +135,7 @@ object PredefinedFunctionNodeCreator {
                                 condition = Reference("reset"),
                                 then = listOf(
                                     NonBlockingAssignment(
-                                        variableName = it.regsiter,
+                                        variableName = Reference(it.register),
                                         expression = IntLiteral(0),
                                     )
                                 ),
@@ -137,7 +143,7 @@ object PredefinedFunctionNodeCreator {
                             elseIfBranches = listOf(),
                             elseStatements = listOf(
                                 NonBlockingAssignment(
-                                    variableName = it.regsiter,
+                                    variableName = Reference(it.register),
                                     expression = Reference(it.input),
                                 )
                             ),
@@ -148,6 +154,175 @@ object PredefinedFunctionNodeCreator {
         }
     }
 
+    fun muxFunction(node: PredefinedFunctionNode): List<Statement> {
+        val selector = node.inputWireVectorGroups.first { it.identifier == "selector" }
+        val inputs = node.inputWireVectorGroups.first { it.identifier == "inputs" }
+        val output = node.outputWireVectorGroups.first { it.identifier == "output" }
+
+        data class RegisterWires(
+            val output: String,
+            val register: String,
+            val size: Int,
+        )
+
+        val registers = output.wireVectors.map { output ->
+            RegisterWires(
+                output = Identifier.wire(output),
+                register = "${Identifier.wire(output)}_register",
+                size = output.wires.size,
+            )
+        }
+
+        val registerDeclarations = registers.map {
+            Declaration(
+                name = it.register,
+                type = DataType.REG,
+                startIndex = it.size - 1,
+                endIndex = 0,
+            )
+        }
+
+        val registerAssignments = registers.map {
+            Assignment(
+                destReference = Reference(it.output),
+                expression = Reference(it.register)
+            )
+        }
+
+        val inputCount = (node.predefinedFunction as MuxFunction).inputCount
+
+        val entries = List(inputCount) { index ->
+            val assignments = inputs.wireVectors.zip(registers).map { (inputs, outputRegister) ->
+                val inputIdentifier = Identifier.wire(inputs)
+                val outputIdentifier = outputRegister.register
+
+                val inputSize = inputs.wires.size / inputCount
+                val outputSize = outputRegister.size
+
+                if (inputSize != outputSize) {
+                    throw Exception("Compiler Bug: Invalid input and output sizes for mux function: $inputSize != $outputSize")
+                }
+
+                val startIndex = index * inputSize
+                val endIndex = startIndex + inputSize - 1
+
+                BlockingAssignment(
+                    variableName = Reference(outputIdentifier),
+                    expression = Reference(
+                        variableName = inputIdentifier,
+                        startIndex = endIndex,
+                        endIndex = startIndex,
+                    )
+                )
+            }
+
+            CaseEntry(
+                condition = IntLiteral(index),
+                statements = assignments,
+            )
+        }
+
+        val caseStatement = CaseStatement(
+            selector = Reference(Identifier.wire(selector.wireVectors.first())),
+            caseEntries = entries,
+        )
+
+        val alwaysStatement = Always(
+            sensitivity = Combinational,
+            statements = listOf(caseStatement),
+        )
+
+        return registerDeclarations + registerAssignments + alwaysStatement
+    }
+
+    fun demuxFunction(node: PredefinedFunctionNode): List<Statement> {
+        val selector = node.inputWireVectorGroups.first { it.identifier == "selector" }
+        val input = node.inputWireVectorGroups.first { it.identifier == "input" }
+        val outputs = node.outputWireVectorGroups.first { it.identifier == "outputs" }
+
+        data class RegisterWires(
+            val output: String,
+            val register: String,
+            val size: Int,
+        )
+
+        val registers = outputs.wireVectors.map { output ->
+            RegisterWires(
+                output = Identifier.wire(output),
+                register = "${Identifier.wire(output)}_register",
+                size = output.wires.size,
+            )
+        }
+
+        val registerDeclarations = registers.map {
+            Declaration(
+                name = it.register,
+                type = DataType.REG,
+                startIndex = it.size - 1,
+                endIndex = 0,
+            )
+        }
+
+        val registerAssignments = registers.map {
+            Assignment(
+                destReference = Reference(it.output),
+                expression = Reference(it.register)
+            )
+        }
+
+        val outputReset = registers.map {
+            BlockingAssignment(
+                variableName = Reference(it.register),
+                expression = IntLiteral(0)
+            )
+        }
+
+        val outputCount = (node.predefinedFunction as DemuxFunction).outputCount
+
+        val entries = List(outputCount) { index ->
+            val assignments = registers.zip(input.wireVectors).map { (outputsRegister, input) ->
+                val outputIdentifier = outputsRegister.register
+                val inputIdentifier = Identifier.wire(input)
+
+                val inputSize = input.wires.size
+                val outputSize = outputsRegister.size / outputCount
+
+                if (inputSize != outputSize) {
+                    throw Exception("Compiler Bug: Invalid input and output sizes for demux function: $inputSize != $outputSize")
+                }
+
+                val startIndex = index * outputSize
+                val endIndex = startIndex + outputSize - 1
+
+                BlockingAssignment(
+                    variableName = Reference(
+                        variableName = outputIdentifier,
+                        startIndex = endIndex,
+                        endIndex = startIndex,
+                    ),
+                    expression = Reference(inputIdentifier)
+                )
+            }
+
+            CaseEntry(
+                condition = IntLiteral(index),
+                statements = assignments,
+            )
+        }
+
+        val caseStatement = CaseStatement(
+            selector = Reference(Identifier.wire(selector.wireVectors.first())),
+            caseEntries = entries,
+        )
+
+        val alwaysStatement = Always(
+            sensitivity = Combinational,
+            statements = outputReset + caseStatement,
+        )
+
+        return registerDeclarations + registerAssignments + alwaysStatement
+    }
+
     fun create(node: PredefinedFunctionNode): List<Statement> = buildList {
         addAll(Declarations.create(node))
 
@@ -155,6 +330,8 @@ object PredefinedFunctionNodeCreator {
             is BinaryFunction -> add(binaryFunction(node))
             is LiteralFunction -> add(literalFunction(node))
             is RegisterFunction -> addAll(registerFunction(node))
+            is MuxFunction -> addAll(muxFunction(node))
+            is DemuxFunction -> addAll(demuxFunction(node))
         }
     }
 }

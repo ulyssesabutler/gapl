@@ -2,21 +2,23 @@ package com.uabutler.verilogir.module.statement.always
 
 import com.uabutler.verilogir.VerilogSerialize
 import com.uabutler.verilogir.module.statement.expression.Expression
+import com.uabutler.verilogir.module.statement.expression.IntLiteral
+import com.uabutler.verilogir.module.statement.expression.Reference
 
 sealed class AlwaysStatement: VerilogSerialize
 
 data class BlockingAssignment(
-    val variableName: String,
+    val variableName: Reference,
     val expression: Expression,
 ): AlwaysStatement() {
-    override fun verilogSerialize() = "$variableName = ${expression.verilogSerialize()};"
+    override fun verilogSerialize() = "${variableName.verilogSerialize()} = ${expression.verilogSerialize()};"
 }
 
 data class NonBlockingAssignment(
-    val variableName: String,
+    val variableName: Reference,
     val expression: Expression,
 ): AlwaysStatement() {
-    override fun verilogSerialize() = "$variableName <= ${expression.verilogSerialize()};"
+    override fun verilogSerialize() = "${variableName.verilogSerialize()} <= ${expression.verilogSerialize()};"
 }
 
 data class IfBranch(
@@ -45,5 +47,29 @@ data class IfStatement(
         appendLine(elseStatements.prependIndent())
 
         append("end")
+    }
+}
+
+data class CaseEntry(
+    val condition: IntLiteral,
+    val statements: List<AlwaysStatement>,
+)
+
+data class CaseStatement(
+    val selector: Reference,
+    val caseEntries: List<CaseEntry>,
+): AlwaysStatement() {
+    override fun verilogSerialize() = buildString {
+        appendLine("case (${selector.verilogSerialize()})")
+        val caseEntries = caseEntries.joinToString("\n") { caseEntry ->
+            buildString {
+                appendLine("${caseEntry.condition.value}: begin")
+                val statements = caseEntry.statements.joinToString("\n") { it.verilogSerialize() }
+                appendLine(statements.prependIndent())
+                append("end")
+            }
+        }
+        appendLine(caseEntries.prependIndent())
+        append("endcase")
     }
 }
