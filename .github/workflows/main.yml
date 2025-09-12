@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # Set your one-shot Gradle command here
+      GRADLE_CMD: ./gradlew :simtest:runSimulation
+      # If you generate/compile C++ as part of the build, these help Gradle find compilers
+      CC: gcc
+      CXX: g++
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   # if you use submodules; otherwise remove
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'      # or 17, to match your toolchain
+
+      - name: Install native deps (C/C++ toolchain)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          sudo apt-get install -y verilator
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+        # This action handles ~/.gradle caches (wrapper, dependencies, configuration)
+
+      - name: Build & test
+        run: $GRADLE_CMD
+
+      # Upload JUnit reports so PRs show exactly what failed
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/build/test-results/test/*.xml
+            **/build/reports/tests/test/
+            **/build/reports/*
+
+      # Optional: publish a junit summary in the job UI (nice on failures)
+      - name: JUnit summary
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: '**/build/test-results/test/*.xml'
+          fail_on_failure: false
