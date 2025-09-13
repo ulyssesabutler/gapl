@@ -1,0 +1,36 @@
+[
+    {
+        "name": "test_packet_forwarding",
+        "description": "Test basic packet forwarding",
+        "input": "0102030405060708090A",
+        "expected_output": "0102030405060708090A"
+    },
+    {
+        "name": "test_packet_modification",
+        "description": "Test packet modification",
+        "input": "0102030405",
+        "expected_output": "0504030201"
+    },
+    {
+        "name": "test_network_packet",
+        "description": "Test network packet processing",
+        "input": {
+            "file": "test_data/network_packet.hex"
+        },
+        "expected_output": {
+            "file": "test_data/network_packet.hex"
+        }
+    },
+    {
+        "name": "test_string_comparison",
+        "description": "Test string comparison with cycle count",
+        "input": {
+            "string1": "0102030405",
+            "string2": "0102030405"
+        },
+        "expected_output": {
+            "result": true,
+            "cycle_count": 42
+        }
+    }
+]

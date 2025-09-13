@@ -51,7 +51,25 @@ bin/
 *.bit
 .Xil
 clockInfo.txt
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+*.egg-info/
+dist/
+build/
 xsim.dir
 vivado*.str
 vivado*.debug
 vivado*.zip
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+*.egg-info/
+dist/
+build/
