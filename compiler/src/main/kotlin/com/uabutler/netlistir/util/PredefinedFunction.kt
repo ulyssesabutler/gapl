@@ -2,6 +2,7 @@ package com.uabutler.netlistir.util
 
 import com.uabutler.netlistir.builder.util.IntegerParameterValue
 import com.uabutler.netlistir.builder.util.InterfaceStructure
+import com.uabutler.netlistir.builder.util.RecordInterfaceStructure
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
 import com.uabutler.netlistir.netlist.*
@@ -16,14 +17,6 @@ sealed class PredefinedFunction(
         val name: String,
         val structure: InterfaceStructure,
     ) {
-        fun toWireVectorGroup(
-            parent: Node,
-            wireType: WireType,
-        ) = when (wireType) {
-            WireType.INPUT -> toInputWireVectorGroup(parent)
-            WireType.OUTPUT -> toOutputWireVectorGroup(parent)
-        }
-
         fun toInputWireVectorGroup(parent: Node) = InputWireVectorGroup(
             identifier = name,
             parentNode = parent,
@@ -41,6 +34,13 @@ sealed class PredefinedFunction(
         fun wireVector(size: Int) = VectorInterfaceStructure(WireInterfaceStructure, size)
         fun wire() = WireInterfaceStructure
         fun vector(structure: InterfaceStructure, size: Int) = VectorInterfaceStructure(structure, size)
+        fun conditionals(conditionalCount: Int, inputStructure: InterfaceStructure) = vector(conditional(inputStructure), conditionalCount)
+        fun conditional(inputStructure: InterfaceStructure) = RecordInterfaceStructure(
+            ports = mapOf(
+                "condition" to WireInterfaceStructure,
+                "value" to inputStructure,
+            ),
+        )
 
         fun search(invocation: Module.Invocation): PredefinedFunction? {
             val size = invocation.parameters.firstOrNull()?.let {
@@ -83,6 +83,12 @@ sealed class PredefinedFunction(
                     val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value
 
                     DemuxFunction(inputStructure, outputCount, selectorSize)
+                }
+                PredefinedFunctionNames.PRIORITY -> {
+                    val conditionalCount = (invocation.parameters[0] as IntegerParameterValue).value
+                    val inputStructure = invocation.interfaces[0]
+
+                    PriorityFunction(conditionalCount, inputStructure)
                 }
                 null -> null
             }
@@ -197,6 +203,14 @@ data class DemuxFunction(
 ): PredefinedFunction(
     inputs = listOf(IO("selector", wireVector(selectorSize)), IO("input", inputStructure)),
     outputs = listOf(IO("outputs", vector(inputStructure, outputCount))),
+)
+
+data class PriorityFunction(
+    val conditionalCount: Int,
+    val inputStructure: InterfaceStructure,
+): PredefinedFunction(
+    inputs = listOf(IO("conditionals", conditionals(conditionalCount, inputStructure)), IO("default", inputStructure)),
+    outputs = listOf(IO("output", inputStructure)),
 )
 
 data class LiteralFunction(

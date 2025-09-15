@@ -1,22 +1,3 @@
-interface character wire[8]
-
-interface boolean wire
-
-interface valid(T: interface) {
-    value: T;
-    valid: boolean;
-}
-
-interface last(T: interface) {
-    value: T;
-    last: boolean;
-}
-
-interface pair(T: interface, U: interface) {
-    first: T;
-    second: U;
-}
-
 interface nfa {
     n1: boolean;
     n2: boolean;

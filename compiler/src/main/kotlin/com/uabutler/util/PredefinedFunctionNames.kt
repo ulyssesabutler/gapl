@@ -19,6 +19,7 @@ enum class PredefinedFunctionNames(val gaplName: String) {
     LITERAL("literal"),
     MUX("mux"),
     DEMUX("demux"),
+    PRIORITY("priority"),
     ;
 
     companion object {

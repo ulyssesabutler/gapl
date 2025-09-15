@@ -1,0 +1,22 @@
+interface header() {
+    ethernet: byte[14];
+    ip: byte[20];
+}
+
+interface body(data_byte_count: integer, user_byte_count: integer) {
+    data: byte[data_byte_count];
+    keep: boolean[data_byte_count];
+    user: byte[data_byte_count];
+    last: boolean;
+}
+
+function test()
+    input_header: header,
+    input_body: body(32, 4),
+        =>
+            output_header: header,
+            output_body: body(32, 4),
+{
+    input_header => output_header;
+    input_body => output_body;
+}

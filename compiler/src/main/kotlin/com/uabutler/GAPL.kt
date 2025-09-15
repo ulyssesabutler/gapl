@@ -22,35 +22,46 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
     return Compiler.Options(
         flatten = !parsedArgs.containsKey("-ono-flatten"),
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
+        includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = null, // TODO
     )
+}
+
+fun printHelp() {
+    println("Options:")
+    println("  Input Files (REQUIRED)")
+    println("    Usage:       -i INPUT_FILENAME[...]")
+    println("    Description: A list of the input gapl files")
+    println("  Output File (REQUIRED)")
+    println("    Usage:       -o OUTPUT_FILENAME")
+    println("    Description: The output verilog file")
+    println("  Flatten")
+    println("    Usage:       [-ono-flatten]")
+    println("    Description: Defaults to true. Providing this option disables function inlining.")
+    println("  Literal Simplification")
+    println("    Usage:       [-ono-literal-simplification]")
+    println("    Description: Defaults to true. Providing this option disables function inlining.")
+    println("  Retime")
+    println("    Usage:       -retime DELAY_MODEL_FILENAME")
+    println("    Description: Provide a YAML file that specifies the delay model to be used.")
+    println("  Standard Library")
+    println("    Usage:       [-no-std-lib]")
+    println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
 }
 
 fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
 
-    if (parsedArgs.containsKey("-i") && parsedArgs.containsKey("-o")) {
+    if (parsedArgs.containsKey("-h")) {
+        printHelp()
+        exitProcess(0)
+    } else if (parsedArgs.containsKey("-i") && parsedArgs.containsKey("-o")) {
         val inputFiles = parsedArgs["-i"]!!
         val outputFile = parsedArgs["-o"]!!.first()
 
         compile(inputFiles, outputFile, compilerOptions(parsedArgs))
     } else {
-        println("Options:")
-        println("  Input Files (REQUIRED)")
-        println("    Usage:       -i INPUT_FILENAME[...]")
-        println("    Description: A list of the input gapl files")
-        println("  Output File (REQUIRED)")
-        println("    Usage:       -o OUTPUT_FILENAME")
-        println("    Description: The output verilog file")
-        println("  Flatten")
-        println("    Usage:       [-ono-flatten]")
-        println("    Description: Defaults to true. Providing this option disables function inlining.")
-        println("  Literal Simplification")
-        println("    Usage:       [-ono-literal-simplification]")
-        println("    Description: Defaults to true. Providing this option disables function inlining.")
-        println("  Retime")
-        println("    Usage:       -retime DELAY_MODEL_FILENAME")
-        println("    Description: Provide a YAML file that specifies the delay model to be used.")
+        printHelp()
         exitProcess(1)
     }
 }

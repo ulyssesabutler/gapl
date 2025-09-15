@@ -1,0 +1,20 @@
+interface io_type wire[8]
+
+function test() selector: wire[4], i1: io_type, i2: io_type => o: io_type {
+    declare conditionals: conditional(io_type)[4],
+    declare default: io_type
+        => priority(io_type, 4)
+        => o;
+
+    i1, i2 => add(8)         => conditionals[0].value;
+    i1, i2 => multiply(8)    => conditionals[1].value;
+    i1, i2 => subtract(8)    => conditionals[2].value;
+    i1, i2 => bitwise_and(8) => conditionals[3].value;
+
+    i1, i2 => bitwise_or(8)  => default;
+
+    selector[0] => conditionals[0].condition;
+    selector[1] => conditionals[1].condition;
+    selector[2] => conditionals[2].condition;
+    selector[3] => conditionals[3].condition;
+}

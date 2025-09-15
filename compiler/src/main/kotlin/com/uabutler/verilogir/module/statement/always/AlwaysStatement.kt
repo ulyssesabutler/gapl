@@ -36,9 +36,9 @@ data class IfStatement(
         val ifStatements = ifBranch.then.joinToString("\n") { it.verilogSerialize() }
         appendLine(ifStatements.prependIndent())
 
-        val elseIfBranches = elseIfBranches.forEach { elseIfBranch ->
+        elseIfBranches.forEach { elseIfBranch ->
             appendLine("end else if (${elseIfBranch.condition.verilogSerialize()}) begin")
-            val statements = buildString { elseIfBranch.then.forEach { appendLine(it.verilogSerialize()) } }
+            val statements = elseIfBranch.then.joinToString("\n") { it.verilogSerialize() }
             appendLine(statements.prependIndent())
         }
 

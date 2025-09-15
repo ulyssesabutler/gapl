@@ -17,6 +17,7 @@ import com.uabutler.netlistir.util.LogicalOrFunction
 import com.uabutler.netlistir.util.MultiplicationFunction
 import com.uabutler.netlistir.util.MuxFunction
 import com.uabutler.netlistir.util.NotEqualsFunction
+import com.uabutler.netlistir.util.PriorityFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
@@ -323,6 +324,101 @@ object PredefinedFunctionNodeCreator {
         return registerDeclarations + registerAssignments + alwaysStatement
     }
 
+    fun priorityFunction(node: PredefinedFunctionNode): List<Statement> {
+        val conditionals = node.inputWireVectorGroups.first { it.identifier == "conditionals" }
+        val default = node.inputWireVectorGroups.first { it.identifier == "default" }
+        val output = node.outputWireVectorGroups.first { it.identifier == "output" }
+
+        data class RegisterWires(
+            val output: String,
+            val register: String,
+            val size: Int,
+        )
+
+        val registers = output.wireVectors.map { output ->
+            RegisterWires(
+                output = Identifier.wire(output),
+                register = "${Identifier.wire(output)}_register",
+                size = output.wires.size,
+            )
+        }
+
+        val registerDeclarations = registers.map {
+            Declaration(
+                name = it.register,
+                type = DataType.REG,
+                startIndex = it.size - 1,
+                endIndex = 0,
+            )
+        }
+
+        val registerAssignments = registers.map {
+            Assignment(
+                destReference = Reference(it.output),
+                expression = Reference(it.register)
+            )
+        }
+
+        val inputCount = (node.predefinedFunction as PriorityFunction).conditionalCount
+
+        val branches = List(inputCount) { index ->
+            val conditions = conditionals.wireVectors.first { it.identifier.first() == "condition" }
+            val values = conditionals.wireVectors.filter { it.identifier.first() == "value" }
+
+            val assignments = values.zip(registers).map { (value, outputRegister) ->
+                val inputIdentifier = Identifier.wire(value)
+                val outputIdentifier = outputRegister.register
+
+                val inputSize = value.wires.size / inputCount
+                val outputSize = outputRegister.size
+
+                if (inputSize != outputSize) {
+                    throw Exception("Compiler Bug: Invalid input and output sizes for priority function: $inputSize != $outputSize")
+                }
+
+                val startIndex = index * inputSize
+                val endIndex = startIndex + inputSize - 1
+
+                BlockingAssignment(
+                    variableName = Reference(outputIdentifier),
+                    expression = Reference(
+                        variableName = inputIdentifier,
+                        startIndex = endIndex,
+                        endIndex = startIndex,
+                    )
+                )
+            }
+
+            IfBranch(
+                condition = Reference(Identifier.wire(conditions), index, index),
+                then = assignments,
+            )
+        }
+
+        val elseStatements = default.wireVectors.zip(registers).map { (value, outputRegister) ->
+            val inputIdentifier = Identifier.wire(value)
+            val outputIdentifier = outputRegister.register
+
+            BlockingAssignment(
+                variableName = Reference(outputIdentifier),
+                expression = Reference(inputIdentifier)
+            )
+        }
+
+        val ifStatement = IfStatement(
+            ifBranch = branches.first(),
+            elseIfBranches = branches.drop(1),
+            elseStatements = elseStatements,
+        )
+
+        val alwaysStatement = Always(
+            sensitivity = Combinational,
+            statements = listOf(ifStatement),
+        )
+
+        return registerDeclarations + registerAssignments + alwaysStatement
+    }
+
     fun create(node: PredefinedFunctionNode): List<Statement> = buildList {
         addAll(Declarations.create(node))
 
@@ -332,6 +428,7 @@ object PredefinedFunctionNodeCreator {
             is RegisterFunction -> addAll(registerFunction(node))
             is MuxFunction -> addAll(muxFunction(node))
             is DemuxFunction -> addAll(demuxFunction(node))
+            is PriorityFunction -> addAll(priorityFunction(node))
         }
     }
 }
