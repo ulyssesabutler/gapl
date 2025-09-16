@@ -1,5 +1,7 @@
 package com.uabutler
 
+import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
+import com.uabutler.util.YamlDelayModel
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -18,12 +20,16 @@ fun compile(inputFiles: List<String>, outputFile: String, options: Compiler.Opti
     File(outputFile).writeText(verilog)
 }
 
+fun createDelayModelFromFile(yaml: File): PropagationDelay {
+    return YamlDelayModel(yaml)
+}
+
 fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
     return Compiler.Options(
         flatten = !parsedArgs.containsKey("-ono-flatten"),
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
-        retime = null, // TODO
+        retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
     )
 }
 

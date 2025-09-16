@@ -26,11 +26,15 @@ object WeightedModuleFromModule {
         val source = module.getConnectionForInputWire(inputWire).source
         val sourceNode = source.parentWireVector.parentGroup.parentNode
 
-        if (sourceNode is PredefinedFunctionNode && sourceNode.predefinedFunction !is RegisterFunction) {
+        if (sourceNode !is PredefinedFunctionNode || sourceNode.predefinedFunction !is RegisterFunction) {
             return WeightedSource(source, currentWeight)
         }
 
-        val sourceRegisterInput = registerSourceConnections[source]!!
+        val sourceRegisterInput = try {
+            registerSourceConnections[source]!!
+        } catch (e: NullPointerException) {
+            throw Exception("Compiler Error: Unable to find register input for ${sourceNode.javaClass.simpleName}: ${sourceNode.name()}", e)
+        }
 
         return getNonRegisterSource(module, sourceRegisterInput, registerSourceConnections, currentWeight + 1)
     }

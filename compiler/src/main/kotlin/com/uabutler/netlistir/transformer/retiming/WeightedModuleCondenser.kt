@@ -21,15 +21,12 @@ object WeightedModuleCondenser {
                 if (source != connection.source) throw Exception("Compiler Bug: Invariant violation, Source mismatch")
                 if (sink != connection.sink) throw Exception("Compiler Bug: Invariant violation, Sink mismatch")
                 if (weight != connection.weight) throw Exception("Compiler Bug: Invariant violation, Weight mismatch")
-                if (connection.connectionGroups.size != 1) throw Exception("Compiler Bug: Invariant violation, Connection group already has more than 1 item")
             }
 
-            val groupGroups = weightGroup.groupBy { it.connectionGroups.first().group }.values
-
-            val groups = groupGroups.map { groupGroup ->
+            val connectionGroups = weightGroup.flatMap { it.connectionGroups }.groupBy { it.group }.map { (wireVectorGroup, connectionGroups) ->
                 WeightedModule.InputGroupConnection(
-                    group = groupGroup.first().connectionGroups.first().group,
-                    connections = groupGroup.flatMap { it.connectionGroups.first().connections }
+                    group = wireVectorGroup,
+                    connections = connectionGroups.flatMap { it.connections }
                 )
             }
 
@@ -37,7 +34,7 @@ object WeightedModuleCondenser {
                 source = source,
                 sink = sink,
                 weight = weight,
-                connectionGroups = groups
+                connectionGroups = connectionGroups,
             )
         }
 

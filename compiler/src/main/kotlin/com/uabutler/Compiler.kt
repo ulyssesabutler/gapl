@@ -7,6 +7,8 @@ import com.uabutler.netlistir.transformer.LiteralSimplifier
 import com.uabutler.netlistir.transformer.PassThroughRemover
 import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
+import com.uabutler.netlistir.transformer.StandardLibraryFilter
+import com.uabutler.netlistir.transformer.retiming.ModuleRetimer
 import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
 import com.uabutler.resolver.Resolver
 import com.uabutler.util.standardLibary
@@ -24,6 +26,8 @@ object Compiler {
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
         val transformers = buildList {
             if (options.flatten) add(Flattener)
+
+            if (options.includeStdLib) add(StandardLibraryFilter)
 
             if (options.literalSimplification) add(LiteralSimplifier)
 

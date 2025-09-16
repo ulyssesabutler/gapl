@@ -50,7 +50,7 @@ object WeightedModuleRetimer {
                 edgeWeight = { it.weight to -it.source.weight },
                 edgeComparator = compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second },
                 weightAddition = { a, b -> a.first + b.first to a.second + b.second }
-            ).values.map { it.second }
+            ).values.map { -it.second }
 
             possibleClockPeriods.addAll(possibleClockPeriodsFromNode)
         }
@@ -58,22 +58,21 @@ object WeightedModuleRetimer {
         return possibleClockPeriods.toList()
     }
 
-    // Algorithm FEAS
     private fun attemptRetiming(graph: ModuleAdjacencyList, clockPeriod: Int): ModuleAdjacencyList.Retiming? {
-        val currentRetiming = graph.nodes.associateWith { 0 }.toMutableMap()
+        val currentRetiming = ModuleAdjacencyList.Retiming(graph, graph.nodes.associateWith { 0 })
+        val originalNodes = graph.nodes.associateBy { it.underlyingNode.node }
 
         repeat(graph.nodes.size - 1) {
-            val retiming = graph.retimed(currentRetiming)
-
-            computeCombinationalDelay(retiming).forEach { (node, delay) ->
-                if (delay > clockPeriod) currentRetiming[node] = currentRetiming[node]!! + 1
+            computeCombinationalDelay(currentRetiming.retimedModule()).forEach { (node, delay) ->
+                if (delay > clockPeriod) {
+                    val nodeInRetiming = originalNodes[node.underlyingNode.node]!!
+                    currentRetiming.forNode(nodeInRetiming, currentRetiming.ofNode(nodeInRetiming) + 1)
+                }
             }
         }
 
-        val retiming = ModuleAdjacencyList.Retiming(graph, currentRetiming)
-        val clockPeriodOfRetimedGraph = computeClockPeriod(retiming.retimedModule())
-
-        return if (clockPeriodOfRetimedGraph <= clockPeriod) retiming else null
+        val clockPeriodOfRetimedGraph = computeClockPeriod(currentRetiming.retimedModule())
+        return if (clockPeriodOfRetimedGraph <= clockPeriod) currentRetiming else null
     }
 
     fun retime(module: WeightedModule): WeightedModule {
@@ -90,7 +89,10 @@ object WeightedModuleRetimer {
         }
 
         // Now, return the smallest clock period in the cache that yielded a valid retiming
-        val retiming = cache.filter { it.value != null }.minBy { it.key }.value!!
+        val retiming = cache
+            .filter { it.value != null }
+            .minBy { it.key }
+            .value!!
 
         return retiming.retimedModule().weightedModule
     }
