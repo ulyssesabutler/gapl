@@ -58,6 +58,14 @@ object WeightedModuleRetimer {
         return possibleClockPeriods.toList()
     }
 
+    private fun printRetiming(retiming: ModuleAdjacencyList.Retiming) {
+        println("Retiming:")
+        retiming.retimings.forEach { (node, lag) ->
+            println("  ${node.underlyingNode.node.name()}: $lag")
+        }
+        println()
+    }
+
     private fun attemptRetiming(graph: ModuleAdjacencyList, clockPeriod: Int): ModuleAdjacencyList.Retiming? {
         val currentRetiming = ModuleAdjacencyList.Retiming(graph, graph.nodes.associateWith { 0 })
         val originalNodes = graph.nodes.associateBy { it.underlyingNode.node }
@@ -72,7 +80,10 @@ object WeightedModuleRetimer {
         }
 
         val clockPeriodOfRetimedGraph = computeClockPeriod(currentRetiming.retimedModule())
-        return if (clockPeriodOfRetimedGraph <= clockPeriod) currentRetiming else null
+        return if (clockPeriodOfRetimedGraph <= clockPeriod) {
+            printRetiming(currentRetiming)
+            currentRetiming
+        } else null
     }
 
     fun retime(module: WeightedModule): WeightedModule {

@@ -56,8 +56,8 @@ object WeightedModuleFromModule {
             .map {
                 val source = getNonRegisterSource(module, it, registerSourceConnections)
                 WeightedModule.WeightedConnection(
-                    source = nonRegisterNodes[it.parentWireVector.parentGroup.parentNode]!!,
-                    sink = nonRegisterNodes[source.source.parentWireVector.parentGroup.parentNode]!!,
+                    source = nonRegisterNodes[source.source.parentWireVector.parentGroup.parentNode]!!,
+                    sink = nonRegisterNodes[it.parentWireVector.parentGroup.parentNode]!!,
                     weight = source.weight,
                     connectionGroups = listOf(
                         WeightedModule.InputGroupConnection(
