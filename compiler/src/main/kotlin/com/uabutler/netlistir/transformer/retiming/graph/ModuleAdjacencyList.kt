@@ -134,7 +134,7 @@ class ModuleAdjacencyList(
     }
 
     class Subgraph(
-        val baseModuleAdjacencyList: ModuleAdjacencyList,
+        baseModuleAdjacencyList: ModuleAdjacencyList,
         nodeFilter: (Node) -> Boolean,
         edgeFilter: (Edge) -> Boolean,
     ): AdjacencyList() {
