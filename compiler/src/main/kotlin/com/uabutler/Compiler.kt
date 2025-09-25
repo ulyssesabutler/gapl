@@ -8,8 +8,7 @@ import com.uabutler.netlistir.transformer.PassThroughRemover
 import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
-import com.uabutler.netlistir.transformer.retiming.ModuleRetimer
-import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
+import com.uabutler.util.PropagationDelay
 import com.uabutler.resolver.Resolver
 import com.uabutler.util.standardLibary
 import com.uabutler.verilogir.builder.VerilogBuilder
@@ -38,7 +37,10 @@ object Compiler {
             add(Renamer)
         }
 
-        return transformers.fold(inputNetlist) { acc, transformer -> transformer.transform(acc) }
+        return transformers.fold(inputNetlist) { intermediate, transformer ->
+            println("Running transformer: ${transformer::class.simpleName}")
+            transformer.transform(intermediate)
+        }
     }
 
     fun preprocessor(gapl: String, options: Options) = buildString {

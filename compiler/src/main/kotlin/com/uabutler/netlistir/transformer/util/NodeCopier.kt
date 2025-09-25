@@ -51,6 +51,38 @@ object NodeCopier {
         )
     }
 
+    fun copyInputNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<InputNode> {
+        val node = InputNode(
+            identifier = copiedIdentifier(invocationIdentifier, inputNode.name()),
+            parentModule = newParent,
+            outputWireVectorGroupsBuilder = { parentNode ->
+                inputNode.outputWireVectorGroups.map {
+                    OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                }
+            },
+        ).also { newParent.addInputNode(it) }
+
+        val wirePairs = createWirePairs(node, inputNode)
+
+        return CreatedNode(node, wirePairs)
+    }
+
+    fun copyOutputNode(outputNode: OutputNode, invocationIdentifier: String, newParent: Module): CreatedNode<OutputNode> {
+        val node = OutputNode(
+            identifier = copiedIdentifier(invocationIdentifier, outputNode.name()),
+            parentModule = newParent,
+            inputWireVectorGroupsBuilder = { parentNode ->
+                outputNode.inputWireVectorGroups.map {
+                    InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                }
+            },
+        ).also { newParent.addOutputNode(it) }
+
+        val wirePairs = createWirePairs(node, outputNode)
+
+        return CreatedNode(node, wirePairs)
+    }
+
     fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
         val node = PassThroughNode(
             identifier = copiedIdentifier(invocationIdentifier, inputNode.name()),

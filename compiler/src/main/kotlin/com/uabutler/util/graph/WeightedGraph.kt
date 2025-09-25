@@ -1,11 +1,11 @@
 package com.uabutler.util.graph
 
 open class WeightedGraph<N, E>(
-    val nodes: List<Node<N>>,
-    val edges: List<Edge<N, E>>,
+    val nodes: Collection<Node<N>>,
+    val edges: Collection<Edge<N, E>>,
 ) {
 
-    private val adjacencyList: Map<Node<N>, List<Edge<N, E>>> = edges.groupBy { it.source }
+    private val adjacencyList: Map<Node<N>, Collection<Edge<N, E>>> = edges.groupBy { it.source }
 
 
     data class Node<N>(
@@ -55,7 +55,12 @@ open class WeightedGraph<N, E>(
 
     fun topologicalSort(): List<Node<N>> {
         // Kahn's algorithm
-        val inDegree = edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.size }.toMutableMap()
+        val inDegree = nodes
+            .associateWith { 0 }
+            .toMutableMap()
+            .apply {
+                edges.groupBy { it.sink }.forEach { (sink, edges) -> this[sink] = edges.size }
+            }
 
         val currentStartNodes = inDegree.filterValues { it == 0 }.keys.toMutableList()
 

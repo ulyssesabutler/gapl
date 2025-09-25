@@ -1,8 +1,11 @@
 package com.uabutler.util.graph
 
+import com.uabutler.netlistir.netlist.Module
+
 open class LeisersonCircuitGraph<N, E>(
-    nodes: List<Node<N>>,
-    edges: List<Edge<N, E>>,
+    val module: Module,
+    nodes: Collection<Node<N>>,
+    edges: Collection<Edge<N, E>>,
 ): WeightedGraph<N, E>(nodes, edges) {
 
     fun computeCombinationalDelays(): Map<Node<N>, Int> {
@@ -20,8 +23,8 @@ open class LeisersonCircuitGraph<N, E>(
 
     fun computeClockPeriod() = computeCombinationalDelays().values.max()
 
-    fun computePossibleClockPeriods(): Collection<Int> = buildSet {
-        nodes.asSequence()
+    fun computePossibleClockPeriods(): Collection<Int> {
+        return nodes.asSequence()
             .map { node ->
                 shortestPathsFromNode(
                     root = node,

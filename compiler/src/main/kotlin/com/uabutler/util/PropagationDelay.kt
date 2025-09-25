@@ -1,4 +1,4 @@
-package com.uabutler.netlistir.transformer.retiming.delay
+package com.uabutler.util
 
 import com.uabutler.netlistir.netlist.Node
 

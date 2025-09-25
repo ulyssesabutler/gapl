@@ -2,7 +2,7 @@ package com.uabutler.util
 
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
-import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
+import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.util.AdditionFunction
 import com.uabutler.netlistir.util.BitwiseAndFunction
 import com.uabutler.netlistir.util.BitwiseOrFunction

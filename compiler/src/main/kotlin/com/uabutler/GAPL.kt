@@ -1,6 +1,6 @@
 package com.uabutler
 
-import com.uabutler.netlistir.transformer.retiming.delay.PropagationDelay
+import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
 import java.io.File
 import kotlin.system.exitProcess

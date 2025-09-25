@@ -1,5 +1,7 @@
 package com.uabutler.util.graph
 
+import com.uabutler.netlistir.netlist.Node
+
 class Retiming<N, E>(val graph: LeisersonCircuitGraph<N, E>) {
 
     companion object {
@@ -48,8 +50,9 @@ class Retiming<N, E>(val graph: LeisersonCircuitGraph<N, E>) {
 
     fun generateNewCircuit(): LeisersonCircuitGraph<N, E> {
         return LeisersonCircuitGraph(
+            module = graph.module,
             nodes = graph.nodes,
-            edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) }
+            edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
         )
     }
 
