@@ -194,11 +194,11 @@ object LeisersonCircuitConverter {
         }
 
         oldModule.getInputNodes().forEach { oldNode ->
-            val copiedNode = copyInputNode(oldNode, "FromLeiserson", newModule)
+            val copiedNode = copyInputNode(oldNode, newModule)
             addNodeToMaps(oldNode, copiedNode)
         }
         oldModule.getOutputNodes().forEach { oldNode ->
-            val copiedNode = copyOutputNode(oldNode, "FromLeiserson", newModule)
+            val copiedNode = copyOutputNode(oldNode, newModule)
             addNodeToMaps(oldNode, copiedNode)
         }
         oldModule.getBodyNodes().filter { it !is PredefinedFunctionNode || it.predefinedFunction !is RegisterFunction }.forEach { oldNode ->

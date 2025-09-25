@@ -51,9 +51,9 @@ object NodeCopier {
         )
     }
 
-    fun copyInputNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<InputNode> {
+    fun copyInputNode(inputNode: InputNode, newParent: Module): CreatedNode<InputNode> {
         val node = InputNode(
-            identifier = copiedIdentifier(invocationIdentifier, inputNode.name()),
+            identifier = inputNode.name(), // Unlike body nodes, IO nodes must keep the same name.
             parentModule = newParent,
             outputWireVectorGroupsBuilder = { parentNode ->
                 inputNode.outputWireVectorGroups.map {
@@ -67,9 +67,9 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyOutputNode(outputNode: OutputNode, invocationIdentifier: String, newParent: Module): CreatedNode<OutputNode> {
+    fun copyOutputNode(outputNode: OutputNode, newParent: Module): CreatedNode<OutputNode> {
         val node = OutputNode(
-            identifier = copiedIdentifier(invocationIdentifier, outputNode.name()),
+            identifier = outputNode.name(), // Unlike body nodes, IO nodes must keep the same name.
             parentModule = newParent,
             inputWireVectorGroupsBuilder = { parentNode ->
                 outputNode.inputWireVectorGroups.map {

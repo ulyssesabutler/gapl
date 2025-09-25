@@ -56,13 +56,17 @@ sealed class PredefinedFunction(
             return when (PredefinedFunctionNames.from(invocation.gaplFunctionName)) {
                 PredefinedFunctionNames.LESS_THAN_EQUALS -> LessThanEqualsFunction(size!!)
                 PredefinedFunctionNames.GREATER_THAN_EQUALS -> GreaterThanEqualsFunction(size!!)
+                PredefinedFunctionNames.LESS_THAN -> LessThanFunction(size!!)
+                PredefinedFunctionNames.GREATER_THAN -> GreaterThanFunction(size!!)
                 PredefinedFunctionNames.EQUALS -> EqualsFunction(size!!)
                 PredefinedFunctionNames.NOT_EQUALS -> NotEqualsFunction(size!!)
                 PredefinedFunctionNames.AND -> LogicalAndFunction
                 PredefinedFunctionNames.OR -> LogicalOrFunction
+                PredefinedFunctionNames.NOT -> LogicalNotFunction
                 PredefinedFunctionNames.BITWISE_AND -> BitwiseAndFunction(size!!)
                 PredefinedFunctionNames.BITWISE_OR -> BitwiseOrFunction(size!!)
                 PredefinedFunctionNames.BITWISE_XOR -> BitwiseXorFunction(size!!)
+                PredefinedFunctionNames.BITWISE_NOT -> BitwiseNotFunction(size!!)
                 PredefinedFunctionNames.ADD -> AdditionFunction(size!!)
                 PredefinedFunctionNames.SUBTRACT -> SubtractionFunction(size!!)
                 PredefinedFunctionNames.MULTIPLY -> MultiplicationFunction(size!!)
@@ -106,6 +110,14 @@ sealed class BinaryFunction(
     outputs = listOf(IO("result", result)),
 )
 
+sealed class UnaryFunction(
+    val input: InterfaceStructure,
+    val result: InterfaceStructure,
+): PredefinedFunction(
+    inputs = listOf(IO("input", input)),
+    outputs = listOf(IO("result", result)),
+)
+
 sealed class BooleanComparison(
     open val size: Int,
 ): BinaryFunction(
@@ -130,21 +142,43 @@ data class GreaterThanEqualsFunction(
     override val size: Int,
 ): BooleanComparison(size)
 
-sealed class BooleanFunction: BinaryFunction(
+data class LessThanFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+data class GreaterThanFunction(
+    override val size: Int,
+): BooleanComparison(size)
+
+sealed class BooleanBinaryFunction: BinaryFunction(
     lhs = wire(),
     rhs = wire(),
     result = wire(),
 )
 
-data object LogicalAndFunction: BooleanFunction()
+sealed class BooleanUnaryFunction: UnaryFunction(
+    input = wire(),
+    result = wire(),
+)
 
-data object LogicalOrFunction: BooleanFunction()
+data object LogicalAndFunction: BooleanBinaryFunction()
+
+data object LogicalOrFunction: BooleanBinaryFunction()
+
+data object LogicalNotFunction: BooleanUnaryFunction()
 
 sealed class BinaryArithmeticFunction(
     open val size: Int,
 ): BinaryFunction(
     lhs = wireVector(size),
     rhs = wireVector(size),
+    result = wireVector(size),
+)
+
+sealed class UnaryArithmeticFunction(
+    open val size: Int,
+): UnaryFunction(
+    input = wireVector(size),
     result = wireVector(size),
 )
 
@@ -159,6 +193,10 @@ data class BitwiseOrFunction(
 data class BitwiseXorFunction(
     override val size: Int,
 ): BinaryArithmeticFunction(size)
+
+data class BitwiseNotFunction(
+    override val size: Int,
+): UnaryArithmeticFunction(size)
 
 data class AdditionFunction(
     override val size: Int,

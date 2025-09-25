@@ -5,14 +5,18 @@ import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.util.AdditionFunction
 import com.uabutler.netlistir.util.BitwiseAndFunction
+import com.uabutler.netlistir.util.BitwiseNotFunction
 import com.uabutler.netlistir.util.BitwiseOrFunction
 import com.uabutler.netlistir.util.BitwiseXorFunction
 import com.uabutler.netlistir.util.EqualsFunction
 import com.uabutler.netlistir.util.GreaterThanEqualsFunction
+import com.uabutler.netlistir.util.GreaterThanFunction
 import com.uabutler.netlistir.util.LeftShiftFunction
 import com.uabutler.netlistir.util.LessThanEqualsFunction
+import com.uabutler.netlistir.util.LessThanFunction
 import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.LogicalAndFunction
+import com.uabutler.netlistir.util.LogicalNotFunction
 import com.uabutler.netlistir.util.LogicalOrFunction
 import com.uabutler.netlistir.util.MultiplicationFunction
 import com.uabutler.netlistir.util.NotEqualsFunction
@@ -113,15 +117,19 @@ class YamlDelayModel(file: File): PropagationDelay {
 
     private fun stringToPredefinedFunction(value: String): KClass<out PredefinedFunction> {
         return when (value) {
+            "lessThan" -> LessThanFunction::class
+            "greaterThan" -> GreaterThanFunction::class
             "lessThanEquals" -> LessThanEqualsFunction::class
             "greaterThanEquals" -> GreaterThanEqualsFunction::class
             "equals" -> EqualsFunction::class
             "notEquals" -> NotEqualsFunction::class
             "logicalAnd" -> LogicalAndFunction::class
             "logicalOr" -> LogicalOrFunction::class
+            "logicalNot" -> LogicalNotFunction::class
             "bitwiseAnd" -> BitwiseAndFunction::class
             "bitwiseOr" -> BitwiseOrFunction::class
             "bitwiseXor" -> BitwiseXorFunction::class
+            "bitwiseNot" -> BitwiseNotFunction::class
             "addition" -> AdditionFunction::class
             "subtraction" -> SubtractionFunction::class
             "multiplication" -> MultiplicationFunction::class

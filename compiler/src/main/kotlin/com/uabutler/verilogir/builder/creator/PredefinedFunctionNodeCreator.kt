@@ -4,15 +4,19 @@ import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.AdditionFunction
 import com.uabutler.netlistir.util.BinaryFunction
 import com.uabutler.netlistir.util.BitwiseAndFunction
+import com.uabutler.netlistir.util.BitwiseNotFunction
 import com.uabutler.netlistir.util.BitwiseOrFunction
 import com.uabutler.netlistir.util.BitwiseXorFunction
 import com.uabutler.netlistir.util.DemuxFunction
 import com.uabutler.netlistir.util.EqualsFunction
 import com.uabutler.netlistir.util.GreaterThanEqualsFunction
+import com.uabutler.netlistir.util.GreaterThanFunction
 import com.uabutler.netlistir.util.LeftShiftFunction
 import com.uabutler.netlistir.util.LessThanEqualsFunction
+import com.uabutler.netlistir.util.LessThanFunction
 import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.LogicalAndFunction
+import com.uabutler.netlistir.util.LogicalNotFunction
 import com.uabutler.netlistir.util.LogicalOrFunction
 import com.uabutler.netlistir.util.MultiplicationFunction
 import com.uabutler.netlistir.util.MuxFunction
@@ -21,6 +25,7 @@ import com.uabutler.netlistir.util.PriorityFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
+import com.uabutler.netlistir.util.UnaryFunction
 import com.uabutler.verilogir.builder.creator.util.Declarations
 import com.uabutler.verilogir.builder.creator.util.Identifier
 import com.uabutler.verilogir.module.statement.Always
@@ -38,7 +43,9 @@ import com.uabutler.verilogir.module.statement.always.NonBlockingAssignment
 import com.uabutler.verilogir.module.statement.expression.BinaryOperation
 import com.uabutler.verilogir.module.statement.expression.IntLiteral
 import com.uabutler.verilogir.module.statement.expression.Reference
+import com.uabutler.verilogir.module.statement.expression.UnaryOperation
 import com.uabutler.verilogir.module.statement.util.BinaryOperator
+import com.uabutler.verilogir.module.statement.util.UnaryOperator
 import com.uabutler.verilogir.util.DataType
 
 object PredefinedFunctionNodeCreator {
@@ -74,9 +81,35 @@ object PredefinedFunctionNodeCreator {
             is EqualsFunction -> create(node, BinaryOperator.EQUALS)
             is GreaterThanEqualsFunction -> create(node, BinaryOperator.GREATER_THAN_EQUALS)
             is LessThanEqualsFunction -> create(node, BinaryOperator.LESS_THAN_EQUALS)
+            is GreaterThanFunction -> create(node, BinaryOperator.GREATER_THAN)
+            is LessThanFunction -> create(node, BinaryOperator.LESS_THAN)
             is NotEqualsFunction -> create(node, BinaryOperator.NOT_EQUALS)
             LogicalAndFunction -> create(node, BinaryOperator.AND)
             LogicalOrFunction -> create(node, BinaryOperator.OR)
+        }
+    }
+
+    private fun unaryFunction(node: PredefinedFunctionNode): Statement {
+        fun create(node: PredefinedFunctionNode, operator: UnaryOperator): Statement {
+            if (node.inputWireVectors().size != 1 || node.outputWireVectors().size != 1) {
+                throw Exception("Invalid number of inputs or outputs for unary function $operator")
+            }
+
+            val input = node.inputWireVectors()[0]
+            val result = node.outputWireVectors()[0]
+
+            return Assignment(
+                destReference = Reference(Identifier.wire(result)),
+                expression = UnaryOperation(
+                    operand = Reference(Identifier.wire(input)),
+                    operator = operator,
+                )
+            )
+        }
+
+        return when (node.predefinedFunction as UnaryFunction) {
+            is BitwiseNotFunction -> create(node, UnaryOperator.BITWISE_NOT)
+            LogicalNotFunction -> create(node, UnaryOperator.NOT)
         }
     }
 
@@ -429,6 +462,8 @@ object PredefinedFunctionNodeCreator {
             is MuxFunction -> addAll(muxFunction(node))
             is DemuxFunction -> addAll(demuxFunction(node))
             is PriorityFunction -> addAll(priorityFunction(node))
+            is BitwiseNotFunction -> add(unaryFunction(node))
+            LogicalNotFunction -> add(unaryFunction(node))
         }
     }
 }

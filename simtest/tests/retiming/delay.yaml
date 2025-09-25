@@ -2,3 +2,5 @@ addition:
   default: 4
 multiplication:
   default: 7
+bitwiseNot:
+  default: 1
