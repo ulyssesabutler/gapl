@@ -1,0 +1,24 @@
+function unary() i: wire[32] => o: wire[32] {
+    i => bitwise_not(32) => o;
+}
+
+function binary() i1: wire[32], i2: wire[32] => o: wire[32] {
+    i1, i2 => bitwise_and(32) => o;
+}
+
+function test() i: wire[32] => o: wire[32] {
+    declare cycle_end: wire[32];
+
+    i, cycle_end
+        => declare cycle_entrance: binary()
+        => unary()
+        => register(wire[32])
+        => unary()
+        => declare cycle_exit: wire[32]
+        => o;
+
+    cycle_exit
+        => unary()
+        => unary()
+        => cycle_end;
+}

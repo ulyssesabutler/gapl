@@ -1,7 +1,5 @@
 package com.uabutler.util.graph
 
-import com.uabutler.netlistir.netlist.Node
-
 class Retiming<N, E>(val graph: LeisersonCircuitGraph<N, E>) {
 
     companion object {

@@ -1,0 +1,4 @@
+bitwiseAnd:
+  default: 1
+bitwiseNot:
+  default: 1

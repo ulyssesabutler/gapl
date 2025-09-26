@@ -8,8 +8,8 @@ function unary() i: wire[32] => o: wire[32] {
 }
 
 function test() i: wire[32] => o: wire[32] {
-    i => register(wire[32])
-        => unary()
+    i   => unary()
+        => register(wire[32])
         => unary()
         => unary()
         => unary()

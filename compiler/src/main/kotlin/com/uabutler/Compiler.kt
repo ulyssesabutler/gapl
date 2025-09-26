@@ -37,10 +37,7 @@ object Compiler {
             add(Renamer)
         }
 
-        return transformers.fold(inputNetlist) { intermediate, transformer ->
-            println("Running transformer: ${transformer::class.simpleName}")
-            transformer.transform(intermediate)
-        }
+        return transformers.fold(inputNetlist) { intermediate, transformer -> transformer.transform(intermediate) }
     }
 
     fun preprocessor(gapl: String, options: Options) = buildString {
