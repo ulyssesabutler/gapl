@@ -8,7 +8,7 @@ open class LeisersonCircuitGraph<G, N, E>(
 
     fun computeCombinationalDelays(): Map<Node<N>, Int> {
         val combinationalSubgraph = subgraph(edgeFilter = { it.weight == 0 })
-        val incomingNodes = edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.map { it.source } }
+        val incomingNodes = combinationalSubgraph.edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.map { it.source } }
         val combinationalDelay = mutableMapOf<Node<N>, Int>()
 
         combinationalSubgraph.topologicalSort().forEach { node ->

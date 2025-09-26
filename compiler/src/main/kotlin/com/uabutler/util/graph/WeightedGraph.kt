@@ -75,6 +75,8 @@ open class WeightedGraph<N, E>(
                     if (inDegree[edge.sink] == 0) currentStartNodes.add(edge.sink)
                 }
             }
+        }.also {
+            if (it.size != nodes.size) throw IllegalArgumentException("Graph contains cycles")
         }
     }
 
