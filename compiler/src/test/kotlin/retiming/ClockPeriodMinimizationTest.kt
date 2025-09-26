@@ -101,6 +101,45 @@ class ClockPeriodMinimizationTest {
         assertTrue(chainWeight >= 2, "Chain weight should be at least 2, is $chainWeight")
     }
 
+    @Test
+    fun `retime multiple interconnected cycles`() {
+        val firstCycle = listOf(
+            Edge("a1", "a2", 0),
+            Edge("a2", "a3", 1),
+            Edge("a3", "a1", 0),
+        )
+
+        val secondCycle = listOf(
+            Edge("b1", "b2", 0),
+            Edge("b2", "b3", 0),
+            Edge("b3", "b1", 1),
+        )
+
+        val interconnect = listOf(
+            Edge("a2", "b1", 0),
+            Edge("b2", "a3", 0),
+        )
+
+        val edgeList = buildList {
+            addAll(firstCycle)
+            addAll(secondCycle)
+            addAll(interconnect)
+        }
+
+        val graph = createGraph(
+            name = "Multiple Cycles",
+            edgeList = edgeList,
+        )
+
+        val retimedGraphEdges = graph.retimed().edges
+
+        val firstCycleWeight = firstCycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
+        val secondCycleWeight = secondCycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
+
+        assertEquals(1, firstCycleWeight, "First cycle weight should be 1, is $firstCycleWeight")
+        assertEquals(1, secondCycleWeight, "Second cycle weight should be 1, is $secondCycleWeight")
+    }
+
     fun createGraph(name: String, edgeList: List<Edge>, weightOverride: Map<String, Int> = emptyMap()): Graph {
         val nodes = edgeList
             .flatMap { listOf(it.source, it.sink) }
