@@ -17,7 +17,7 @@ import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 import kotlin.sequences.forEach
 
-object LeisersonCircuitConverter {
+object NetlistLeisersonCircuitConverter {
 
     data class NonRegisterConnection(
         val source: OutputWire,
@@ -83,7 +83,7 @@ object LeisersonCircuitConverter {
 
     private fun nodeType(node: Node) = if (node !is PredefinedFunctionNode) node::class.simpleName else node.predefinedFunction::class.simpleName
 
-    fun printGraph(graph: LeisersonCircuitGraph<Node, Collection<NonRegisterConnection>>) = buildString {
+    fun printGraph(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>) = buildString {
         println("PRINTING GRAPH:")
         println("  Nodes:")
         graph.nodes.forEach { node ->
@@ -95,7 +95,7 @@ object LeisersonCircuitConverter {
         }
     }
 
-    fun fromModule(module: Module, delay: PropagationDelay): LeisersonCircuitGraph<Node, Collection<NonRegisterConnection>> {
+    fun fromModule(module: Module, delay: PropagationDelay): LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>> {
         val nodes = module.getNodes()
             .filter { !isRegisterNode(it) }
             .associateWith { moduleNode ->
@@ -125,7 +125,7 @@ object LeisersonCircuitConverter {
             }
 
         return LeisersonCircuitGraph(
-            module = module,
+            value = module,
             nodes = nodes.values,
             edges = edges,
         )
@@ -175,8 +175,8 @@ object LeisersonCircuitConverter {
         )
     }
 
-    fun toModule(graph: LeisersonCircuitGraph<Node, Collection<NonRegisterConnection>>): Module {
-        val oldModule = graph.module
+    fun toModule(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>): Module {
+        val oldModule = graph.value
 
         // First, create the new module
         val newModule = Module(oldModule.invocation)
@@ -239,7 +239,7 @@ object LeisersonCircuitConverter {
         val newGraphNodes = oldNetlistNodeToNewGraphNode.values
 
         val condensedGraph = LeisersonCircuitGraph(
-            module = newModule,
+            value = newModule,
             nodes = newGraphNodes,
             edges = newGraphEdges,
         )

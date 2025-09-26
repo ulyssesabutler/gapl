@@ -1,9 +1,7 @@
 package com.uabutler.util.graph
 
-import com.uabutler.netlistir.netlist.Module
-
-open class LeisersonCircuitGraph<N, E>(
-    val module: Module,
+open class LeisersonCircuitGraph<G, N, E>(
+    val value: G,
     nodes: Collection<Node<N>>,
     edges: Collection<Edge<N, E>>,
 ): WeightedGraph<N, E>(nodes, edges) {

@@ -3,7 +3,7 @@ package com.uabutler.netlistir.transformer
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.util.PropagationDelay
-import com.uabutler.netlistir.transformer.util.LeisersonCircuitConverter
+import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.util.RegisterFunction
 
 class Retimer(val delay: PropagationDelay): Transformer {
@@ -23,9 +23,9 @@ class Retimer(val delay: PropagationDelay): Transformer {
         val modulesToSkip = moduleRetimability[false] ?: emptyList()
 
         val retimedModules = modulesToRetime
-            .map { LeisersonCircuitConverter.fromModule(it, delay) }
+            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay) }
             .map { it.retimed() }
-            .map { LeisersonCircuitConverter.toModule(it) }
+            .map { NetlistLeisersonCircuitConverter.toModule(it) }
 
         return retimedModules + modulesToSkip
     }
