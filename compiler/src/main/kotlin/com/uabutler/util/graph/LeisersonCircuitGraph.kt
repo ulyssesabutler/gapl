@@ -6,6 +6,17 @@ open class LeisersonCircuitGraph<G, N, E>(
     edges: Collection<Edge<N, E>>,
 ): WeightedGraph<N, E>(nodes, edges) {
 
+    init {
+        if (nodes.any { it.weight < 0 }) throw IllegalArgumentException("Node weights must be non-negative")
+        if (edges.any { it.weight < 0 }) throw IllegalArgumentException("Edge weights must be non-negative")
+
+        try {
+            subgraph(edgeFilter = { it.weight == 0 }).topologicalSort()
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Graph cannot contain zero-weight cycles")
+        }
+    }
+
     fun computeCombinationalDelays(): Map<Node<N>, Int> {
         val combinationalSubgraph = subgraph(edgeFilter = { it.weight == 0 })
         val incomingNodes = combinationalSubgraph.edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.map { it.source } }

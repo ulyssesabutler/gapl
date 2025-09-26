@@ -1,15 +1,10 @@
-package retiming
+package graph
 
-import com.uabutler.util.graph.LeisersonCircuitGraph
-import com.uabutler.util.graph.WeightedGraph
+import graph.TestUtil.createGraph
+import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.Test
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.forEach
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-
-typealias Graph = LeisersonCircuitGraph<String, String, String>
 
 class ClockPeriodMinimizationTest {
 
@@ -143,55 +138,32 @@ class ClockPeriodMinimizationTest {
         assertEquals(1, secondCycleWeight, "Second cycle weight should be 1, is $secondCycleWeight")
     }
 
-    fun createGraph(name: String, edgeList: List<Edge>, weightOverride: Map<String, Int> = emptyMap()): Graph {
-        val nodes = edgeList
-            .flatMap { listOf(it.source, it.sink) }
-            .toSet()
-            .associateWith { weightOverride[it] ?: 1 }
-            .map { (node, weight) -> WeightedGraph.Node(weight, node) }
-            .associateBy { it.value }
+    @Test
+    fun `retime branches`() {
+        val shortBranchNodes = listOf("branchStart") + List(3) { "a$it" } + listOf("branchEnd")
+        val longBranchNodes = listOf("branchStart") + List(10) { "b$it" } + listOf("branchEnd")
 
-        val edges = edgeList.map {
-            WeightedGraph.Edge(
-                source = nodes[it.source]!!,
-                sink = nodes[it.sink]!!,
-                value = it.value(),
-                weight = it.weight,
-            )
+        val shortBranchEdges = shortBranchNodes.zipWithNext().map { Edge(it.first, it.second, 0) }
+        val longBranchEdges = longBranchNodes.zipWithNext().map { Edge(it.first, it.second, 0) }
+
+        val edgeList = buildList {
+            add(Edge("circuitStart", "branchStart", 0))
+            add(Edge("branchEnd", "circuitEnd", 0))
+            addAll(shortBranchEdges)
+            addAll(longBranchEdges)
         }
 
-        return Graph(
-            value = name,
-            nodes = nodes.values.toList(),
-            edges = edges,
+        val graph = createGraph(
+            name = "Branches",
+            edgeList = edgeList,
         )
-    }
 
-    fun getCorrespondingEdge(edgeList: Collection<WeightedGraph.Edge<String, String>>, edge: Edge): WeightedGraph.Edge<String, String> {
-        return edgeList.first { it.value == edge.value() }
-    }
+        val retimedGraphEdges = graph.retimed().edges
 
-    fun WeightedGraph<String, String>.print() {
-        println("Graph")
+        val longBranchWeight = longBranchEdges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
+        val shortBranchWeight = shortBranchEdges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
 
-        println("  Nodes:")
-        nodes.forEach { node ->
-            println("    ${node.value}: ${node.weight}")
-        }
-
-        println("  Edges:")
-        edges.forEach { edge ->
-            println("    ${edge.value}: ${edge.weight}")
-        }
-    }
-
-    data class Edge(
-        val source: String,
-        val sink: String,
-        val weight: Int,
-    ) {
-        fun value() = "$source -> $sink"
-        override fun toString() = value()
+        assertEquals(shortBranchWeight, longBranchWeight, "Short branch weight should be equal to long branch weight, short is $shortBranchWeight, long is $longBranchWeight")
     }
 
 }
