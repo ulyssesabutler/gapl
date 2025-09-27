@@ -11,7 +11,7 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime chain`() {
         val graph = createGraph(
-            name = "Chain",
+            name = "chain",
             edgeList = listOf(
                 Edge("a", "b", 1),
                 Edge("b", "c", 0),
@@ -46,7 +46,7 @@ class ClockPeriodMinimizationTest {
         }
 
         val graph = createGraph(
-            name = "Cycle",
+            name = "cycle",
             edgeList = edgeList,
         )
 
@@ -86,7 +86,7 @@ class ClockPeriodMinimizationTest {
         }
 
         val graph = createGraph(
-            name = "Cycle and Chain",
+            name = "cycle and chain",
             edgeList = edgeList,
         )
 
@@ -125,7 +125,7 @@ class ClockPeriodMinimizationTest {
         }
 
         val graph = createGraph(
-            name = "Multiple Cycles",
+            name = "multiple cycles",
             edgeList = edgeList,
         )
 
@@ -154,7 +154,7 @@ class ClockPeriodMinimizationTest {
         }
 
         val graph = createGraph(
-            name = "Branches",
+            name = "branches",
             edgeList = edgeList,
         )
 
@@ -164,6 +164,77 @@ class ClockPeriodMinimizationTest {
         val shortBranchWeight = shortBranchEdges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
 
         assertEquals(shortBranchWeight, longBranchWeight, "Short branch weight should be equal to long branch weight, short is $shortBranchWeight, long is $longBranchWeight")
+    }
+
+    @Test
+    fun `retime multiple registers in cycle`() {
+        val edgeList = listOf(
+            Edge("a", "b", 0),
+            Edge("b", "c", 2),
+            Edge("c", "d", 0),
+            Edge("d", "a", 0),
+        )
+
+        val graph = createGraph(
+            name = "multiple registers in cycle",
+            edgeList = edgeList,
+        )
+
+        val preRetimingClockPeriod = graph.computeClockPeriod()
+        assertEquals(4, preRetimingClockPeriod, "Graph should have period 4, is $preRetimingClockPeriod")
+
+        val retimedGraph = graph.retimed()
+        val retimedGraphEdges = retimedGraph.edges
+
+        val cycleWeight = edgeList.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
+
+        assertEquals(2, cycleWeight, "Cycle should have maintained weight of 2, is $cycleWeight")
+
+        val aWeight = retimedGraphEdges.first { it.source.value == "a" }.weight
+        val bWeight = retimedGraphEdges.first { it.source.value == "b" }.weight
+        val cWeight = retimedGraphEdges.first { it.source.value == "c" }.weight
+        val dWeight = retimedGraphEdges.first { it.source.value == "d" }.weight
+
+        if (aWeight > 0) {
+            assertEquals(1, aWeight, "a should have weight 1, has $aWeight")
+            assertEquals(1, cWeight, "c should have weight 1, has $cWeight")
+        } else {
+            assertEquals(1, bWeight, "b should have weight 1, has $bWeight")
+            assertEquals(1, dWeight, "d should have weight 1, has $dWeight")
+        }
+
+        val postRetimingClockPeriod = retimedGraph.computeClockPeriod()
+        assertEquals(2, postRetimingClockPeriod, "Retimed graph should have period 2, is $postRetimingClockPeriod")
+    }
+
+    @Test
+    fun `retime large cycle`() {
+        val nodes = List(1000) { "node$it" }
+        val edges = nodes.zipWithNext().map { Edge(it.first, it.second, 0) } + Edge(nodes.last(), nodes.first(), 500)
+
+        val graph = createGraph(
+            name = "multiple registers in cycle",
+            edgeList = edges,
+        )
+
+        val preRetimingClockPeriod = graph.computeClockPeriod()
+        assertEquals(1000, preRetimingClockPeriod, "Graph should have period 1000, is $preRetimingClockPeriod")
+
+        val retimedGraph = graph.retimed()
+        val retimedGraphEdges = retimedGraph.edges
+
+        val cycleWeight = edges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
+
+        assertEquals(500, cycleWeight, "Cycle should have maintained weight of 500, is $cycleWeight")
+
+        val pairedEdges = nodes
+            .map { retimedGraphEdges.first { edge -> edge.source.value == it } }
+            .zipWithNext()
+
+        pairedEdges.forEach { (a, b) -> assertEquals(1, a.weight + b.weight, "Edge weights not evenly distributed, ${a.value}: ${a.weight}, ${b.value}: ${b.weight}") }
+
+        val postRetimingClockPeriod = retimedGraph.computeClockPeriod()
+        assertEquals(2, postRetimingClockPeriod, "Retimed graph should have period 2, is $postRetimingClockPeriod")
     }
 
 }
