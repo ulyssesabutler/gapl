@@ -1,0 +1,142 @@
+import org.gradle.api.tasks.Exec
+
+plugins { base }
+
+// ---- Helpers ----
+fun Project.propOrEnv(prop: String, env: String, default: String? = null): String =
+    (findProperty(prop) as String?)
+        ?: System.getenv(env)
+        ?: default
+        ?: error("Missing required setting: -P$prop or env $env")
+
+fun Project.optPropOrEnv(prop: String, env: String, default: String? = null): String? =
+    (findProperty(prop) as String?) ?: System.getenv(env) ?: default
+
+// Resolve the vendored NetFPGA checkout inside this repo
+val defaultSumeFolder = rootProject.projectDir.resolve("netfpga/packet-processor").absolutePath
+
+// ---- Core inputs ----
+val vivadoSettings = propOrEnv(
+    prop = "vivadoSettings",
+    env  = "VIVADO_SETTINGS",
+    default = "/opt/Xilinx/Vivado/2020.1/settings64.sh"
+)
+
+// Default SUME_FOLDER is the vendored subtree inside THIS repo
+val sumeFolder = propOrEnv(
+    prop = "sumeFolder",
+    env  = "SUME_FOLDER",
+    default = defaultSumeFolder
+)
+
+// Optional explicit tool paths
+val xilinxPath = optPropOrEnv("xilinxPath", "XILINX_PATH", "/opt/Xilinx/Vivado/2020.1")
+val vitisPath  = optPropOrEnv("vitisPath",  "VITIS_PATH",  "/opt/Xilinx/Vitis/2020.1")
+
+// Project name within SUME projects
+val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_switch")
+
+// Derived paths
+val projects         = "$sumeFolder/projects"
+val contribProjects  = "$sumeFolder/contrib-projects"
+val ipFolder         = "$sumeFolder/lib/hw/std/cores"
+val constraints      = "$sumeFolder/lib/hw/std/constraints"
+val xilinxIpFolder   = "$sumeFolder/lib/hw/xilinx/cores"
+
+// NF_DESIGN_DIR can be overridden, else derive from projects/NF_PROJECT_NAME
+val nfDesignDir = optPropOrEnv("nfDesignDir", "NF_DESIGN_DIR") ?: "$projects/$nfProjectName"
+
+// Work dir default
+val tmpDir    = System.getenv("TMPDIR") ?: "/tmp"
+val nfWorkDir = optPropOrEnv("nfWorkDir", "NF_WORK_DIR")
+    ?: "$tmpDir/${System.getenv("USER") ?: System.getProperty("user.name")}"
+
+// Driver/app names
+val driverName   = optPropOrEnv("driverName", "DRIVER_NAME", "sume_riffa_v1_0_0")
+val driverFolder = "$sumeFolder/lib/sw/std/driver/$driverName"
+val appsFolder   = "$sumeFolder/lib/sw/std/apps/$driverName"
+
+// PYTHONPATH aggregate
+val pythonPath = listOf(
+    ".",
+    "$sumeFolder/tools/scripts/",
+    "$nfDesignDir/lib/Python",
+    "$sumeFolder/tools/scripts/NFTest"
+).joinToString(":")
+
+// Bash runner
+fun bash(cmd: String) = listOf("bash", "-lc", cmd)
+
+fun Exec.exportNetfpgaEnv() {
+    environment(
+        mapOf(
+            "SUME_FOLDER"      to sumeFolder,
+            "XILINX_PATH"      to (xilinxPath ?: ""),
+            "VITIS_PATH"       to (vitisPath  ?: ""),
+            "NF_PROJECT_NAME"  to nfProjectName,
+            "PROJECTS"         to projects,
+            "CONTRIB_PROJECTS" to contribProjects,
+            "IP_FOLDER"        to ipFolder,
+            "CONSTRAINTS"      to constraints,
+            "XILINX_IP_FOLDER" to xilinxIpFolder,
+            "NF_DESIGN_DIR"    to nfDesignDir,
+            "NF_WORK_DIR"      to nfWorkDir,
+            "PYTHONPATH"       to pythonPath,
+            "DRIVER_NAME"      to driverName,
+            "DRIVER_FOLDER"    to driverFolder,
+            "APPS_FOLDER"      to appsFolder,
+        )
+    )
+}
+
+// Handy debug task
+tasks.register<Exec>("printEnv") {
+    group = "netfpga"
+    description = "Print the NetFPGA-related environment Gradle will export"
+    exportNetfpgaEnv()
+    commandLine(bash("""
+        set -e
+        echo "SUME_FOLDER=${'$'}SUME_FOLDER"
+        echo "NF_PROJECT_NAME=${'$'}NF_PROJECT_NAME"
+        echo "PROJECTS=${'$'}PROJECTS"
+        echo "NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
+        echo "PYTHONPATH=${'$'}PYTHONPATH"
+    """.trimIndent()))
+}
+
+// :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
+tasks.register<Exec>("makeBuild") {
+    group = "netfpga"
+    description = "Run make in \$NF_DESIGN_DIR after sourcing Vivado"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+        [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
+        echo "[netfpga] SUME_FOLDER=${'$'}SUME_FOLDER"
+        echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
+        make -C "${'$'}NF_DESIGN_DIR"
+    """.trimIndent()))
+}
+
+// :netfpga:clean -> make clean in $NF_DESIGN_DIR
+tasks.register<Exec>("makeClean") {
+    group = "netfpga"
+    description = "Run make clean in \$NF_DESIGN_DIR after sourcing Vivado"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+        [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
+        echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
+        make -C "${'$'}NF_DESIGN_DIR" clean
+    """.trimIndent()))
+}
+
+// Wire lifecycle
+tasks.named("build") { dependsOn("makeBuild") }
+tasks.named("clean") { dependsOn("makeClean") }
