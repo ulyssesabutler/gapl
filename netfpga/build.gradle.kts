@@ -19,7 +19,7 @@ val defaultSumeFolder = rootProject.projectDir.resolve("netfpga/packet-processor
 val vivadoSettings = propOrEnv(
     prop = "vivadoSettings",
     env  = "VIVADO_SETTINGS",
-    default = "/opt/Xilinx/Vivado/2020.1/settings64.sh"
+    default = "/tools/Xilinx/Vivado/2020.1/settings64.sh"
 )
 
 // Default SUME_FOLDER is the vendored subtree inside THIS repo
@@ -30,8 +30,8 @@ val sumeFolder = propOrEnv(
 )
 
 // Optional explicit tool paths
-val xilinxPath = optPropOrEnv("xilinxPath", "XILINX_PATH", "/opt/Xilinx/Vivado/2020.1")
-val vitisPath  = optPropOrEnv("vitisPath",  "VITIS_PATH",  "/opt/Xilinx/Vitis/2020.1")
+val xilinxPath = optPropOrEnv("xilinxPath", "XILINX_PATH", "/tools/Xilinx/Vivado/2020.1")
+val vitisPath  = optPropOrEnv("vitisPath",  "VITIS_PATH",  "/tools/Xilinx/Vitis/2020.1")
 
 // Project name within SUME projects
 val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_switch")
@@ -103,6 +103,77 @@ tasks.register<Exec>("printEnv") {
         echo "PYTHONPATH=${'$'}PYTHONPATH"
     """.trimIndent()))
 }
+
+// :netfpga:makeInit ---
+// Runs `make` in $SUME_FOLDER (one-time; guarded by a stamp file)
+tasks.register<Exec>("makeInit") {
+    group = "netfpga"
+    description = "Initialize NetFPGA project by running make in \$SUME_FOLDER"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+
+        [ -d "${'$'}SUME_FOLDER" ] || { echo "SUME_FOLDER not found: ${'$'}SUME_FOLDER" >&2; exit 2; }
+        echo "[netfpga:init] SUME_FOLDER=${'$'}SUME_FOLDER"
+        make -C "${'$'}SUME_FOLDER"
+    """.trimIndent()))
+}
+
+// Build Xilinx CAM/TCAM IPs locally
+tasks.register<Exec>("makeIPs") {
+    group = "netfpga"
+    description = "Check required ZIPs and build CAM/TCAM IPs in xilinx cores"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+
+    // Resolve the two IP directories under the vendored SUME folder
+    val ipRoot = xilinxIpFolder // e.g. $SUME_FOLDER/lib/hw/xilinx/cores
+    val tcamDir = "$ipRoot/tcam_v1_1_0"
+    val camDir  = "$ipRoot/cam_v1_1_0"
+    val requiredZip = "xapp1151_Param_CAM.zip"
+
+    commandLine(bash("""
+        set -euo pipefail
+
+        # Source Vivado environment
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+
+        echo "[netfpga:makeIPs] SUME_FOLDER=${'$'}SUME_FOLDER"
+        echo "[netfpga:makeIPs] IP root: $ipRoot"
+
+        # Ensure dirs exist
+        for d in "$tcamDir" "$camDir"; do
+          [ -d "${'$'}d" ] || { echo "ERROR: IP directory not found: ${'$'}d" >&2; exit 3; }
+        done
+
+        # Verify required ZIP exists in both
+        for d in "$tcamDir" "$camDir"; do
+          if [ ! -f "${'$'}d/$requiredZip" ]; then
+            echo "ERROR: Missing ${requiredZip} in ${'$'}d" >&2
+            echo "Please place '${requiredZip}' into:" >&2
+            echo "  $tcamDir" >&2
+            echo "  $camDir"  >&2
+            exit 4
+          fi
+        done
+
+        # Build sequence for each: make, make sim, make
+        for d in "$tcamDir" "$camDir"; do
+          echo "[netfpga:makeIPs] Building in ${'$'}d"
+          make -C "${'$'}d" update
+          make -C "${'$'}d" sim
+          make -C "${'$'}d"
+        done
+
+        echo "[netfpga:makeIPs] Done."
+    """.trimIndent()))
+}
+
 
 // :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
 tasks.register<Exec>("makeBuild") {

@@ -25,6 +25,7 @@
             <option value="$PROJECT_DIR$/buildSrc" />
             <option value="$PROJECT_DIR$/compiler" />
             <option value="$PROJECT_DIR$/gapl-example" />
+            <option value="$PROJECT_DIR$/netfpga" />
             <option value="$PROJECT_DIR$/simtest" />
           </set>
         </option>

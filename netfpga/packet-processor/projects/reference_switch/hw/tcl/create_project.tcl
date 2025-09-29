@@ -127,72 +127,105 @@ set_property generate_synth_checkpoint false [get_files identifier_ip.xci]
 reset_target all [get_ips identifier_ip]
 generate_target all [get_ips identifier_ip]
 
-
-
 read_verilog "./hdl/axi_clocking.v"
 
-read_verilog "./hdl/jpeg_decoder/jpeg_mcu_id.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_mcu_proc.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_bitbuffer.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_output_fifo.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_output_cx_ram.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_output_y_ram.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_output.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dqt.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_fifo.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_y.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_transpose_ram.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_transpose.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_x.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_ram_dp.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct_ram.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_idct.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dht_std_cx_ac.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dht_std_cx_dc.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dht_std_y_ac.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dht_std_y_dc.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_dht.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_input.v"
-read_verilog "./hdl/jpeg_decoder/jpeg_core.v"
-
-read_verilog "./hdl/jpeg_to_bitmap/jpeg_to_bitmap.v"
-
+# util/
 read_verilog "./hdl/util/first_null_index.v"
 read_verilog "./hdl/util/copy_into_empty.v"
-read_verilog "./hdl/util/byte_to_bit_mask.v"
-read_verilog "./hdl/util/apply_byte_mask.v"
 read_verilog "./hdl/util/modular_add.v"
 read_verilog "./hdl/util/population_count.v"
 read_verilog "./hdl/util/last_one_detector.v"
 read_verilog "./hdl/util/one_hot_to_count.v"
 read_verilog "./hdl/util/find_last_bit.v"
-read_verilog "./hdl/util/variable_width_queue.v"
-read_verilog "./hdl/util/fallthrough_variable_width_queue.v"
+read_verilog "./hdl/util/ones_complement_addition.v"
+read_verilog "./hdl/util/ones_complement_sum.v"
 
-read_verilog "./hdl/axis/axis_data_width_converter.v"
-read_verilog "./hdl/axis/axis_flattener.v"
-read_verilog "./hdl/axis/axis_queue_flattener.v"
-read_verilog "./hdl/axis/axis_transmission_splitter.v"
-read_verilog "./hdl/axis/axis_transmission_combiner.v"
+# util/datatype/
+read_verilog "./hdl/util/datatype/reverse_byte_order.v"
 
-read_verilog "./hdl/tensor_scaler/uint8_to_float32.v"
-read_verilog "./hdl/tensor_scaler/small_axis_image_to_tensor_scaler.v"
-read_verilog "./hdl/tensor_scaler/image_to_tensor_scaler.v"
-read_verilog "./hdl/tensor_scaler/image_to_tensor_splitter_scaler.v"
+# util/masking/
+read_verilog "./hdl/util/masking/byte_to_bit_mask.v"
+read_verilog "./hdl/util/masking/apply_byte_mask.v"
+read_verilog "./hdl/util/masking/generate_mask.v"
 
-read_verilog "./hdl/channel/extract_channel_from_transmission.v"
-read_verilog "./hdl/channel/extract_channel_from_transmission_with_offset.v"
-read_verilog "./hdl/channel/extract_channel_from_stream.v"
-read_verilog "./hdl/channel/color_channel.v"
+# util/variable_width_queue/
+read_verilog "./hdl/util/variable_width_queue/variable_width_queue.v"
+read_verilog "./hdl/util/variable_width_queue/fallthrough_variable_width_queue.v"
 
-read_verilog "./hdl/reshape/manifold.v"
-read_verilog "./hdl/reshape/arbiter.v"
-read_verilog "./hdl/reshape/reshaper.v"
+# util/axis/
+read_verilog "./hdl/util/axis/axis_1_to_3_manifold.v"
+read_verilog "./hdl/util/axis/axis_3_to_1_arbiter.v"
+read_verilog "./hdl/util/axis/axis_data_width_converter.v"
+read_verilog "./hdl/util/axis/axis_flattener.v"
+read_verilog "./hdl/util/axis/axis_transmission_splitter.v"
+read_verilog "./hdl/util/axis/axis_transmission_combiner.v"
+read_verilog "./hdl/util/axis/axis_parser.v"
+read_verilog "./hdl/util/axis/axis_trim_front.v"
 
-read_verilog "./hdl/packet_processor/packet_splitter.v"
-read_verilog "./hdl/packet_processor/packet_combiner.v"
-read_verilog "./hdl/packet_processor/packet_constructor.v"
-read_verilog "./hdl/packet_processor/network_packet_processor.v"
+# util/network_header/
+read_verilog "./hdl/util/network_header/eth_hdr_constructor.v"
+read_verilog "./hdl/util/network_header/ip_hdr_constructor.v"
+read_verilog "./hdl/util/network_header/udp_hdr_constructor.v"
+read_verilog "./hdl/util/network_header/cip_hdr_constructor.v"
+
+# bitmap_to_tensor/tensor_scaler/
+read_verilog "./hdl/bitmap_to_tensor/tensor_scaler/uint8_to_float32.v"
+read_verilog "./hdl/bitmap_to_tensor/tensor_scaler/small_axis_image_to_tensor_scaler.v"
+read_verilog "./hdl/bitmap_to_tensor/tensor_scaler/image_to_tensor_scaler.v"
+
+# bitmap_to_tensor/reshape/channel/
+read_verilog "./hdl/bitmap_to_tensor/reshape/channel/extract_channel_from_transmission.v"
+read_verilog "./hdl/bitmap_to_tensor/reshape/channel/extract_channel_from_transmission_with_offset.v"
+read_verilog "./hdl/bitmap_to_tensor/reshape/channel/extract_channel_from_stream.v"
+read_verilog "./hdl/bitmap_to_tensor/reshape/channel/color_channel.v"
+
+# bitmap_to_tensor/reshape/
+read_verilog "./hdl/bitmap_to_tensor/reshape/bitmap_reshaper.v"
+
+# bitmap_to_tensor/
+read_verilog "./hdl/bitmap_to_tensor/bitmap_to_tensor.v"
+
+# jpeg_to_bitmap/jpeg_decoder/
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_mcu_id.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_mcu_proc.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_bitbuffer.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_output_fifo.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_output_cx_ram.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_output_y_ram.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_output.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dqt.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_fifo.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_y.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_transpose_ram.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_transpose.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_x.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_ram_dp.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct_ram.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_idct.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dht_std_cx_ac.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dht_std_cx_dc.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dht_std_y_ac.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dht_std_y_dc.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_dht.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_input.v"
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_decoder/jpeg_core.v"
+
+# jpeg_to_bitmap/
+read_verilog "./hdl/jpeg_to_bitmap/jpeg_to_bitmap.v"
+
+# inference_request_preprocessor/data_preprocessor/
+read_verilog "./hdl/inference_request_preprocessor/data_preprocessor/inference_request_data_processing_pipeline.v"
+read_verilog "./hdl/inference_request_preprocessor/data_preprocessor/inference_request_data_preprocessor.v"
+
+# inference_request_preprocessor/
+read_verilog "./hdl/inference_request_preprocessor/inference_request_packet_parser.v"
+read_verilog "./hdl/inference_request_preprocessor/inference_request_data_packer.v"
+read_verilog "./hdl/inference_request_preprocessor/inference_request_preprocessor.v"
+
+# packet_processor/
+read_verilog "./hdl/packet_processor/packet_processor_switch.v"
+read_verilog "./hdl/packet_processor/packet_processor_transmitter.v"
+read_verilog "./hdl/packet_processor/packet_processor.v"
 
 read_verilog "./hdl/nf_datapath.v"
 read_verilog "./hdl/top.v"
