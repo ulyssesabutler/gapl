@@ -4,7 +4,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
     companion object {
 
-        fun <G, N, E> retimeForClockPeriod(graph: LeisersonCircuitGraph<G, N, E>, clockPeriod: Int): Retiming<G, N, E>? {
+        private fun <G, N, E> retimeForClockPeriod(graph: LeisersonCircuitGraph<G, N, E>, clockPeriod: Int): Retiming<G, N, E>? {
             val retiming = Retiming(graph)
 
             repeat(graph.nodes.size - 1) {
@@ -36,7 +36,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
     }
 
-    val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
+    private val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
 
     fun setNodeLag(node: WeightedGraph.Node<N>, lag: Int) = nodeLag.put(node, lag)
 
@@ -47,11 +47,15 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
     fun increaseNodeLag(node: WeightedGraph.Node<N>, increase: Int = 1) = setNodeLag(node, getNodeLag(node) + increase)
 
     fun generateNewCircuit(): LeisersonCircuitGraph<G, N, E> {
-        return LeisersonCircuitGraph(
-            value = graph.value,
-            nodes = graph.nodes,
-            edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
-        )
+        return try {
+            LeisersonCircuitGraph(
+                value = graph.value,
+                nodes = graph.nodes,
+                edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
+            )
+        } catch (e: IllegalArgumentException) {
+            throw Exception("Failed to generate graph: Illegal retiming", e)
+        }
     }
 
 }

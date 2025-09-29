@@ -8,6 +8,11 @@ import kotlin.test.assertTrue
 
 class ClockPeriodMinimizationTest {
 
+    /* TODO:
+     *   - We still need tests to ensure uneven weights are handled correctly
+     *   - A test with uneven branches is probably not necessary, but wouldn't hurt
+     */
+
     @Test
     fun `retime chain`() {
         val graph = createGraph(
