@@ -20,6 +20,8 @@ object Compiler {
         val literalSimplification: Boolean,
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
+        val preRetimingPrefix: String? = null,
+        val postRetimingPrefix: String? = null,
     )
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
@@ -32,7 +34,7 @@ object Compiler {
 
             add(PassThroughRemover)
 
-            if (options.retime != null) add(Retimer(options.retime))
+            if (options.retime != null) add(Retimer(options.retime, options.preRetimingPrefix, options.postRetimingPrefix))
 
             add(Renamer)
         }

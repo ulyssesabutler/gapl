@@ -1,9 +1,4 @@
 function unary() i: wire[32] => o: wire[32] {
-    /*
-    i[0:15], i[16:31] => multiply(16) => o[0:15];
-    i[0:15], i[16:31] => add(16)      => o[16:31];
-    */
-
     i => bitwise_not(32) => o;
 }
 

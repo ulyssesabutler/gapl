@@ -81,13 +81,11 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
-    private fun nodeType(node: Node) = if (node !is PredefinedFunctionNode) node::class.simpleName else node.predefinedFunction::class.simpleName
-
     fun printGraph(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>) = buildString {
         println("PRINTING GRAPH:")
         println("  Nodes:")
         graph.nodes.forEach { node ->
-            println("    ${node.weight}: ${node.value.name()} [${nodeType(node.value)}]")
+            println("    ${node.weight}: ${node.value.name()} [${node.value.typeString()}]")
         }
         println("  Edges:")
         graph.edges.forEach { edge ->

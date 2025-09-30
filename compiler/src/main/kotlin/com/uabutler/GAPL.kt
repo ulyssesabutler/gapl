@@ -30,6 +30,8 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
+        preRetimingPrefix = parsedArgs["-preretime-dump"]?.first(),
+        postRetimingPrefix = parsedArgs["-postretime-dump"]?.first(),
     )
 }
 
@@ -50,6 +52,12 @@ fun printHelp() {
     println("  Retime")
     println("    Usage:       -retime DELAY_MODEL_FILENAME")
     println("    Description: Provide a YAML file that specifies the delay model to be used.")
+    println("  Pre-Retiming Graph Dump")
+    println("    Usage:       -preretime-dump PREFIX")
+    println("    Description: Provide a prefix for the pre-retiming graph, in the form of a DOT file")
+    println("  Post-Retiming Graph Dump")
+    println("    Usage:       -postretime-dump PREFIX")
+    println("    Description: Provide a prefix for the post-retiming graph, in the form of a DOT file")
     println("  Standard Library")
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")

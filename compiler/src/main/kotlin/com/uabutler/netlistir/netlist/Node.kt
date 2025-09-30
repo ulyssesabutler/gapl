@@ -11,6 +11,7 @@ sealed class Node(
 ) {
     fun name() = identifier
     fun rename(newName: String) { identifier = newName }
+    fun typeString() = if (this !is PredefinedFunctionNode) this::class.simpleName else predefinedFunction::class.simpleName
 
     val inputWireVectorGroups: List<InputWireVectorGroup> = inputWireVectorGroupsBuilder(this)
     val outputWireVectorGroups: List<OutputWireVectorGroup> = outputWireVectorGroupsBuilder(this)
