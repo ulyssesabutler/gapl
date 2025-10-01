@@ -3,7 +3,7 @@
  * This module takes a stream representing a packet as its input. It's output consists of the values for
  * each of the relevant header fields and a stream consisting of just the packet body (with no headers).
  */
-module inference_request_packet_parser
+module packet_parser
 #(
     parameter TDATA_WIDTH             = 256,
     parameter TUSER_WIDTH             = 128,
@@ -11,8 +11,6 @@ module inference_request_packet_parser
     localparam MAC_ADDRESS_WIDTH      = 48,
     localparam IP_ADDRESS_WIDTH       = 32,
     localparam PORT_WIDTH             = 16,
-    localparam TRANSMISSION_ID_WIDTH  = 32,
-    localparam CIP_SEQUENCE_NUM_WIDTH = 16,
 
     localparam TKEEP_WIDTH            = TDATA_WIDTH / 8
 )
@@ -39,11 +37,6 @@ module inference_request_packet_parser
     output [PORT_WIDTH - 1:0]             src_port_out,
     output [PORT_WIDTH - 1:0]             dest_port_out,
 
-    output [TRANSMISSION_ID_WIDTH - 1:0]  transmission_id_out,
-
-    output [CIP_SEQUENCE_NUM_WIDTH - 1:0] sequence_number_out,
-    output                                last_packet_out,
-
     output [TDATA_WIDTH - 1:0]            packet_body_out_axis_tdata,
     output [TKEEP_WIDTH - 1:0]            packet_body_out_axis_tkeep,
     output [TUSER_WIDTH - 1:0]            packet_body_out_axis_tuser,
@@ -51,7 +44,6 @@ module inference_request_packet_parser
     input                                 packet_body_out_axis_tready,
     output                                packet_body_out_axis_tlast
 );
-
 
     // 1. STATES
 
@@ -277,70 +269,6 @@ module inference_request_packet_parser
         .parsed_value_ready(dest_port_ready)
     );
 
-    // transmission ID
-    wire transmission_id_ready;
-
-    axis_parser #( .START_INDEX(344), .END_INDEX(375) ) transmission_id_parser
-    (
-        .axis_aclk         (axis_aclk),
-        .axis_resetn       (axis_resetn),
-
-        .axis_tdata        (pretrim_tdata),
-        .axis_tkeep        (pretrim_tkeep),
-        .axis_tuser        (pretrim_tuser),
-        .axis_tready       (pretrim_tready),
-        .axis_tvalid       (pretrim_tvalid),
-        .axis_tlast        (pretrim_tlast),
-
-        .reset             (reset_parsers),
-
-        .parsed_value      (transmission_id_out),
-        .parsed_value_ready(transmission_id_ready)
-    );
-
-    // last packet
-    wire last_packet_ready;
-
-    axis_parser #( .START_INDEX(343), .END_INDEX(343) ) last_packet_parser
-    (
-        .axis_aclk         (axis_aclk),
-        .axis_resetn       (axis_resetn),
-
-        .axis_tdata        (pretrim_tdata),
-        .axis_tkeep        (pretrim_tkeep),
-        .axis_tuser        (pretrim_tuser),
-        .axis_tready       (pretrim_tready),
-        .axis_tvalid       (pretrim_tvalid),
-        .axis_tlast        (pretrim_tlast),
-
-        .reset             (reset_parsers),
-
-        .parsed_value      (last_packet_out),
-        .parsed_value_ready(last_packet_ready)
-    );
-
-    // sequence number
-    wire sequence_number_ready;
-
-    axis_parser #( .START_INDEX(376), .END_INDEX(391) ) sequence_number_parser
-    (
-        .axis_aclk         (axis_aclk),
-        .axis_resetn       (axis_resetn),
-
-        .axis_tdata        (pretrim_tdata),
-        .axis_tkeep        (pretrim_tkeep),
-        .axis_tuser        (pretrim_tuser),
-        .axis_tready       (pretrim_tready),
-        .axis_tvalid       (pretrim_tvalid),
-        .axis_tlast        (pretrim_tlast),
-
-        .reset             (reset_parsers),
-
-        .parsed_value      (sequence_number_out),
-        .parsed_value_ready(sequence_number_ready)
-    );
-
-
     // 6. OUTPUT
 
     wire metadata_ready =
@@ -349,10 +277,7 @@ module inference_request_packet_parser
         src_ip_addr_ready &
         dest_ip_addr_ready &
         src_port_ready &
-        dest_port_ready &
-        transmission_id_ready &
-        last_packet_ready &
-        sequence_number_ready;
+        dest_port_ready;
 
     assign trimmed_tready = packet_body_out_axis_tready & metadata_ready;
 
@@ -398,6 +323,5 @@ module inference_request_packet_parser
             reset_parsers <= reset_parsers_next;
         end
     end
-
 
 endmodule

@@ -9,7 +9,7 @@
  * On the contrary, the error wire should have the correct value on the last AXI transmission of this
  * image. That is, while tlast and tvalid are set.
  */
-module inference_request_data_packer
+module packet_packer
 #(
     parameter TDATA_WIDTH             = 256,
     parameter TUSER_WIDTH             = 128,
@@ -19,18 +19,15 @@ module inference_request_data_packer
     localparam MAC_ADDRESS_WIDTH      = 48,
     localparam IP_ADDRESS_WIDTH       = 32,
     localparam PORT_WIDTH             = 16,
-    localparam TRANSMISSION_ID_WIDTH  = 32,
+
     localparam IP_BODY_LENGTH_WIDTH   = 16,
     localparam IP_ID_WIDTH            = 16,
     localparam UDP_BODY_LENGTH_WIDTH  = 16,
-    localparam CIP_SEQUENCE_NUM_WIDTH = 16,
 
     localparam ETH_HDR_WIDTH          = 14 * 8,
     localparam IP_HDR_WIDTH           = 20 * 8,
-    localparam UDP_HDR_WIDTH          = 8 * 8,
-    localparam CIP_HDR_WIDTH          = 8 * 8
-)
-(
+    localparam UDP_HDR_WIDTH          = 8 * 8
+) (
     // Global Ports
     input                                axis_aclk,
     input                                axis_resetn,
@@ -44,10 +41,6 @@ module inference_request_data_packer
 
     input  [PORT_WIDTH - 1:0]            src_port_in,
     input  [PORT_WIDTH - 1:0]            dest_port_in,
-
-    input  [TRANSMISSION_ID_WIDTH - 1:0] transmission_id_in,
-
-    input                                error_in,
 
     input  [TDATA_WIDTH - 1:0]           packet_body_in_axis_tdata,
     input  [TKEEP_WIDTH - 1:0]           packet_body_in_axis_tkeep,
@@ -64,7 +57,6 @@ module inference_request_data_packer
     input                                packet_out_axis_tready,
     output                               packet_out_axis_tlast
 );
-
 
     // 1. STATES
 
@@ -84,8 +76,7 @@ module inference_request_data_packer
     localparam WRITING_ETH_HDR_STATE = 2;
     localparam WRITING_IP_HDR_STATE  = 3;
     localparam WRITING_UDP_HDR_STATE = 4;
-    localparam WRITING_CIP_HDR_STATE = 5;
-    localparam WRITING_BODY_STATE    = 6;
+    localparam WRITING_BODY_STATE    = 5;
 
 
     // 2. METADATA STORAGE
@@ -100,8 +91,6 @@ module inference_request_data_packer
     reg [PORT_WIDTH - 1:0]            src_port;
     reg [PORT_WIDTH - 1:0]            dest_port;
 
-    reg [TRANSMISSION_ID_WIDTH - 1:0] transmission_id;
-
     // Create next values
     reg [MAC_ADDRESS_WIDTH - 1:0]     src_mac_addr_next;
     reg [MAC_ADDRESS_WIDTH - 1:0]     dest_mac_addr_next;
@@ -111,8 +100,6 @@ module inference_request_data_packer
 
     reg [PORT_WIDTH - 1:0]            src_port_next;
     reg [PORT_WIDTH - 1:0]            dest_port_next;
-
-    reg [TRANSMISSION_ID_WIDTH - 1:0] transmission_id_next;
 
     // Capture input
     always @(*) begin
@@ -125,8 +112,6 @@ module inference_request_data_packer
 
         src_port_next        = src_port;
         dest_port_next       = dest_port;
-
-        transmission_id_next = transmission_id;
 
         // Packet tracking
         image_packet_count_next = image_packet_count;
@@ -143,8 +128,6 @@ module inference_request_data_packer
             src_port_next        = src_port_in;
             dest_port_next       = dest_port_in;
 
-            transmission_id_next = transmission_id_in;
-
             // Packet tracking
             packet_count_next = packet_count + 1;
 
@@ -156,9 +139,7 @@ module inference_request_data_packer
                 dest_ip_addr_next    == dest_ip_addr_in  &
 
                 src_port_next        == src_port_in      &
-                dest_port_next       == dest_port_in     &
-
-                transmission_id_next == transmission_id_in
+                dest_port_next       == dest_port_in
             ) begin
                 image_packet_count_next = image_packet_count + 1;
             end else begin
@@ -339,22 +320,6 @@ module inference_request_data_packer
     wire [ETH_HDR_WIDTH - 1:0] eth_hdr;
     wire [IP_HDR_WIDTH - 1:0]  ip_hdr;
     wire [UDP_HDR_WIDTH - 1:0] udp_hdr;
-    wire [CIP_HDR_WIDTH - 1:0] cip_hdr;
-
-    // CIP Header
-    wire                                cip_last_flag    = is_last_image_packet;
-    wire                                cip_error_flag   = 0; // TODO
-    wire [CIP_SEQUENCE_NUM_WIDTH - 1:0] cip_sequence_num = image_packet_count;
-
-    cip_hdr_constructor construct_cip_header
-    (
-        .last_flag(cip_last_flag),
-        .error_flag(cip_error_flag),
-        .transmission_id(transmission_id),
-        .sequence_num(cip_sequence_num),
-
-        .cip_hdr(cip_hdr)
-    );
 
     // UDP Header
     wire [UDP_BODY_LENGTH_WIDTH - 1:0] udp_body_length = packet_body_length;
@@ -435,15 +400,6 @@ module inference_request_data_packer
                     write_to_output_queue_next = 1;
                 end
 
-                WRITING_CIP_HDR_STATE: begin
-                    output_queue_tdata_next    = { {(TDATA_WIDTH - CIP_HDR_WIDTH){1'h0}}, cip_hdr };
-                    output_queue_tkeep_next    = { {(TKEEP_WIDTH - (CIP_HDR_WIDTH / 8)){1'h0}}, {(CIP_HDR_WIDTH / 8){1'h1}} };
-                    output_queue_tuser_next    = 0;
-                    output_queue_tlast_next    = 0;
-
-                    write_to_output_queue_next = 1;
-                end
-
                 WRITING_BODY_STATE: begin
                     output_queue_tdata_next    = input_queue_tdata;
                     output_queue_tkeep_next    = input_queue_tkeep;
@@ -493,12 +449,6 @@ module inference_request_data_packer
 
             WRITING_UDP_HDR_STATE: begin
                 if (should_write_to_output_queue) begin
-                    state_next = WRITING_CIP_HDR_STATE;
-                end
-            end
-
-            WRITING_CIP_HDR_STATE: begin
-                if (should_write_to_output_queue) begin
                     state_next = WRITING_BODY_STATE;
                 end
             end
@@ -510,9 +460,7 @@ module inference_request_data_packer
             end
 
         endcase
-
     end
-
 
     // 9. WRITE REGISTERS
 
@@ -532,8 +480,6 @@ module inference_request_data_packer
 
             src_port        <= 0;
             dest_port       <= 0;
-
-            transmission_id <= 0;
 
             // Packet tracking
             items_in_buffer              <= 0;
@@ -564,8 +510,6 @@ module inference_request_data_packer
 
             src_port        <= src_port_next;
             dest_port       <= dest_port_next;
-
-            transmission_id <= transmission_id_next;
 
             // Packet tracking
             items_in_buffer              <= items_in_buffer_next;
