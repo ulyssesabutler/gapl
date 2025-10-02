@@ -33,6 +33,13 @@ Without this, the build will likely fail.
 - Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/cam_v1_1_0`.
 - Run `./gradlew :netfpga:makeIPs`
 
+3. Build the packet processor
+- `./gradlew :netfpga:build`
+
+## Simulation
+
+The simulation can be run using `./gradlew :netfpga:runSimulation`.
+
 ## Building the project
 
 ```
@@ -41,4 +48,4 @@ Without this, the build will likely fail.
 
 ## References
 
-These instructions are 
+These instructions are based on the instructions for the [reference switch](https://github.com/NetFPGA/NetFPGA-SUME-public/wiki/NetFPGA-SUME-Reference-Learning-Switch) and [CAM setup](https://github.com/NetFPGA/NetFPGA-SUME-public/wiki/NetFPGA-SUME-TCAM-IPs).

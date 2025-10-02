@@ -192,6 +192,44 @@ tasks.register<Exec>("makeBuild") {
     """.trimIndent()))
 }
 
+tasks.register<Exec>("runSimulation") {
+    group = "netfpga"
+    description = "Run tools/scripts/nf_test.py sim with NetFPGA env and Vivado"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+
+    // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
+    val major = (findProperty("major") as String?) ?: "simple"
+    val minor = (findProperty("minor") as String?) ?: "broadcast"
+    val gui   = ((findProperty("gui") as String?) ?: "true").toBoolean()
+
+    val guiFlag = if (gui) "--gui" else ""
+
+    commandLine(listOf("bash", "-lc", """
+        set -euo pipefail
+
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+
+        # Resolve script path purely in bash (avoid Kotlin ${'$'} escaping headaches)
+        script_path="${'$'}SUME_FOLDER/tools/scripts/nf_test.py"
+        script_dir="${'$'}SUME_FOLDER/tools/scripts"
+
+        [ -f "${'$'}script_path" ] || { echo "ERROR: ${'$'}script_path not found" >&2; exit 3; }
+
+        echo "[netfpga:runSimulation] SUME_FOLDER=${'$'}SUME_FOLDER"
+        echo "[netfpga:runSimulation] PYTHONPATH=${'$'}PYTHONPATH"
+        echo "[netfpga:runSimulation] Running: ./nf_test.py sim --major $major --minor $minor $guiFlag"
+
+        cd "${'$'}script_dir"
+        if [ -x "./nf_test.py" ]; then
+          ./nf_test.py sim --major "$major" --minor "$minor" $guiFlag
+        else
+          python3 ./nf_test.py sim --major "$major" --minor "$minor" $guiFlag
+        fi
+    """.trimIndent()))
+}
+
 // :netfpga:clean -> make clean in $NF_DESIGN_DIR
 tasks.register<Exec>("makeClean") {
     group = "netfpga"

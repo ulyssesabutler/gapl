@@ -65,6 +65,8 @@ tasks.register<VivadoTask>("runVivado") {
     // TODO: Outputs
 }
 
+// TODO: We should eliminate the gapl-example subproject. The simtest is a better test of the compiler.
+//  Instead, gapl code targetting the Basys should exist in this directory
 tasks.register<VivadoTask>("compileVerilog") {
     dependsOn(":gapl-example:generateVerilog")
 
