@@ -1,0 +1,14 @@
+interface netfpga_packet_body {
+    data: byte[32];
+    keep: boolean[32];
+    user: byte[16];
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
+    i.data => map(byte, byte, 32, ) => o.data;
+
+    i.keep => o.keep;
+    i.user => o.user;
+    i.last => o.last;
+}

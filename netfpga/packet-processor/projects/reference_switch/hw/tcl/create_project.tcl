@@ -173,7 +173,10 @@ read_verilog "./hdl/packet_processor/packet_packer.v"
 read_verilog "./hdl/packet_processor/packet_processor.v"
 
 # packet_body_processor/
-read_verilog "./hdl/packet_body_processor/packet_body_processor.v"
+read_verilog "./hdl/gapl_wrapper/gapl_wrapper.v"
+
+# GAPL: Ensure gradle.properties, reference_switch_sim.tcl, create_project.tcl are updated together
+read_verilog "./hdl/GAPLpacket_body_processor.v"
 
 read_verilog "./hdl/nf_datapath.v"
 read_verilog "./hdl/top.v"

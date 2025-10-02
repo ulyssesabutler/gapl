@@ -1,4 +1,4 @@
-module packet_body_processor
+module gapl_wrapper
 #(
     parameter TDATA_WIDTH             = 256,
     parameter TUSER_WIDTH             = 128,
@@ -52,6 +52,7 @@ module packet_body_processor
      * If we use a sequential module to process the body, we need to send the header data through a queue
      */
 
+    // HEADER
     assign src_mac_addr_out = src_mac_addr_in;
     assign dest_mac_addr_out = dest_mac_addr_in;
 
@@ -61,11 +62,25 @@ module packet_body_processor
     assign src_port_out = src_port_in;
     assign dest_port_out = dest_port_in;
 
-    assign packet_body_out_axis_tdata = packet_body_in_axis_tdata;
-    assign packet_body_out_axis_tkeep = packet_body_in_axis_tkeep;
-    assign packet_body_out_axis_tuser = packet_body_in_axis_tuser;
+    // BODY
     assign packet_body_out_axis_tvalid = packet_body_in_axis_tvalid;
-    assign packet_body_out_axis_tready = packet_body_in_axis_tready;
-    assign packet_body_out_axis_tlast = packet_body_in_axis_tlast;
+    assign packet_body_in_axis_tready = packet_body_out_axis_tready;
+
+    packet_body_processor gapl_processor
+    (
+        .clock(axis_aclk),
+        .reset(!axis_resetn),
+        .enable(1),
+
+        .i$data(packet_body_in_axis_tdata),
+        .i$keep(packet_body_in_axis_tkeep),
+        .i$user(packet_body_in_axis_tuser),
+        .i$last(packet_body_in_axis_tlast),
+
+        .o$data(packet_body_out_axis_tdata),
+        .o$keep(packet_body_out_axis_tkeep),
+        .o$user(packet_body_out_axis_tuser),
+        .o$last(packet_body_out_axis_tlast)
+    );
 
 endmodule

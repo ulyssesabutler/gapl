@@ -64,6 +64,44 @@ val pythonPath = listOf(
     "$sumeFolder/tools/scripts/NFTest"
 ).joinToString(":")
 
+val gaplSrcRoot = layout.projectDirectory.dir("src").asFile
+
+// Comma-separated list of .gapl files relative to netfpga/src/, e.g. "foo.gapl,subdir/bar.gapl"
+val gaplSourcesProp = (findProperty("gaplSources") as String?)
+    ?: throw GradleException(
+        "Missing -PgaplSources. Provide a comma-separated list of .gapl files relative to netfpga/src/, e.g. " +
+                "-PgaplSources=my_top.gapl,subdir/alu.gapl"
+    )
+
+val gaplTargetRelPaths: List<String> = gaplSourcesProp
+    .split(',')
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
+
+// Validate: under src, exists, and ends with .gapl
+fun ensureUnder(parent: File, child: File): Boolean =
+    child.canonicalPath.startsWith(parent.canonicalPath + File.separator)
+
+val gaplTargetFiles: List<File> = gaplTargetRelPaths.map { rel ->
+    val f = File(gaplSrcRoot, rel)
+    when {
+        !rel.endsWith(".gapl") -> throw GradleException("Target must be a .gapl file: $rel")
+        !ensureUnder(gaplSrcRoot, f) -> throw GradleException("Target not under src/: $rel -> ${f.absolutePath}")
+        !f.exists() -> throw GradleException("Missing .gapl file under src/: $rel (looked at ${f.absolutePath})")
+        else -> f
+    }
+}
+
+
+// Output directory for generated Verilog
+val gaplVerilogOut = layout.buildDirectory.dir("verilog")
+
+fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension + ".v"
+
+// Build/install location of the compiler binary
+val compilerPath = project(":compiler")
+    .layout.buildDirectory.file("install/gapl/bin/gapl")
+
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
 
@@ -104,6 +142,67 @@ tasks.register<Exec>("printEnv") {
     """.trimIndent()))
 }
 
+tasks.register("generateGaplVerilog") {
+    group = "netfpga"
+    description = "Compile specified *.gapl (under src/) to Verilog into build/verilog"
+    dependsOn(":compiler:installDist")
+
+    // Incremental inputs/outputs
+    inputs.files(gaplTargetFiles)
+    outputs.dir(gaplVerilogOut)
+
+    doLast {
+        val compiler = compilerPath.get().asFile
+        if (!compiler.exists()) {
+            throw GradleException("GAPL compiler not found at $compiler")
+        }
+        val outDir = gaplVerilogOut.get().asFile
+        outDir.mkdirs()
+
+        var hasFailure = false
+        gaplTargetFiles.forEach { gapl ->
+            val verilogFile = outDir.resolve(targetVerilogName(gapl))
+            println("Compiling ${gapl.relativeTo(gaplSrcRoot)} -> ${verilogFile.name}")
+
+            val err = java.io.ByteArrayOutputStream()
+            val result = project.exec {
+                isIgnoreExitValue = true
+                commandLine(compiler.absolutePath, "-i", gapl.absolutePath, "-o", verilogFile.absolutePath)
+                errorOutput = err
+                standardOutput = System.out
+            }
+            if (result.exitValue != 0) {
+                hasFailure = true
+                println("❌ Failed to compile ${gapl.relativeTo(gaplSrcRoot)}")
+                println("---- Compiler Error Output ----")
+                println(err.toString().trim())
+                println("--------------------------------")
+            }
+        }
+        if (hasFailure) throw GradleException("One or more specified .gapl files failed to compile")
+    }
+}
+
+tasks.register<Copy>("installGaplVerilog") {
+    group = "netfpga"
+    description = "Install generated Verilog for specified .gapl files into \$NF_DESIGN_DIR/hw/hdl"
+    dependsOn("generateGaplVerilog")
+
+    // Copy only the produced .v for the requested targets
+    val outDirProvider = gaplVerilogOut
+    from(provider {
+        val outDir = outDirProvider.get().asFile
+        gaplTargetFiles.map { outDir.resolve(targetVerilogName(it)) }
+    })
+    into(provider { file("$nfDesignDir/hw/hdl") })
+
+    // Incremental wiring
+    inputs.files(gaplTargetFiles)
+    outputs.files(provider {
+        gaplTargetFiles.map { file("$nfDesignDir/hw/hdl/${targetVerilogName(it)}") }
+    })
+}
+
 // :netfpga:makeInit ---
 // Runs `make` in $SUME_FOLDER (one-time; guarded by a stamp file)
 tasks.register<Exec>("makeInit") {
@@ -111,6 +210,7 @@ tasks.register<Exec>("makeInit") {
     description = "Initialize NetFPGA project by running make in \$SUME_FOLDER"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
+    dependsOn("installGaplVerilog")
 
     commandLine(bash("""
         set -euo pipefail
@@ -174,13 +274,14 @@ tasks.register<Exec>("makeIPs") {
     """.trimIndent()))
 }
 
-
 // :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
 tasks.register<Exec>("makeBuild") {
     group = "netfpga"
     description = "Run make in \$NF_DESIGN_DIR after sourcing Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
+    dependsOn("installGaplVerilog")
+
     commandLine(bash("""
         set -euo pipefail
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
@@ -197,6 +298,7 @@ tasks.register<Exec>("runSimulation") {
     description = "Run tools/scripts/nf_test.py sim with NetFPGA env and Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
+    dependsOn("installGaplVerilog")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("major") as String?) ?: "simple"
@@ -230,12 +332,52 @@ tasks.register<Exec>("runSimulation") {
     """.trimIndent()))
 }
 
+// Remove generated/installed Verilog from $NF_DESIGN_DIR/hw/hdl
+tasks.register<Delete>("uninstallGaplVerilog") {
+    group = "netfpga"
+    description = "Remove Verilog installed from -PgaplSources under \$NF_DESIGN_DIR/hw/hdl"
+
+    doFirst {
+        val nfHdlDir = file("$nfDesignDir/hw/hdl")
+        if (!nfHdlDir.exists()) {
+            println("[uninstallGaplVerilog] Skipping: $nfHdlDir does not exist")
+            return@doFirst
+        }
+
+        val targetsProp = findProperty("gaplSources") as String?
+        if (targetsProp.isNullOrBlank()) {
+            println("[uninstallGaplVerilog] No -PgaplSources provided; skipping file removal.")
+            return@doFirst
+        }
+
+        // For each target path relative to netfpga/src/, decide the installed .v name
+        val toDelete = targetsProp.split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { rel ->
+                val relFile = File(rel)
+                val vName = targetVerilogName(relFile)
+                nfHdlDir.resolve(vName)
+            }
+
+        toDelete.forEach { f ->
+            if (f.exists()) {
+                println("[uninstallGaplVerilog] Deleting ${f.absolutePath}")
+                delete(f)
+            } else {
+                println("[uninstallGaplVerilog] Not found (ok): ${f.absolutePath}")
+            }
+        }
+    }
+}
+
 // :netfpga:clean -> make clean in $NF_DESIGN_DIR
 tasks.register<Exec>("makeClean") {
     group = "netfpga"
     description = "Run make clean in \$NF_DESIGN_DIR after sourcing Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
+
     commandLine(bash("""
         set -euo pipefail
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
@@ -247,5 +389,10 @@ tasks.register<Exec>("makeClean") {
 }
 
 // Wire lifecycle
-tasks.named("build") { dependsOn("makeBuild") }
-tasks.named("clean") { dependsOn("makeClean") }
+tasks.named("build") {
+    dependsOn("makeBuild")
+}
+tasks.named("clean") {
+    dependsOn("uninstallGaplVerilog")
+    dependsOn("makeClean")
+}

@@ -118,8 +118,7 @@ module packet_processor
     wire                               processed_packet_body_axis_tlast;
 
     // Instantiate the module
-    // TODO
-    packet_body_processor
+    gapl_wrapper
     #(
         .TDATA_WIDTH(TDATA_WIDTH),
         .TUSER_WIDTH(TUSER_WIDTH)
