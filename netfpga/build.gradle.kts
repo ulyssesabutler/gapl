@@ -361,12 +361,7 @@ tasks.register<Delete>("uninstallGaplVerilog") {
             }
 
         toDelete.forEach { f ->
-            if (f.exists()) {
-                println("[uninstallGaplVerilog] Deleting ${f.absolutePath}")
-                delete(f)
-            } else {
-                println("[uninstallGaplVerilog] Not found (ok): ${f.absolutePath}")
-            }
+            if (f.exists()) { delete(f) }
         }
     }
 }
@@ -383,8 +378,7 @@ tasks.register<Exec>("makeClean") {
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
         source "$vivadoSettings"
         [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
-        echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
-        make -C "${'$'}NF_DESIGN_DIR" clean
+        make -s -C "${'$'}NF_DESIGN_DIR" clean
     """.trimIndent()))
 }
 
