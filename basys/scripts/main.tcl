@@ -6,7 +6,7 @@ set current_datetime [clock format [clock seconds] -format "%Y-%m-%d_%H:%M:%S"]
 
 # project working dir
 set prj_dir             [pwd]
-set gen_dir             "$prj_dir/../gapl-example/build/verilog"
+set gen_dir             "$prj_dir/build/verilog"
 set prj_name            [file tail $prj_dir]
 
 # FPGA and board part numbers:

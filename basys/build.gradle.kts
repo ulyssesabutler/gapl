@@ -24,7 +24,6 @@ val gaplVerilogDir = layout.buildDirectory.dir("verilog")
 
 val handCodedVerilogSource = fileTree("rtl") { include("**/*.v") }
 val testBenchVerilogSource = fileTree("tb") { include("**/*.v") }
-val generatedVerilogSource = project(":gapl-example").layout.buildDirectory.dir("verilog")
 
 val runName = findProperty("runName")?.toString() ?: "run1"
 

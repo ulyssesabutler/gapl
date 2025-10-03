@@ -16,10 +16,9 @@ rootProject.name = "gapl"
  */
 
 include(
-    "antlr", // Parser / Lexer
-    "compiler", // Use generated parser to build gapl compiler
+    "antlr",
+    "compiler",
     "simtest",
-    "gapl-example", // Use compiler to convert this gapl code into verilog
-    "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
-    "netfpga", // Use generated verilog, along with a test harness, to test design on NetFPGA
+    "basys",
+    "netfpga",
 )
