@@ -1,0 +1,76 @@
+name: Release (deb + rpm)
+
+on:
+  push:
+    branches: [ release ]
+
+permissions:
+  contents: write   # needed to create releases and upload assets
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GRADLE_CMD: ./gradlew :compiler:buildDeb :compiler:buildRpm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK (build uses JVM; packaging is JVM-side)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install packaging deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg-dev rpm
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build .deb and .rpm
+        run: $GRADLE_CMD
+
+      - name: Locate artifacts
+        id: artifacts
+        run: |
+          DEB=$(ls compiler/build/pkg/*.deb)
+          RPM=$(ls compiler/build/pkg/*.rpm)
+          echo "deb=$DEB" >> "$GITHUB_OUTPUT"
+          echo "rpm=$RPM" >> "$GITHUB_OUTPUT"
+
+      - name: Read project version
+        id: version
+        run: |
+          VERSION=$(${{ env.GRADLE_CMD%% * }} :compiler:properties -q | awk -F': ' '/^version:/ {print $2; exit}')
+          # Fallback to git short sha if not found
+          if [ -z "$VERSION" ]; then VERSION="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifacts (debugging convenience)
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.artifacts.outputs.deb }}
+            ${{ steps.artifacts.outputs.rpm }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            ${{ steps.artifacts.outputs.deb }}
+            ${{ steps.artifacts.outputs.rpm }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
