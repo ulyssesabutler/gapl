@@ -45,13 +45,16 @@ jobs:
           RPM=$(ls compiler/build/pkg/*.rpm)
           echo "deb=$DEB" >> "$GITHUB_OUTPUT"
           echo "rpm=$RPM" >> "$GITHUB_OUTPUT"
-
+          
       - name: Read project version
         id: version
+        shell: bash
         run: |
-          VERSION=$(${{ env.GRADLE_CMD%% * }} :compiler:properties -q | awk -F': ' '/^version:/ {print $2; exit}')
-          # Fallback to git short sha if not found
-          if [ -z "$VERSION" ]; then VERSION="0.0.0-${GITHUB_SHA::7}"; fi
+          set -euo pipefail
+          # Ask Gradle for the :compiler module's properties and extract 'version: ...'
+          VERSION=$(./gradlew -p compiler -q properties | awk -F': ' '/^version:/ {print $2; exit}')
+          # Fallback if not found
+          if [[ -z "${VERSION:-}" ]]; then VERSION="0.0.0-${GITHUB_SHA::7}"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts (debugging convenience)
