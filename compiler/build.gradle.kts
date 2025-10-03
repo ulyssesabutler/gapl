@@ -47,7 +47,7 @@ tasks.named<JavaExec>("run") {
 
 ospackage {
     packageName = "gapl"
-    summary = "GAPL compiler CLI"
+    summary = "Compiler for the gate array programming language"
     packageDescription = "Compiles GAPL source files to Verilog."
     maintainer = "Ulysses gapl@uabutler.com"
 }
