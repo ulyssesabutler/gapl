@@ -55,19 +55,29 @@ fun printHelp() {
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
 }
 
+object BuildInfo {
+    val version: String = BuildInfo::class.java.`package`.implementationVersion ?: "dev"
+}
+
+fun printVersion() {
+    println("GAPL version ${BuildInfo.version}")
+}
+
 fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
 
     if (parsedArgs.containsKey("-h")) {
         printHelp()
         exitProcess(0)
+    } else if (parsedArgs.containsKey("-v")) {
+        printVersion()
     } else if (parsedArgs.containsKey("-i") && parsedArgs.containsKey("-o")) {
         val inputFiles = parsedArgs["-i"]!!
         val outputFile = parsedArgs["-o"]!!.first()
 
         compile(inputFiles, outputFile, compilerOptions(parsedArgs))
     } else {
-        printHelp()
+        println("Error: Invalid arguments. Use -h for help")
         exitProcess(1)
     }
 }

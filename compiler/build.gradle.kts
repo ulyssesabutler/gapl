@@ -1,6 +1,10 @@
+import com.netflix.gradle.plugins.deb.Deb
+import com.netflix.gradle.plugins.rpm.Rpm
+
 plugins {
     kotlin("jvm") version "2.0.21"
     application
+    id("com.netflix.nebula.ospackage-application") version "12.1.1"
 }
 
 application {
@@ -28,10 +32,57 @@ tasks.test {
     }
 }
 
+tasks.named<Jar>("jar") {
+    manifest {
+        attributes(
+            "Implementation-Title" to project.name,
+            "Implementation-Version" to project.version.toString()
+        )
+    }
+}
+
 tasks.named<JavaExec>("run") {
     jvmArgs = jvmArgs?.plus("-ea") ?: listOf("-ea")
 }
 
+ospackage {
+    packageName = "gapl"
+    summary = "GAPL compiler CLI"
+    packageDescription = "GAPL compiler (runs on system JRE)."
+    maintainer = "Ulysses Butler gapl@uabutler.com"
+
+    requires("/usr/bin/java")
+}
+
+tasks.named<Deb>("buildDeb") {
+    dependsOn("installDist")
+    link("/usr/bin/gapl", "/opt/gapl/bin/gapl")
+
+    destinationDirectory.set(layout.buildDirectory.dir("pkg"))
+    archiveBaseName.set("gapl")
+    archiveVersion.set(project.version.toString().ifBlank { "0.0.1" })
+}
+
+tasks.named<Rpm>("buildRpm") {
+    dependsOn("installDist")
+    link("/usr/bin/gapl", "/opt/gapl/bin/gapl")
+
+    destinationDirectory.set(layout.buildDirectory.dir("pkg"))
+    archiveBaseName.set("gapl")
+    archiveVersion.set(project.version.toString().ifBlank { "0.0.1" })
+}
+
+tasks.register("deb") {
+    group = "distribution"
+    dependsOn("buildDeb")
+}
+
+tasks.register("rpm") {
+    group = "distribution"
+    dependsOn("buildRpm")
+}
+
+
 kotlin {
-    jvmToolchain(8)
+    jvmToolchain(17)
 }
