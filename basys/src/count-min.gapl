@@ -1,0 +1,152 @@
+interface count wire[8]
+
+interface sketch_column(
+    // The number of possible values each has function can produce
+    hash_function_depth: integer,
+) count[hash_function_depth]
+
+// TODO: Something that would be cool? A datatype that represents the number of bits need to store a value of at least size N.
+interface sketch_column_index wire[4]
+
+interface sketch(
+    // The number of hash functions we need support
+    hash_function_count: integer,
+    // The number of possible values each has function can produce
+    hash_function_depth: integer,
+) sketch_column(hash_function_depth)[hash_function_count]
+
+interface sketch3(hash_function_depth: integer) sketch(3, hash_function_depth)
+interface sketch6(hash_function_depth: integer) sketch(6, hash_function_depth)
+
+function increment_sketch_column(
+    depth: integer,
+) index: sketch_column_index, original: sketch_column(depth) => updated: sketch_column(depth) {
+
+    // First, let's generate the increment vector. This will be a vector where a single value is 1, all others are 0
+    index => replicate(sketch_column_index, depth) => declare replicated_index: sketch_column_index[depth];
+    index_list(depth, 4) => declare indices: sketch_column_index[depth];
+
+    replicated_index, indices
+        => vector_zip(sketch_column_index, sketch_column_index, depth)
+        => vector_map(
+            pair(sketch_column_index, sketch_column_index),
+            boolean,
+            depth,
+            unpair(sketch_column_index, sketch_column_index, boolean, equals(4)),
+        )
+        => vector_map(boolean, count, depth, boolean_to_int(8))
+        => declare increment_vector: sketch_column(depth);
+
+    // Now, let's add the increment vector to the input column
+    original, increment_vector
+        => vector_zip(count, count, depth)
+        => vector_map(
+            pair(count, count),
+            count,
+            depth,
+            unpair(count, count, count, add(8))
+        )
+        => updated;
+
+}
+
+function hash_with_op(op: wire[4], wire[4] => wire[4]) i: wire[8] => o: wire[4] {
+    i[0:3], i[4:7] => op => o;
+}
+
+function int_hash0() i: wire[8] => o: sketch_column_index {
+    i => hash_with_op(bitwise_xor(4)) => o;
+}
+
+function int_hash1() i: wire[8] => o: sketch_column_index {
+    i => hash_with_op(add(4)) => o;
+}
+
+function int_hash2() i: wire[8] => o: sketch_column_index {
+    i => hash_with_op(multiply(4)) => o;
+}
+
+function update_sketch3(
+    T: interface,
+    depth: integer,
+    hash0: T => sketch_column_index,
+    hash1: T => sketch_column_index,
+    hash2: T => sketch_column_index,
+) value: T, original: sketch3(depth) => updated: sketch3(depth) {
+
+    // Run the hash functions on the input
+    value => hash0 => declare hash0_index: sketch_column_index;
+    value => hash1 => declare hash1_index: sketch_column_index;
+    value => hash2 => declare hash2_index: sketch_column_index;
+
+    // Now, using the results of the hash functions to update the sketch
+    hash0_index, original[0] => increment_sketch_column(depth) => updated[0];
+    hash1_index, original[1] => increment_sketch_column(depth) => updated[1];
+    hash2_index, original[2] => increment_sketch_column(depth) => updated[2];
+
+}
+
+function update_sketch6(
+    T: interface,
+    depth: integer,
+    hash0: T => sketch_column_index,
+    hash1: T => sketch_column_index,
+    hash2: T => sketch_column_index,
+    hash3: T => sketch_column_index,
+    hash4: T => sketch_column_index,
+    hash5: T => sketch_column_index,
+) value: T, original: sketch6(depth) => updated: sketch6(depth) {
+
+    // Run the hash functions on the input
+    value => hash0 => declare hash0_index: sketch_column_index;
+    value => hash1 => declare hash1_index: sketch_column_index;
+    value => hash2 => declare hash2_index: sketch_column_index;
+    value => hash3 => declare hash3_index: sketch_column_index;
+    value => hash4 => declare hash4_index: sketch_column_index;
+    value => hash5 => declare hash5_index: sketch_column_index;
+
+    // Now, using the results of the hash functions to update the sketch
+    hash0_index, original[0] => increment_sketch_column(depth) => updated[0];
+    hash1_index, original[1] => increment_sketch_column(depth) => updated[1];
+    hash2_index, original[2] => increment_sketch_column(depth) => updated[2];
+    hash3_index, original[3] => increment_sketch_column(depth) => updated[3];
+    hash4_index, original[4] => increment_sketch_column(depth) => updated[4];
+    hash5_index, original[5] => increment_sketch_column(depth) => updated[5];
+
+}
+
+function count_min_fold(
+    T: interface,
+    U: interface,
+    replication_factor: integer,
+    operation: T, U => U,
+) i: last(T[replication_factor]) => o: valid(U) {
+    declare state: register(U);
+    i.value, state
+        => replicated_fold(T, U, replication_factor, operation)
+        => state
+        => o.value;
+
+    i.last => register(boolean) => o.valid;
+}
+
+function main() i: last(wire[8][3]) => o: valid(sketch3(16)) {
+    i
+        => count_min_fold(
+            wire[8],
+            sketch3(16),
+            3,
+            update_sketch3(
+                wire[8],
+                16,
+                int_hash0,
+                int_hash1,
+                int_hash2,
+            ),
+        )
+        => declare updated_state: valid(sketch3(16));
+
+    // updated_state.value[0][0][0:7] => o.value;
+    updated_state.value => o.value;
+    updated_state.valid => o.valid;
+}

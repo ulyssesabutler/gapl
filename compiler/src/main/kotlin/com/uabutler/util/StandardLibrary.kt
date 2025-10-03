@@ -128,16 +128,15 @@ function ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_FOLD.identifier}(
 function ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(
     T: interface,
     U: interface,
-    replication_factor: integer,
+    size: integer,
     operation: T, U => U,
-) i: last(T[replication_factor]) => o: valid(U) {
-    declare state: register(U);
-    i.value, state
-        => ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(T, U, replication_factor, operation)
-        => state
-        => o.value;
-
-    i.last => register(boolean) => o.valid;
+) i: T[size], init: U => o: U {
+    if (size == 1) {
+        i[0], init => operation => o;
+    } else {
+        i[0], init => operation => declare updated_state: U;
+        i[1:size - 1], updated_state => ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(T, U, size - 1, operation) => o;
+    }
 }
 
 function ${StandardLibraryFunctions.VECTOR_ANY.identifier}(size: integer) i: boolean[size] => o: boolean {

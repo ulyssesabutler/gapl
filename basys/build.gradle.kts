@@ -1,3 +1,5 @@
+import java.io.ByteArrayOutputStream
+
 plugins {
     base
     kotlin("jvm") version "2.0.21"
@@ -12,6 +14,13 @@ val testBenchModule = project.findProperty("testBenchModule")?.toString() ?: thr
 
 val xsimDir = "xsim.dir"
 val waveformDb = layout.buildDirectory.file("waveform.wdb")
+
+
+val gaplFiles = fileTree("src") {
+    include("**/*.gapl")
+}
+
+val gaplVerilogDir = layout.buildDirectory.dir("verilog")
 
 val handCodedVerilogSource = fileTree("rtl") { include("**/*.v") }
 val testBenchVerilogSource = fileTree("tb") { include("**/*.v") }
@@ -65,26 +74,85 @@ tasks.register<VivadoTask>("runVivado") {
     // TODO: Outputs
 }
 
-// TODO: We should eliminate the gapl-example subproject. The simtest is a better test of the compiler.
-//  Instead, gapl code targetting the Basys should exist in this directory
-tasks.register<VivadoTask>("compileVerilog") {
-    dependsOn(":gapl-example:generateVerilog")
+tasks.register("compileGapl") {
+    group = "gapl"
+    description = "Compile .gapl sources in basys/src to Verilog into build/verilog"
+    dependsOn(":compiler:installDist")
 
-    val handCodedVerilogSourceFiles = handCodedVerilogSource.files.map { it.absolutePath }
-    val generatedVerilogSourceFiles = generatedVerilogSource.get().asFileTree.files.map { it.absolutePath }
+    inputs.files(gaplFiles)
+    outputs.dir(gaplVerilogDir)
+
+    doLast {
+        val compiler = project(":compiler")
+            .layout.buildDirectory.file("install/gapl/bin/gapl").get().asFile
+        val outDir = gaplVerilogDir.get().asFile
+
+        if (!compiler.exists()) {
+            throw GradleException("GAPL compiler not found at $compiler")
+        }
+        outDir.mkdirs()
+
+        var hasFailure = false
+
+        gaplFiles.forEach { gaplFile ->
+            val verilogFile = outDir.resolve(gaplFile.nameWithoutExtension + ".v")
+            println("Compiling ${gaplFile.name} -> ${verilogFile.name}")
+
+            val errorOut = ByteArrayOutputStream()
+
+            val result = exec {
+                isIgnoreExitValue = true
+                commandLine(compiler, "-i", gaplFile.absolutePath, "-o", verilogFile.absolutePath)
+                errorOutput = errorOut
+                standardOutput = System.out
+            }
+
+            if (result.exitValue != 0) {
+                hasFailure = true
+                println("❌ Failed to compile ${gaplFile.name}")
+                println("---- Compiler Error Output ----")
+                println(errorOut.toString().trim())
+                println("-------------------------------")
+            }
+        }
+
+        if (hasFailure) {
+            throw GradleException("One or more GAPL files failed to compile")
+        }
+    }
+}
+
+tasks.register<VivadoTask>("compileVerilog") {
+    group = "simulation"
+    description = "Compile Verilog (hand-coded + GAPL-generated) for simulation"
+
+    dependsOn("compileGapl")
+
+    val generatedVerilogFiles = gaplVerilogDir.map { dir ->
+        dir.asFileTree.matching { include("**/*.v") }
+    }
 
     doFirst {
         println("Compiling verilog for simulation:")
-        (handCodedVerilogSourceFiles + generatedVerilogSourceFiles).forEach { println("  $it") }
+
+        handCodedVerilogSource.files
+            .map { it.absolutePath }
+            .sorted()
+            .forEach { println("  $it") }
+
+        generatedVerilogFiles.get().files
+            .map { it.absolutePath }
+            .sorted()
+            .forEach { println("  $it") }
     }
 
-    vivadoCommand.set(
-        verilogCompilerCommon +
-        handCodedVerilogSourceFiles +
-        generatedVerilogSourceFiles
-    )
+    vivadoCommand.set(provider {
+        val hand = handCodedVerilogSource.files.map { it.absolutePath }
+        val gen  = generatedVerilogFiles.get().files.map { it.absolutePath }
+        verilogCompilerCommon + hand + gen
+    })
 
-    inputs.files(handCodedVerilogSource, generatedVerilogSource)
+    inputs.files(handCodedVerilogSource, generatedVerilogFiles)
     outputs.dir(xsimDir)
 }
 

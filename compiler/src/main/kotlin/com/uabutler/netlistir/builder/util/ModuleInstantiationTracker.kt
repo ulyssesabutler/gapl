@@ -38,15 +38,22 @@ class ModuleInstantiationTracker(
 
         val astNode = try {
             functionNodes[instantiationData.gaplFunctionName]!!
-        } catch (e: NullPointerException) {
+        } catch (_: NullPointerException) {
             throw Exception("Unable to locate function: ${instantiationData.gaplFunctionName}")
         }
 
         // Match the provided values with the local identifier
-        val interfaceValues =
+        val interfaceValues = try {
             GenericValueMatcher.getInterfaceValues(astNode.genericInterfaces, instantiationData.interfaces)
-        val parameterValues =
-            GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.parameters)
+        } catch (e: Exception) {
+            throw Exception("Invalid instantiation of module: ${instantiationData.gaplFunctionName}", e)
+        }
+
+        val parameterValues = try {
+                GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.parameters)
+        } catch (e: Exception) {
+            throw Exception("Invalid instantiation of module: ${instantiationData.gaplFunctionName}", e)
+        }
 
         val input = astNode.inputFunctionIO.map {
             InterfaceDescription(
