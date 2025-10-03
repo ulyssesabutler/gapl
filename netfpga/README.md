@@ -19,6 +19,14 @@ This is a dependency of Vivado.
 
 Without this, the build will likely fail.
 
+## Compiling GAPL
+
+1. Compile gapl code to Verilog, placed in `netfpga/build/verilog`
+- `./gradlew :netfpga:generateGaplVerilog`
+
+2. Install Verilog files into the NetFPGA project
+- `./gradlew :netfpga:installGaplVerilog`
+
 ## Initial setup
 
 1. Build the NetFPGA to setup the project
@@ -29,9 +37,12 @@ Without this, the build will likely fail.
 2. Build the CAM and TCAM IPs
 - This is a closed-source submodule that is not distributed by NetFPGA, but can be downloaded from Xilinx.
 - Download the [module](https://www.xilinx.com/member/forms/download/design-license.html?cid=154257&filename=xapp1151_Param_CAM.zip).
-- Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/tcam_v1_1_0`.
-- Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/cam_v1_1_0`.
-- Run `./gradlew :netfpga:makeIPs`
+- If the IPs have not been built before
+    - Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/tcam_v1_1_0`.
+    - Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/cam_v1_1_0`.
+    - Run `./gradlew :netfpga:makeIPs`
+- If the IPs have been built before
+    - Run `./gradlew :netfpga:remakeIPs`
 
 3. Build the packet processor
 - `./gradlew :netfpga:build`

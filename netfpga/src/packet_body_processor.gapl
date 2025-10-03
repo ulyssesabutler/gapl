@@ -5,8 +5,26 @@ interface netfpga_packet_body {
     last: boolean;
 }
 
+function add5() i: byte => o: byte {
+    i, literal(8, 5) => add(8) => o;
+}
+
+function conditional_add5() i: byte, condition: boolean => o: byte {
+    declare with_addition: conditional(byte)[1];
+
+    i => add5() => with_addition[0].value;
+    condition => with_addition[0].condition;
+
+    i => declare without_addition: byte;
+
+    with_addition, without_addition => priority(byte, 1) => o;
+}
+
 function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
-    i.data => map(byte, byte, 32, ) => o.data;
+    i.data, i.keep
+        => vector_zip(byte, boolean, 32)
+        => vector_map(pair(byte, boolean), byte, 32, unpair(byte, boolean, byte, conditional_add5))
+        => o.data;
 
     i.keep => o.keep;
     i.user => o.user;

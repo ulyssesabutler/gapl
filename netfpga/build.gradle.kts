@@ -274,6 +274,38 @@ tasks.register<Exec>("makeIPs") {
     """.trimIndent()))
 }
 
+tasks.register<Exec>("remakeIPs") {
+    group = "netfpga"
+    description = "Check required ZIPs and build CAM/TCAM IPs in xilinx cores"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+
+    // Resolve the two IP directories under the vendored SUME folder
+    val ipRoot = xilinxIpFolder // e.g. $SUME_FOLDER/lib/hw/xilinx/cores
+    val tcamDir = "$ipRoot/tcam_v1_1_0"
+    val camDir  = "$ipRoot/cam_v1_1_0"
+
+    commandLine(bash("""
+        set -euo pipefail
+
+        # Source Vivado environment
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+
+        # Ensure dirs exist
+        for d in "$tcamDir" "$camDir"; do
+          [ -d "${'$'}d" ] || { echo "ERROR: IP directory not found: ${'$'}d" >&2; exit 3; }
+        done
+
+        # Build sequence for each: make, make sim, make
+        for d in "$tcamDir" "$camDir"; do
+          echo "[netfpga:makeIPs] Building in ${'$'}d"
+          make -C "${'$'}d"
+        done
+    """.trimIndent()))
+}
+
+
 // :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
 tasks.register<Exec>("makeBuild") {
     group = "netfpga"
@@ -378,6 +410,7 @@ tasks.register<Exec>("makeClean") {
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
         source "$vivadoSettings"
         [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
+        make -s -C "${'$'}SUME_FOLDER" clean
         make -s -C "${'$'}NF_DESIGN_DIR" clean
     """.trimIndent()))
 }

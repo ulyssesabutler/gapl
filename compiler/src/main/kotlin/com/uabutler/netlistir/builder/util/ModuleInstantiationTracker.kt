@@ -43,10 +43,16 @@ class ModuleInstantiationTracker(
         }
 
         // Match the provided values with the local identifier
-        val interfaceValues =
+        val interfaceValues = try {
             GenericValueMatcher.getInterfaceValues(astNode.genericInterfaces, instantiationData.interfaces)
-        val parameterValues =
+        } catch (e: Exception) {
+            throw Exception("Unable to match generic interface values for ${instantiationData.gaplFunctionName}: ${e.message}")
+        }
+        val parameterValues = try {
             GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.parameters)
+        } catch (e: Exception) {
+            throw Exception("Unable to match generic parameter values for ${instantiationData.gaplFunctionName}: ${e.message}")
+        }
 
         val input = astNode.inputFunctionIO.map {
             InterfaceDescription(

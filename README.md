@@ -1,49 +1,29 @@
 # Gate Array Programming Language [WIP]
 
-This project is seperated into multiple different subproject, each of which depend on the last.
-These subproject are, in order
-- Lexer / Parser
-  - Directory: `antlr`
-  - Source: .g4 files
-  - Generates: ANTLR visitors, listeners, and parsers in Kotlin
-- Compiler
-  - Directory: `compiler`
-  - Source: Kotlin
-  - Generates: GAPL → Verilog compiler
-- GAPL Example Source Code
-  - Directory: `gapl-example`
-  - Source: GAPL code
-  - Generates: Verilog code to process data
-- Basys 3 Test Harness
-  - Directory: `basys`
-  - Source: Verilog code to send data to the module produced from the last step
-  - Generates: A bitstream to flash to the Basys 3
+## Installing
 
-The compiler is the primary artifact of this project.
-The lexer/parser just builds dependencies for the compiler, and the gapl example and Basys 3 test harness are just used to test that compiler.
+Currently, Debian and RedHat based distributions are supported.
+You can install gapl using the `.deb` or `.rpm` files made available in the latest release.
 
-This project is managed through gradle.
-Specifically, all the build steps can be run through the gradle wrapper script, `./gradlew`
-
-Gradle allows you to run tasks from each subproject individually.
-For example, if you just want to run the source generation script of the lexer/parser subproject, you can run
-```bash
-./gradlew :antlr:generateKotlinGrammarSource
+For example, on debian, after downloading, say, `gapl_0.0.2_all.deb`, you can use apt to install it:
+```
+# sudo apt install ./gapl*.deb
 ```
 
-If you want to run the full pipeline, this can be accomplished using
-```bash
-./gradlew build
+## Running
+
+Once you've built the application, you can invoke the execution script.
+
+```text
+gapl [ARGUMENTS]
 ```
 
-And, as usual, you can remove the build artifacts using
-```bash
-./gradlew clean
+To compile a list of files (into a single verilog file), use
+
+```text
+gapl -i INPUT_FILE [...] -o OUTPUT_FILE
 ```
-
-Below are a few specific, helpful commands.
-
-## Build Compiler
+## Building
 
 If you just want to build the executable gapl compiler (which, is the main output of this project)
 
@@ -51,90 +31,219 @@ If you just want to build the executable gapl compiler (which, is the main outpu
 ./gradlew :compiler:install
 ```
 
-This task will create an installable distribution of this application in the `build/install` directory.
+This task will create an installable distribution of this application in the `compiler/build/install` directory.
 Since this is a JVM application, that installation will consist of a set of JAR files, as well as an execution script.
 
-## Running
+You can then run that build using the `gapl` script in the `compiler/build/install/gapl/bin` directory.
 
-Once you've built the application, you can invoke the execution script.
+## Standard Library
 
-```text
- ./compiler/build/install/gapl/bin/gapl [ARGUMENTS]
+### Predefined Interfaces
+```
+interface boolean wire
 ```
 
-There are currently two modes.
-A "test" mode, and a "compile" mode.
-To compile a list of files (into a single verilog file), use
-
-```text
- ./compiler/build/install/gapl/bin/gapl -i INPUT_FILE [...] -o OUTPUT_FILE
+```
+interface byte wire[8]
 ```
 
-In test mode, you provide a directory that contains many gapl files.
-The test script will treat each file in the directory as a separate test case.
-It will compile the gapl code in the file, then print that code and the compiled verilog onto the screen.
-
-For instance, you can use the provided `examples` directory.
-```text
- ./compiler/build/install/gapl/bin/gapl --test examples
+```
+interface character wire[8]
 ```
 
-Which will print out
-```text
-############################
-#### TEST: passthrough.g
-## GAPL ##
-
-function passthrough() i: wire[32] => o: wire[32]
-{
-    i => o;
+```
+interface pair(T: interface, U: interface) {
+    first: T;
+    second: U;
 }
+```
 
-
-## VERILOG ##
-
-module passthrough
-(
-    input wire [31:0] i_output,
-    output wire [31:0] o_input
-);
-    assign o_input[31:0] = i_output[31:0];
-endmodule
-
-############################
-#### TEST: passthrough2.g
-## GAPL ##
-
-function passthrough() i: wire[32] => o: wire[32]
-{
-    i => declare t1: wire[32] => declare t2: wire[32] => declare t: wire[32];
-    t => o;
+```
+interface valid(T: interface) {
+    value: T;
+    valid: boolean;
 }
+```
 
+```
+interface last(T: interface) {
+    value: T;
+    last: boolean;
+}
+```
 
-## VERILOG ##
+```
+interface conditional(T: interface) {
+    condition: boolean;
+    value: T;
+}
+```
 
-module passthrough
-(
-    input wire [31:0] i_output,
-    output wire [31:0] o_input
-);
-    wire [31:0] t1_input;
-    wire [31:0] t1_output;
-    wire [31:0] t2_input;
-    wire [31:0] t2_output;
-    wire [31:0] t_input;
-    wire [31:0] t_output;
-    assign t1_outputs[0:31] = t1_inputs[0:31];
-    assign t1_input[31:0] = i_output[31:0];
-    assign t2_outputs[0:31] = t2_inputs[0:31];
-    assign t2_input[31:0] = t1_output[31:0];
-    assign t_outputs[0:31] = t_inputs[0:31];
-    assign t_input[31:0] = t2_output[31:0];
-    assign o_input[31:0] = t_output[31:0];
-endmodule
+### Utility Functions
+```
+function vector_to_wire() i: wire[1] => o: wire { i[0] => o; }
+```
 
-.
-.
-.
+```
+function wire_to_vector() i: wire => o: wire[1] { i => o[0]; }
+```
+
+```
+function left_pad(
+    original: integer,
+    padding: integer,
+) i: wire[original] => o: wire[original + padding] {
+    i => o[0:original - 1];
+    literal(padding, 0) => o[original:original + padding - 1];
+}
+```
+
+```
+function boolean_to_int(size: integer) i: wire => o: wire[size] {
+    i => wire_to_vector() => left_pad(1, size - 1) => o;
+}
+```
+
+```
+function index_list(list_size: integer, index_size: integer) null => o: wire[index_size][list_size] {
+    literal(index_size, list_size - 1) => o[list_size - 1];
+
+    if (list_size > 1) {
+        declare recursivefun: index_list(index_size, list_size - 1) => o[0:list_size - 2];
+    }
+}
+```
+
+```
+function replicate(I: interface, factor: integer) i: I => o: I[factor] {
+    i => o[0];
+    if (factor > 1) {
+        i => replicate(I, factor - 1) => o[1:factor - 1];
+    }
+}
+```
+
+```
+function unpair(
+    T: interface,
+    U: interface,
+    V: interface,
+    operation: T, U => V
+) i: pair(T, U) => o: V {
+    i.first, i.second => operation => o;
+}
+```
+
+### Collection Operations
+
+```
+function vector_map(I: interface, O: interface, size: integer, operation: I => O) i: I[size] => o: O[size]
+{
+    if (size > 0) {
+        i[size - 1] => operation => o[size - 1];
+
+        if (size > 1) {
+            i[0:size - 2] => vector_map(I, O, size - 1, operation) => o[0:size - 2];
+        }
+    }
+}
+```
+
+```
+function vector_zip(
+    I: interface,
+    J: interface,
+    vector_size: integer,
+) i1: I[vector_size], i2: J[vector_size] => o: pair(I, J)[vector_size] {
+    i1[0] => o[0].first;
+    i2[0] => o[0].second;
+
+    if (vector_size > 1) {
+        i1[1:vector_size - 1], i2[1:vector_size - 1]
+            => vector_zip(I, J, vector_size - 1)
+            => o[1:vector_size - 1];
+    }
+}
+```
+
+```
+function combinational_vector_fold(
+    T: interface,
+    U: interface,
+    size: integer,
+    operation: T, U => U,
+) i: T[size], init: U => o: U {
+    if (size == 1) {
+        i[0], init => operation => o;
+    } else {
+        i[0], init => operation => declare updated_state: U;
+        i[1:size - 1], updated_state => combinational_vector_fold(T, U, size - 1, operation) => o;
+    }
+}
+```
+
+```
+function replicated_fold(
+    T: interface,
+    U: interface,
+    replication_factor: integer,
+    operation: T, U => U,
+) i: last(T[replication_factor]) => o: valid(U) {
+    declare state: register(U);
+    
+    i.value, state
+        => replicated_fold(T, U, replication_factor, operation)
+        => state
+        => o.value;
+
+    i.last => register(boolean) => o.valid;
+}
+```
+
+```
+function vector_any(size: integer) i: boolean[size] => o: boolean {
+    declare false_v: literal(1, 0);
+    i, false_v[0] => combinational_vector_fold(boolean, boolean, size, or()) => o;
+}
+```
+
+```
+function stream_any() i: boolean() => o: boolean() {
+    declare current: register(boolean);
+    i, current => or() => current => o;
+}
+```
+
+### Operators
+
+```
+funciton less_than          (size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+funciton greater_than       (size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+funciton less_than_equals   (size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+funciton greater_than_equals(size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+funciton equals             (size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+funciton not_equals         (size: integer) lhs: wire[size], rhs: wire[size] => result: wire
+
+funciton and() lhs: wire, rhs: wire => result: wire
+funciton or () lhs: wire, rhs: wire => result: wire
+funciton not() input: wire => result: wire
+
+funciton bitwise_and(size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton bitwise_or (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton bitwise_xor(size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton bitwise_not(size: integer) input: wire[size] => result: wire[size]
+funciton add        (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton subtract   (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton multiply   (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton left_shift (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+funciton right_shift(size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
+
+funciton register(T: interface)  next: T => current: T
+
+funciton literal(size: integer, value: integer) => result: wire[size]
+
+funciton mux  (T: interface, inputCount: integer, selectorSize: integer)  selector: wire[selectorSize], inputs: T[inputCount] => output: T
+funciton demux(T: interface, outputCount: integer, selectorSize: integer) selector: wire[selectorSize], input: T => outputs: T[outputCount]
+
+funciton priority(T: interface, conditionalCount: integer) conditionals: conditional(T)[conditionalCount], default: T => output: T
 ```
