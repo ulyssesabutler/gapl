@@ -68,6 +68,9 @@ tasks.named<Deb>("buildDeb") {
 tasks.named<Rpm>("buildRpm") {
     dependsOn("installDist")
 
+    os = org.redline_rpm.header.Os.LINUX
+    release = "1"
+
     from(layout.buildDirectory.dir("install/gapl")) { into("/usr/lib/gapl") }
     link("/usr/bin/gapl", "/usr/lib/gapl/bin/gapl")
 
