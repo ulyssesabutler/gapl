@@ -114,7 +114,7 @@ module packet_parser
     assign read_from_input_queue = pretrim_tready & pretrim_tvalid;
 
     // Instantiate trim module
-    axis_trim_front #( .BYTES_TRIMMED(14 + 20 + 8 + 8) ) trim_headers
+    axis_trim_front #( .BYTES_TRIMMED(14 + 20 + 8) ) trim_headers
     (
         .axis_aclk           (axis_aclk),
         .axis_resetn         (axis_resetn),
@@ -133,7 +133,6 @@ module packet_parser
         .axis_trimmed_tready (trimmed_tready),
         .axis_trimmed_tlast  (packet_body_out_axis_tlast)
     );
-
 
     // 4. METADATA PARSERS
 

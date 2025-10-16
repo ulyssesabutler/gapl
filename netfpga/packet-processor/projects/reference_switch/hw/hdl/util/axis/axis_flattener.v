@@ -12,7 +12,7 @@ module axis_flattener
 
     // Module input
     input  [TDATA_WIDTH - 1:0] axis_original_tdata,
-    input  [TDATA_WIDTH - 1:0] axis_original_tkeep,
+    input  [TKEEP_WIDTH - 1:0] axis_original_tkeep,
     input  [TUSER_WIDTH - 1:0] axis_original_tuser,
     input                      axis_original_tvalid,
     output                     axis_original_tready,
@@ -20,7 +20,7 @@ module axis_flattener
 
     // Module output
     output [TDATA_WIDTH - 1:0] axis_flattened_tdata,
-    output [TDATA_WIDTH - 1:0] axis_flattened_tkeep,
+    output [TKEEP_WIDTH - 1:0] axis_flattened_tkeep,
     output [TUSER_WIDTH - 1:0] axis_flattened_tuser,
     output                     axis_flattened_tvalid,
     input                      axis_flattened_tready,

@@ -163,6 +163,13 @@ module packet_processor
 
 
     // STAGE 3: Package the processed data
+    wire [TDATA_WIDTH - 1:0]           packed_axis_tdata;
+    wire [TKEEP_WIDTH - 1:0]           packed_axis_tkeep;
+    wire [TUSER_WIDTH - 1:0]           packed_axis_tuser;
+    wire                               packed_axis_tvalid;
+    wire                               packed_axis_tready;
+    wire                               packed_axis_tlast;
+
     packet_packer
     #(
         .TDATA_WIDTH(TDATA_WIDTH),
@@ -189,12 +196,38 @@ module packet_processor
         .packet_body_in_axis_tready(processed_packet_body_axis_tready),
         .packet_body_in_axis_tlast(processed_packet_body_axis_tlast),
 
-        .packet_out_axis_tdata(packet_out_axis_tdata),
-        .packet_out_axis_tkeep(packet_out_axis_tkeep),
-        .packet_out_axis_tuser(packet_out_axis_tuser),
-        .packet_out_axis_tvalid(packet_out_axis_tvalid),
-        .packet_out_axis_tready(packet_out_axis_tready),
-        .packet_out_axis_tlast(packet_out_axis_tlast)
+        .packet_out_axis_tdata(packed_axis_tdata),
+        .packet_out_axis_tkeep(packed_axis_tkeep),
+        .packet_out_axis_tuser(packed_axis_tuser),
+        .packet_out_axis_tvalid(packed_axis_tvalid),
+        .packet_out_axis_tready(packed_axis_tready),
+        .packet_out_axis_tlast(packed_axis_tlast)
+    );
+
+    // STAGE 4: Flattening
+    axis_flattener
+    #(
+        .TDATA_WIDTH(TDATA_WIDTH),
+        .TUSER_WIDTH(TUSER_WIDTH)
+    )
+    flattener
+    (
+        .axis_aclk(axis_aclk),
+        .axis_resetn(axis_resetn),
+
+        .axis_original_tdata(packed_axis_tdata),
+        .axis_original_tkeep(packed_axis_tkeep),
+        .axis_original_tuser(packed_axis_tuser),
+        .axis_original_tvalid(packed_axis_tvalid),
+        .axis_original_tready(packed_axis_tready),
+        .axis_original_tlast(packed_axis_tlast),
+
+        .axis_flattened_tdata(packet_out_axis_tdata),
+        .axis_flattened_tkeep(packet_out_axis_tkeep),
+        .axis_flattened_tuser(packet_out_axis_tuser),
+        .axis_flattened_tvalid(packet_out_axis_tvalid),
+        .axis_flattened_tready(packet_out_axis_tready),
+        .axis_flattened_tlast(packet_out_axis_tlast)
     );
 
 endmodule

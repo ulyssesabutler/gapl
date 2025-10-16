@@ -171,7 +171,11 @@ module axis_trim_front
         bytes_read_next = bytes_read;
 
         if (move_data_between_queues) begin
-            bytes_read_next = bytes_read + TKEEP_WIDTH;
+            if (input_queue_tlast) begin
+                bytes_read_next = 0;
+            end else begin
+                bytes_read_next = bytes_read + TKEEP_WIDTH;
+            end
         end
     end
 
