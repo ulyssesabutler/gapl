@@ -35,8 +35,7 @@ module axis_flattener
 
     fallthrough_variable_width_queue
     #(
-        .IN_TDATA_WIDTH(TDATA_WIDTH),
-        .OUT_TDATA_WIDTH(TDATA_WIDTH),
+        .TDATA_WIDTH(TDATA_WIDTH),
         .TUSER_WIDTH(TUSER_WIDTH)
     )
     flattener

@@ -1,312 +1,208 @@
+// variable_width_queue
+// Packs incoming AXIS-like beats (with right-aligned, contiguous tkeep)
+// into as-full-as-possible output beats. Emits a partial beat only to
+// flush at end-of-stream (after seeing tlast_in).
+//
+// Handshake:
+//   - Accept input when write && can_write
+//   - Produce output when read && can_read
+//
+// TUSER SEMANTICS (assumption):
+//   - Per-stream metadata: captured from the first accepted input beat
+//     of a stream and forwarded on every output beat of that stream.
+//
+// Author: chatgpt (have you tried turning your FIFO off and on again? :)
+//
 module variable_width_queue
 #(
-    parameter IN_TDATA_WIDTH           = 256,
-    parameter OUT_TDATA_WIDTH          = 256,
-
+    parameter TDATA_WIDTH              = 256,
     parameter TUSER_WIDTH              = 128,
+    localparam TKEEP_WIDTH             = TDATA_WIDTH / 8,
 
-    localparam IN_TKEEP_WIDTH          = IN_TDATA_WIDTH / 8,
-    localparam OUT_TKEEP_WIDTH         = OUT_TDATA_WIDTH / 8,
-
-    localparam TDATA_BUFFER_WIDTH      = 2 * (IN_TDATA_WIDTH + OUT_TDATA_WIDTH),
-    localparam TKEEP_BUFFER_WIDTH      = 2 * (IN_TKEEP_WIDTH + OUT_TKEEP_WIDTH),
-    localparam TUSER_BUFFER_WIDTH      = TUSER_WIDTH,
-    
-    localparam IN_TDATA_WIDTH_BITS     = $clog2(IN_TDATA_WIDTH + 1),
-    localparam IN_TKEEP_WIDTH_BITS     = $clog2(IN_TKEEP_WIDTH + 1),
-
-    localparam OUT_TDATA_WIDTH_BITS    = $clog2(OUT_TDATA_WIDTH + 1),
-    localparam OUT_TKEEP_WIDTH_BITS    = $clog2(OUT_TKEEP_WIDTH + 1),
-
-    localparam TDATA_BUFFER_WIDTH_BITS = $clog2(TDATA_BUFFER_WIDTH + 1),
-    localparam TKEEP_BUFFER_WIDTH_BITS = $clog2(TKEEP_BUFFER_WIDTH + 1),
-
-    localparam IN_TDATA_SIZE_BITS      = $clog2(IN_TDATA_WIDTH + 2),
-    localparam IN_TKEEP_SIZE_BITS      = $clog2(IN_TKEEP_WIDTH + 2),
-
-    localparam OUT_TDATA_SIZE_BITS     = $clog2(OUT_TDATA_WIDTH + 2),
-    localparam OUT_TKEEP_SIZE_BITS     = $clog2(OUT_TKEEP_WIDTH + 2),
-
-    localparam TDATA_BUFFER_SIZE_BITS  = $clog2(TDATA_BUFFER_WIDTH + 2),
-    localparam TKEEP_BUFFER_SIZE_BITS  = $clog2(TKEEP_BUFFER_WIDTH + 2)
+    // How many output-beats-worth of byte storage we keep internally.
+    // More beats = more headroom when downstream stalls.
+    parameter BUFFER_BEATS             = 4
 )
 (
-    input                              clk,
-    input                              resetn,
+    input                               clk,
+    input                               resetn,
 
-    input      [IN_TDATA_WIDTH - 1:0]  tdata_in,
-    input      [IN_TKEEP_WIDTH - 1:0]  tkeep_in,
-    input      [TUSER_WIDTH - 1:0]     tuser_in,
-    input                              tlast_in,
-    input                              write,
+    // Input (write side)
+    input      [TDATA_WIDTH - 1:0]      tdata_in,
+    input      [TKEEP_WIDTH - 1:0]      tkeep_in,
+    input      [TUSER_WIDTH - 1:0]      tuser_in,
+    input                               tlast_in,
+    input                               write,
 
-    output reg [OUT_TDATA_WIDTH - 1:0] tdata_out,
-    output reg [OUT_TKEEP_WIDTH - 1:0] tkeep_out,
-    output reg [TUSER_WIDTH - 1:0]     tuser_out,
-    output reg                         tlast_out,
-    input                              read,
+    // Output (read side)
+    output reg [TDATA_WIDTH - 1:0]      tdata_out,
+    output reg [TKEEP_WIDTH - 1:0]      tkeep_out,
+    output reg [TUSER_WIDTH - 1:0]      tuser_out,
+    output reg                          tlast_out,
+    input                               read,
 
-    output                             can_write,
-    output                             can_read
+    output                              can_write,
+    output                              can_read
 );
 
-    // OUTPUT
-    wire [OUT_TDATA_WIDTH - 1:0] tdata_out_after_read;
-    wire [OUT_TKEEP_WIDTH - 1:0] tkeep_out_after_read;
-    wire [TUSER_WIDTH - 1:0]     tuser_out_after_read;
-    wire                         tlast_out_after_read;
+    // ----------------------------------------------------------------
+    // Local params / widths
+    // ----------------------------------------------------------------
+    localparam integer BYTES          = TKEEP_WIDTH;
+    localparam integer BUFFER_BYTES   = BUFFER_BEATS * BYTES;            // total bytes we can hold
+    localparam integer BUF_WIDTH      = BUFFER_BYTES * 8;                // data bits
+    localparam integer COUNT_W        = $clog2(BUFFER_BYTES + 1);
 
-    // CIRCULAR BUFFER
-    // - Create registers and wires
-    reg [TDATA_BUFFER_WIDTH - 1:0]       tdata_buffer;
-    reg [TKEEP_BUFFER_WIDTH - 1:0]       tkeep_buffer;
-    reg [TUSER_BUFFER_WIDTH - 1:0]       tuser_buffer;
-    reg                                  tlast_buffer;
+    // ----------------------------------------------------------------
+    // Byte-accumulator buffer:
+    //   - We keep acc_count bytes valid in the LSB side of buf.
+    //   - On read: take the lowest BYTES (or fewer on final flush),
+    //              then shift buf right by #consumed bytes.
+    //   - On write: OR masked input data shifted left by (acc_count bytes).
+    // ----------------------------------------------------------------
+    reg [BUF_WIDTH-1:0]  buffer;
+    reg [COUNT_W-1:0]    acc_count;       // # of valid bytes in buffer (0..BUFFER_BYTES)
+    reg                  eos;             // seen end-of-stream (accepted a beat with tlast_in)
+    reg                  tuser_latched_v; // have we latched tuser for this stream?
+    reg [TUSER_WIDTH-1:0] tuser_latched;  // per-stream tuser
 
-    wire [TDATA_BUFFER_SIZE_BITS - 1:0]  tdata_buffer_size;
-    reg  [TKEEP_BUFFER_SIZE_BITS - 1:0]  tkeep_buffer_size;
+    // ----------------------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------------------
 
-    reg  [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_start_index;
-    reg  [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_end_index;
+    // Count the number of 1s in tkeep_in (0..BYTES)
+    function [COUNT_W-1:0] count_ones;
+        input [TKEEP_WIDTH-1:0] v;
+        integer i;
+        reg [COUNT_W-1:0] s;
+    begin
+        s = {COUNT_W{1'b0}};
+        for (i = 0; i < TKEEP_WIDTH; i = i + 1)
+            if (v[i]) s = s + 1'b1;
+        count_ones = s;
+    end
+    endfunction
 
-    wire [TDATA_BUFFER_WIDTH_BITS - 1:0] tdata_buffer_start_index = tkeep_buffer_start_index * 8;
-    wire [TDATA_BUFFER_WIDTH_BITS - 1:0] tdata_buffer_end_index   = tkeep_buffer_end_index * 8;
+    // Expand a byte-enable mask (tkeep) to a bit mask over TDATA_WIDTH
+    function [TDATA_WIDTH-1:0] data_mask_from_keep;
+        input [TKEEP_WIDTH-1:0] k;
+        integer i;
+        reg [TDATA_WIDTH-1:0] m;
+    begin
+        m = {TDATA_WIDTH{1'b0}};
+        for (i = 0; i < TKEEP_WIDTH; i = i + 1)
+            if (k[i])
+                m[(8*i) +: 8] = 8'hFF;
+        data_mask_from_keep = m;
+    end
+    endfunction
 
-    // - Buffer tracking logic
-    assign tdata_buffer_size = tkeep_buffer_size * 8;
+    // Keep mask with N LSB ones (width = BYTES). Safe for N=0..BYTES.
+    function [TKEEP_WIDTH-1:0] keep_mask_n;
+        input [COUNT_W-1:0] n;
+        reg [TKEEP_WIDTH-1:0] all1;
+    begin
+        all1 = {TKEEP_WIDTH{1'b1}};
+        keep_mask_n = (n == 0) ? {TKEEP_WIDTH{1'b0}}
+                                : (all1 >> (TKEEP_WIDTH - n));
+    end
+    endfunction
 
-    assign can_write = ((TKEEP_BUFFER_WIDTH - tkeep_buffer_size) >= IN_TKEEP_WIDTH) & ~tlast_buffer;
-    assign can_read  = (tkeep_buffer_size >= OUT_TKEEP_WIDTH) | tlast_buffer;
+    // ----------------------------------------------------------------
+    // Combinational handshake math
+    // ----------------------------------------------------------------
+    wire [COUNT_W-1:0] in_bytes  = count_ones(tkeep_in);
+    wire [TDATA_WIDTH-1:0] in_masked = tdata_in & data_mask_from_keep(tkeep_in);
 
-    // INPUT PROCESSING
-    // - Create registers and wires
-    wire [IN_TKEEP_SIZE_BITS - 1:0] input_tkeep_size;
-    wire [IN_TDATA_SIZE_BITS - 1:0] input_tdata_size = input_tkeep_size * 8;
+    wire [COUNT_W-1:0] capacity  = BUFFER_BYTES[COUNT_W-1:0] - acc_count[COUNT_W-1:0];
 
-    // - Buffer tracking logic
-    find_last_bit #(.INPUT_SIZE(IN_TKEEP_WIDTH)) find_input_tkeep_size
-    (
-        .in(tkeep_in),
-        .bit_count(input_tkeep_size)
-    );
+    // We can accept THIS input beat iff its specific byte count fits.
+    assign can_write = (in_bytes <= capacity);
 
-    // WRITE TO BUFFER
-    // - Indicate when to write to the buffer
-    wire should_write_to_buffer  = can_write & write;
+    // How many bytes would we output this cycle if read is asserted?
+    // - If we have >= BYTES, we can output a full beat.
+    // - If eos is true (we've seen last) and acc_count > 0, we can flush a partial.
+    wire [COUNT_W-1:0] out_bytes_candidate =
+        (acc_count >= BYTES[COUNT_W-1:0]) ? BYTES[COUNT_W-1:0] :
+        (eos && (acc_count != {COUNT_W{1'b0}})) ? acc_count :
+        {COUNT_W{1'b0}};
 
-    // - Create registers and wires for the new buffer
-    wire [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_mask_after_write;
-    wire [TKEEP_BUFFER_WIDTH - 1:0] tkeep_buffer_mask_after_write;
-    wire [TUSER_BUFFER_WIDTH - 1:0] tuser_buffer_after_write;
-    wire                            tlast_buffer_after_write;
+    assign can_read = (out_bytes_candidate != {COUNT_W{1'b0}});
 
-    // - Compute the new TDATA buffer
-    wire [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_mask_after_write_front = tdata_in << tdata_buffer_end_index;
-    wire [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_mask_after_write_back  = tdata_in >> (TDATA_BUFFER_WIDTH - tdata_buffer_end_index);
+    // Handshakes that will happen this cycle
+    wire accept_in  = write && can_write && (in_bytes != {COUNT_W{1'b0}});
+    wire give_out   = read  && can_read   && (out_bytes_candidate != {COUNT_W{1'b0}});
 
-    assign tdata_buffer_mask_after_write = tdata_buffer_mask_after_write_front | ((tdata_buffer_start_index < tdata_buffer_end_index) ? tdata_buffer_mask_after_write_back : 0);
+    // Next acc_count
+    wire [COUNT_W:0] acc_after_read  = acc_count - (give_out ? out_bytes_candidate : {COUNT_W{1'b0}});
+    wire [COUNT_W:0] acc_after_write = acc_after_read + (accept_in ? in_bytes : {COUNT_W{1'b0}});
 
-    // - Compute the new TKEEP buffer
-    wire [TKEEP_BUFFER_WIDTH - 1:0] tkeep_buffer_mask_after_write_front = tkeep_in << tkeep_buffer_end_index;
-    wire [TKEEP_BUFFER_WIDTH - 1:0] tkeep_buffer_mask_after_write_back  = tkeep_in >> (TKEEP_BUFFER_WIDTH - tkeep_buffer_end_index);
+    // Next eos (stream end pending): latch when we accept a tlast_in; clear when we drain to 0.
+    wire eos_seen_this_cycle = accept_in && tlast_in;
+    wire will_have_eos       = eos | eos_seen_this_cycle;
+    wire eos_next            = will_have_eos && (acc_after_write != {COUNT_W+1{1'b0}});
 
-    assign tkeep_buffer_mask_after_write = tkeep_buffer_mask_after_write_front | ((tkeep_buffer_start_index < tkeep_buffer_end_index) ? tkeep_buffer_mask_after_write_back : 0);
+    // tlast_out fires only when we produce data AND after this cycle the accumulator goes to zero AND we know we've seen end.
+    wire tlast_out_next      = give_out && will_have_eos && (acc_after_write == {COUNT_W+1{1'b0}});
 
-    // - Compute the new TUSER buffer
-    assign tuser_buffer_after_write = tuser_in ? tuser_in : tuser_buffer;
+    // ----------------------------------------------------------------
+    // Data-path updates
+    // ----------------------------------------------------------------
+    // Build next buffer:
+    // 1) If giving out, drop the consumed bytes by shifting right.
+    // 2) If accepting input, OR the masked input shifted to land above current bytes.
+    wire [BUF_WIDTH-1:0] buf_after_read  =
+        give_out ? (buffer >> (out_bytes_candidate * 8)) : buffer;
 
-    // - Compute the new TLAST buffer
-    assign tlast_buffer_after_write = tlast_in;
+    wire [BUF_WIDTH-1:0] in_shifted      =
+        accept_in ? ( {{(BUF_WIDTH-TDATA_WIDTH){1'b0}}, in_masked} << (acc_after_read * 8) )
+                  : {BUF_WIDTH{1'b0}};
 
-    // - Compute the new indicies
-    wire [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_end_index_after_write;
-    wire [TDATA_BUFFER_WIDTH_BITS - 1:0] tdata_buffer_end_index_after_write = tkeep_buffer_end_index_after_write * 8;
-    modular_add #( .INT_WIDTH(TKEEP_BUFFER_WIDTH_BITS), .MOD(TKEEP_BUFFER_WIDTH) ) compute_tkeep_buffer_end_index_after_write
-    (
-        .in_a(tkeep_buffer_end_index),
-        .in_b({{(TKEEP_BUFFER_WIDTH_BITS - IN_TKEEP_SIZE_BITS){1'b0}}, input_tkeep_size}),
-        .result(tkeep_buffer_end_index_after_write)
-    );
+    wire [BUF_WIDTH-1:0] buf_next        = buf_after_read | in_shifted;
 
-    // READ FROM BUFFER
-    // - Indicate when to read from the buffer
-    wire should_read_from_buffer = can_read & read;
+    // The output data word for this transfer is always the lowest BYTES bytes of *current* buffer.
+    // For partial flush, the upper bytes in that word will be zero (by construction), and tkeep_out says how many are valid.
+    wire [TDATA_WIDTH-1:0] tdata_word = buffer[TDATA_WIDTH-1:0];
+    wire [TKEEP_WIDTH-1:0] tkeep_word = keep_mask_n(out_bytes_candidate);
 
-    // - Create registers and wires for the buffer masks and output
-    wire [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_after_read;
-    reg  [TKEEP_BUFFER_WIDTH - 1:0] tkeep_buffer_after_read;
-    wire                            tlast_buffer_after_read;
-
-    // - Compute TDATA output
-    wire [OUT_TDATA_WIDTH - 1:0] tdata_out_front = tdata_buffer >> tdata_buffer_start_index;
-    wire [OUT_TDATA_WIDTH - 1:0] tdata_out_back  = tdata_buffer << (TDATA_BUFFER_WIDTH - tdata_buffer_start_index);
-
-    assign tdata_out_after_read = tdata_out_front | tdata_out_back;
-
-    // - Compute TKEEP output
-    wire [TKEEP_BUFFER_WIDTH - 1:0] tkeep_out_front = tkeep_buffer >> tkeep_buffer_start_index;
-    wire [TKEEP_BUFFER_WIDTH - 1:0] tkeep_out_back  = tkeep_buffer << (TKEEP_BUFFER_WIDTH - tkeep_buffer_start_index);
-
-    assign tkeep_out_after_read = tkeep_out_front | tkeep_out_back;
-
-    // - Compute TUSER output
-    assign tuser_out_after_read = tuser_buffer;
-
-    // - Compute TLAST output
-    //assign tlast_out_after_read = tlast_buffer & (!tkeep_buffer_after_read);
-    assign tlast_out_after_read = tlast_buffer & (tkeep_buffer_size <= OUT_TKEEP_WIDTH);
-
-    // - Output tracking logic
-    wire [OUT_TKEEP_SIZE_BITS - 1:0] tkeep_out_size_after_read;
-    find_last_bit #(.INPUT_SIZE(OUT_TKEEP_WIDTH)) find_output_tkeep_size
-    (
-        .in(tkeep_out_after_read),
-        .bit_count(tkeep_out_size_after_read)
-    );
-
-    // - Compute the new TKEEP buffer
-    always @(*) begin
-        if (TKEEP_BUFFER_WIDTH >= (tkeep_buffer_start_index + tkeep_out_size_after_read)) begin
-            if (tkeep_buffer_start_index > tkeep_buffer_end_index) begin
-                //tkeep_buffer_after_read = ((1 << tkeep_buffer_end_index) - 1) | ((1 << (TKEEP_BUFFER_WIDTH - (tkeep_buffer_start_index + tkeep_out_size_after_read))) - 1);
-                tkeep_buffer_after_read = ((1 << tkeep_buffer_end_index) - 1) | ~((1 << (tkeep_buffer_start_index + tkeep_out_size_after_read)) - 1);
-            end else begin
-                tkeep_buffer_after_read = ~((1 << (tkeep_buffer_start_index + tkeep_out_size_after_read)) - 1) & ((1 << tkeep_buffer_end_index) - 1);
+    // ----------------------------------------------------------------
+    // Sequential logic
+    // ----------------------------------------------------------------
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn) begin
+            buffer           <= {BUF_WIDTH{1'b0}};
+            acc_count        <= {COUNT_W{1'b0}};
+            eos              <= 1'b0;
+            tdata_out        <= {TDATA_WIDTH{1'b0}};
+            tkeep_out        <= {TKEEP_WIDTH{1'b0}};
+            tlast_out        <= 1'b0;
+            tuser_out        <= {TUSER_WIDTH{1'b0}};
+            tuser_latched    <= {TUSER_WIDTH{1'b0}};
+            tuser_latched_v  <= 1'b0;
+        end else begin
+            // Latch per-stream TUSER on first accepted beat after becoming idle
+            if (!tuser_latched_v && accept_in) begin
+                tuser_latched   <= tuser_in;
+                tuser_latched_v <= 1'b1;
             end
-        end else begin
-            tkeep_buffer_after_read = ~((1 << ((tkeep_buffer_start_index + tkeep_out_size_after_read) - TKEEP_BUFFER_WIDTH)) - 1) & ((1 << tkeep_buffer_end_index) - 1);
-        end
-    end
+            // On final output (tlast_out), clear the latch flag so next stream can capture.
+            if (tlast_out_next) begin
+                tuser_latched_v <= 1'b0;
+            end
 
-    // - Compute the new TDATA buffer
-    wire [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_mask_after_read;
-    byte_to_bit_mask #(.BYTE_MASK_WIDTH(TKEEP_BUFFER_WIDTH)) tdata_buffer_mask_after_write_computer
-    (
-        .byte_mask(tkeep_buffer_after_read),
-        .bit_mask(tdata_buffer_mask_after_read)
-    );
-
-    assign tdata_buffer_after_read = tdata_buffer & tdata_buffer_mask_after_read;
-
-    // - Compute the new TLAST buffer
-    assign tlast_buffer_after_read = tlast_buffer & ~tlast_out_after_read;
-
-    // - Compute the new indicies
-    wire [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_start_index_after_read;
-    wire [TDATA_BUFFER_WIDTH_BITS - 1:0] tdata_buffer_start_index_after_read = tkeep_buffer_start_index_after_read * 8;
-    modular_add #( .INT_WIDTH(TKEEP_BUFFER_WIDTH_BITS), .MOD(TKEEP_BUFFER_WIDTH) ) compute_tkeep_buffer_start_index_after_read
-    (
-        .in_a(tkeep_buffer_start_index),
-        .in_b({{(TKEEP_BUFFER_WIDTH_BITS - OUT_TKEEP_SIZE_BITS){1'b0}}, tkeep_out_size_after_read}),
-        .result(tkeep_buffer_start_index_after_read)
-    );
-
-    // APPLY READ AND WRITE
-    reg [OUT_TDATA_WIDTH - 1:0] tdata_out_next;
-    reg [OUT_TKEEP_WIDTH - 1:0] tkeep_out_next;
-    reg [TUSER_WIDTH - 1:0]     tuser_out_next;
-    reg                         tlast_out_next;
-
-    reg [TDATA_BUFFER_WIDTH - 1:0] tdata_buffer_next;
-    reg [TKEEP_BUFFER_WIDTH - 1:0] tkeep_buffer_next;
-    reg [TUSER_BUFFER_WIDTH - 1:0] tuser_buffer_next;
-    reg                            tlast_buffer_next;
-
-    reg [TKEEP_BUFFER_SIZE_BITS - 1:0] tkeep_buffer_size_next;
-
-    reg [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_start_index_next;
-    reg [TKEEP_BUFFER_WIDTH_BITS - 1:0] tkeep_buffer_end_index_next;
-
-    always @(*) begin
-        tdata_buffer_next = tdata_buffer;
-        tkeep_buffer_next = tkeep_buffer;
-        tuser_buffer_next = tuser_buffer;
-        tlast_buffer_next = tlast_buffer;
-
-        tdata_out_next = tdata_out;
-        tkeep_out_next = tkeep_out;
-        tuser_out_next = tuser_out;
-        tlast_out_next = tlast_out;
-
-        tkeep_buffer_size_next = tkeep_buffer_size;
-
-        tkeep_buffer_start_index_next = tkeep_buffer_start_index;
-        tkeep_buffer_end_index_next   = tkeep_buffer_end_index;
-
-        if (should_write_to_buffer & should_read_from_buffer) begin
-            tdata_buffer_next = tdata_buffer_after_read | tdata_buffer_mask_after_write;
-            tkeep_buffer_next = tkeep_buffer_after_read | tkeep_buffer_mask_after_write;
-            tuser_buffer_next = tuser_buffer_after_write;
-            tlast_buffer_next = tlast_buffer_after_write;
-
-            tdata_out_next = tdata_out_after_read;
-            tkeep_out_next = tkeep_out_after_read;
-            tuser_out_next = tuser_out_after_read;
-            tlast_out_next = tlast_out_after_read;
-
-            tkeep_buffer_size_next = tkeep_buffer_size + input_tkeep_size - tkeep_out_size_after_read;
-
-            tkeep_buffer_start_index_next = tkeep_buffer_start_index_after_read;
-            tkeep_buffer_end_index_next   = tkeep_buffer_end_index_after_write;
-        end else if (should_write_to_buffer & ~should_read_from_buffer) begin
-            tdata_buffer_next = tdata_buffer | tdata_buffer_mask_after_write;
-            tkeep_buffer_next = tkeep_buffer | tkeep_buffer_mask_after_write;
-            tuser_buffer_next = tuser_buffer_after_write;
-            tlast_buffer_next = tlast_buffer_after_write;
-
-            tkeep_buffer_size_next = tkeep_buffer_size + input_tkeep_size;
-
-            tkeep_buffer_start_index_next = tkeep_buffer_start_index;
-            tkeep_buffer_end_index_next   = tkeep_buffer_end_index_after_write;
-        end else if (~should_write_to_buffer & should_read_from_buffer) begin
-            tdata_buffer_next = tdata_buffer_after_read;
-            tkeep_buffer_next = tkeep_buffer_after_read;
-            tuser_buffer_next = tuser_buffer; // Reads will never affect the TUSER buffer
-            tlast_buffer_next = tlast_buffer_after_read;
-
-            tdata_out_next = tdata_out_after_read;
-            tkeep_out_next = tkeep_out_after_read;
-            tuser_out_next = tuser_out_after_read;
-            tlast_out_next = tlast_out_after_read;
-
-            tkeep_buffer_size_next = tkeep_buffer_size - tkeep_out_size_after_read;
-
-            tkeep_buffer_start_index_next = tkeep_buffer_start_index_after_read;
-            tkeep_buffer_end_index_next   = tkeep_buffer_end_index;
-        end
-    end
-
-    always @(posedge clk) begin
-        if (~resetn) begin
-            tdata_buffer <= 0;
-            tkeep_buffer <= 0;
-            tuser_buffer <= 0;
-            tlast_buffer <= 0;
-
-            tdata_out <= 0;
-            tkeep_out <= 0;
-            tuser_out <= 0;
-            tlast_out <= 0;
-
-            tkeep_buffer_size <= 0;
-
-            tkeep_buffer_start_index <= 0;
-            tkeep_buffer_end_index   <= 0;
-        end else begin
-            tdata_buffer <= tdata_buffer_next;
-            tkeep_buffer <= tkeep_buffer_next;
-            tuser_buffer <= tuser_buffer_next;
-            tlast_buffer <= tlast_buffer_next;
-
-            tdata_out <= tdata_out_next;
-            tkeep_out <= tkeep_out_next;
-            tuser_out <= tuser_out_next;
+            // Produce outputs on successful read
+            if (give_out) begin
+                tdata_out <= tdata_word;
+                tkeep_out <= tkeep_word;
+                tuser_out <= tuser_latched; // per-stream metadata
+            end
+            // tlast_out is only asserted on the handshake cycle that empties the buffer after EOS
             tlast_out <= tlast_out_next;
 
-            tkeep_buffer_size <= tkeep_buffer_size_next;
-
-            tkeep_buffer_start_index <= tkeep_buffer_start_index_next;
-            tkeep_buffer_end_index   <= tkeep_buffer_end_index_next;
+            // Update accumulator/buffer + flags
+            buffer    <= buf_next;
+            acc_count <= acc_after_write[COUNT_W-1:0];
+            eos       <= eos_next;
         end
     end
 

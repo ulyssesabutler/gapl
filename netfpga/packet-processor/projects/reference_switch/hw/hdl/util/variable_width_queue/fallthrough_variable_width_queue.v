@@ -1,81 +1,54 @@
 module fallthrough_variable_width_queue
 #(
-    parameter IN_TDATA_WIDTH           = 256,
-    parameter OUT_TDATA_WIDTH          = 256,
-
-    parameter TUSER_WIDTH              = 128,
-
-    localparam IN_TKEEP_WIDTH          = IN_TDATA_WIDTH / 8,
-    localparam OUT_TKEEP_WIDTH         = OUT_TDATA_WIDTH / 8,
-
-    localparam TDATA_BUFFER_WIDTH      = 2 * (IN_TDATA_WIDTH + OUT_TDATA_WIDTH),
-    localparam TKEEP_BUFFER_WIDTH      = 2 * (IN_TKEEP_WIDTH + OUT_TKEEP_WIDTH),
-    localparam TUSER_BUFFER_WIDTH      = TUSER_WIDTH,
-    
-    localparam IN_TDATA_WIDTH_BITS     = $clog2(IN_TDATA_WIDTH + 1),
-    localparam IN_TKEEP_WIDTH_BITS     = $clog2(IN_TKEEP_WIDTH + 1),
-
-    localparam OUT_TDATA_WIDTH_BITS    = $clog2(OUT_TDATA_WIDTH + 1),
-    localparam OUT_TKEEP_WIDTH_BITS    = $clog2(OUT_TKEEP_WIDTH + 1),
-
-    localparam TDATA_BUFFER_WIDTH_BITS = $clog2(TDATA_BUFFER_WIDTH + 1),
-    localparam TKEEP_BUFFER_WIDTH_BITS = $clog2(TKEEP_BUFFER_WIDTH + 1),
-
-    localparam IN_TDATA_SIZE_BITS      = $clog2(IN_TDATA_WIDTH + 2),
-    localparam IN_TKEEP_SIZE_BITS      = $clog2(IN_TKEEP_WIDTH + 2),
-
-    localparam OUT_TDATA_SIZE_BITS     = $clog2(OUT_TDATA_WIDTH + 2),
-    localparam OUT_TKEEP_SIZE_BITS     = $clog2(OUT_TKEEP_WIDTH + 2),
-
-    localparam TDATA_BUFFER_SIZE_BITS  = $clog2(TDATA_BUFFER_WIDTH + 2),
-    localparam TKEEP_BUFFER_SIZE_BITS  = $clog2(TKEEP_BUFFER_WIDTH + 2)
+    parameter TDATA_WIDTH  = 256,
+    parameter TUSER_WIDTH  = 128,
+    localparam TKEEP_WIDTH = TDATA_WIDTH / 8
 )
 (
-    input                              clk,
-    input                              resetn,
+    input                          clk,
+    input                          resetn,
 
-    input      [IN_TDATA_WIDTH - 1:0]  tdata_in,
-    input      [IN_TKEEP_WIDTH - 1:0]  tkeep_in,
-    input      [TUSER_WIDTH - 1:0]     tuser_in,
-    input                              tlast_in,
-    input                              write,
+    input      [TDATA_WIDTH - 1:0] tdata_in,
+    input      [TKEEP_WIDTH - 1:0] tkeep_in,
+    input      [TUSER_WIDTH - 1:0] tuser_in,
+    input                          tlast_in,
+    input                          write,
 
-    output reg [OUT_TDATA_WIDTH - 1:0] tdata_out,
-    output reg [OUT_TKEEP_WIDTH - 1:0] tkeep_out,
-    output reg [TUSER_WIDTH - 1:0]     tuser_out,
-    output reg                         tlast_out,
-    input                              read,
+    output reg [TDATA_WIDTH - 1:0] tdata_out,
+    output reg [TKEEP_WIDTH - 1:0] tkeep_out,
+    output reg [TUSER_WIDTH - 1:0] tuser_out,
+    output reg                     tlast_out,
+    input                          read,
 
-    output                             can_write,
-    output reg                         can_read
+    output                         can_write,
+    output reg                     can_read
 );
 
     // CREATE "MIDDLE"
-    reg  [OUT_TDATA_WIDTH - 1:0] middle_tdata;
-    reg  [OUT_TKEEP_WIDTH - 1:0] middle_tkeep;
-    reg  [TUSER_WIDTH - 1:0]     middle_tuser;
-    reg                          middle_tlast;
+    reg  [TDATA_WIDTH - 1:0] middle_tdata;
+    reg  [TKEEP_WIDTH - 1:0] middle_tkeep;
+    reg  [TUSER_WIDTH - 1:0] middle_tuser;
+    reg                      middle_tlast;
 
-    reg                          middle_valid;
+    reg                      middle_valid;
 
     // CREATE THE UNDERLYING NON-FWFT QUEUE
-    wire [OUT_TDATA_WIDTH - 1:0] queue_tdata;
-    wire [OUT_TKEEP_WIDTH - 1:0] queue_tkeep;
-    wire [TUSER_WIDTH - 1:0]     queue_tuser;
-    wire                         queue_tlast;
+    wire [TDATA_WIDTH - 1:0] queue_tdata;
+    wire [TKEEP_WIDTH - 1:0] queue_tkeep;
+    wire [TUSER_WIDTH - 1:0] queue_tuser;
+    wire                     queue_tlast;
 
     // The "head" of the queue will change in the clock cycle *after* read_from_queue_enabled & can_read_from_queue.
     // That head will keep it's value until it's changed again. This register tracks when a new head has appeared
     // that hasn't been read.
-    reg                          queue_valid;
+    reg                     queue_valid;
 
-    wire                         queue_read_enabled;
-    wire                         queue_can_read;
+    wire                    queue_read_enabled;
+    wire                    queue_can_read;
 
     variable_width_queue
     #(
-        .IN_TDATA_WIDTH(IN_TDATA_WIDTH),
-        .OUT_TDATA_WIDTH(OUT_TDATA_WIDTH),
+        .TDATA_WIDTH(TDATA_WIDTH),
         .TUSER_WIDTH(TUSER_WIDTH)
     )
     queue
