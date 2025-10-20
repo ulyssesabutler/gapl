@@ -13,7 +13,7 @@ module ip_hdr_constructor
     input [IP_ADDRESS_WIDTH - 1:0] src_ip_addr,
     input [IP_ADDRESS_WIDTH - 1:0] dest_ip_addr,
 
-    input [LENGTH_WIDTH - 1:0]     body_length,
+    input [LENGTH_WIDTH - 1:0]     ip_length,
     input [ID_WIDTH - 1:0]         id,
 
     output [IP_HDR_WIDTH - 1:0]    ip_hdr
@@ -21,7 +21,7 @@ module ip_hdr_constructor
 
     assign ip_hdr[7:0]     = 8'h45; // Version
     assign ip_hdr[15:8]    = 8'h0;  // DSCP
-    assign ip_hdr[31:16]   = body_length + 20;
+    assign ip_hdr[31:16]   = ip_length;
     assign ip_hdr[47:32]   = id;
     assign ip_hdr[63:48]   = 16'h0; // Fragmentation offset
     assign ip_hdr[71:64]   = 8'h40; // TTL

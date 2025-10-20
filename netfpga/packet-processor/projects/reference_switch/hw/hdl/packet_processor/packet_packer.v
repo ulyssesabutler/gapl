@@ -20,9 +20,9 @@ module packet_packer
     localparam IP_ADDRESS_WIDTH       = 32,
     localparam PORT_WIDTH             = 16,
 
-    localparam IP_BODY_LENGTH_WIDTH   = 16,
+    localparam IP_LENGTH_WIDTH        = 16,
     localparam IP_ID_WIDTH            = 16,
-    localparam UDP_BODY_LENGTH_WIDTH  = 16,
+    localparam UDP_LENGTH_WIDTH       = 16,
 
     localparam ETH_HDR_WIDTH          = 14 * 8,
     localparam IP_HDR_WIDTH           = 20 * 8,
@@ -38,9 +38,12 @@ module packet_packer
 
     input  [IP_ADDRESS_WIDTH - 1:0]      src_ip_addr_in,
     input  [IP_ADDRESS_WIDTH - 1:0]      dest_ip_addr_in,
+    input  [IP_ID_WIDTH - 1:0]           ip_id_in,
+    input  [IP_LENGTH_WIDTH - 1:0]       ip_length_in,
 
     input  [PORT_WIDTH - 1:0]            src_port_in,
     input  [PORT_WIDTH - 1:0]            dest_port_in,
+    input  [UDP_LENGTH_WIDTH - 1:0]      udp_length_in,
 
     input  [TDATA_WIDTH - 1:0]           packet_body_in_axis_tdata,
     input  [TKEEP_WIDTH - 1:0]           packet_body_in_axis_tkeep,
@@ -82,9 +85,12 @@ module packet_packer
 
     reg [IP_ADDRESS_WIDTH - 1:0]      src_ip_addr;
     reg [IP_ADDRESS_WIDTH - 1:0]      dest_ip_addr;
+    reg [IP_ID_WIDTH - 1:0]           ip_id;
+    reg [IP_LENGTH_WIDTH - 1:0]       ip_length;
 
     reg [PORT_WIDTH - 1:0]            src_port;
     reg [PORT_WIDTH - 1:0]            dest_port;
+    reg [UDP_LENGTH_WIDTH - 1:0]      udp_length;
 
     reg [TUSER_WIDTH - 1:0]           tuser;
 
@@ -94,9 +100,12 @@ module packet_packer
 
     reg [IP_ADDRESS_WIDTH - 1:0]      src_ip_addr_next;
     reg [IP_ADDRESS_WIDTH - 1:0]      dest_ip_addr_next;
+    reg [IP_ID_WIDTH - 1:0]           ip_id_next;
+    reg [IP_LENGTH_WIDTH - 1:0]       ip_length_next;
 
     reg [PORT_WIDTH - 1:0]            src_port_next;
     reg [PORT_WIDTH - 1:0]            dest_port_next;
+    reg [UDP_LENGTH_WIDTH - 1:0]      udp_length_next;
 
     reg [TUSER_WIDTH - 1:0]           tuser_next;
 
@@ -108,9 +117,12 @@ module packet_packer
 
         src_ip_addr_next     = src_ip_addr;
         dest_ip_addr_next    = dest_ip_addr;
+        ip_id_next           = ip_id;
+        ip_length_next       = ip_length;
 
         src_port_next        = src_port;
         dest_port_next       = dest_port;
+        udp_length_next      = udp_length;
 
         tuser_next           = tuser;
 
@@ -121,9 +133,13 @@ module packet_packer
 
             src_ip_addr_next     = src_ip_addr_in;
             dest_ip_addr_next    = dest_ip_addr_in;
+            ip_id_next           = ip_id_in;
+            ip_length_next       = ip_length_in;
 
             src_port_next        = src_port_in;
             dest_port_next       = dest_port_in;
+            udp_length_next      = udp_length_in;
+
             tuser_next           = packet_body_in_axis_tuser;
         end
     end
@@ -211,27 +227,22 @@ module packet_packer
     wire [UDP_HDR_WIDTH - 1:0] udp_hdr;
 
     // UDP Header
-    wire [UDP_BODY_LENGTH_WIDTH - 1:0] udp_body_length = 0; // TODO
-
     udp_hdr_constructor construct_udp_hdr
     (
         .src_port(src_port),
         .dest_port(dest_port),
-        .body_length(udp_body_length),
+        .udp_length(udp_length),
 
         .udp_hdr(udp_hdr)
     );
 
     // IP Header
-    wire [IP_BODY_LENGTH_WIDTH - 1:0] ip_body_length = udp_body_length + (UDP_HDR_WIDTH / 8);
-    wire [IP_ID_WIDTH - 1:0]          ip_id          = 1; // TODO
-
     ip_hdr_constructor construct_ip_hdr
     (
         .src_ip_addr(src_ip_addr),
         .dest_ip_addr(dest_ip_addr),
 
-        .body_length(ip_body_length),
+        .ip_length(ip_length),
         .id(ip_id),
 
         .ip_hdr(ip_hdr)
@@ -350,9 +361,12 @@ module packet_packer
 
             src_ip_addr   <= 0;
             dest_ip_addr  <= 0;
+            ip_id         <= 0;
+            ip_length     <= 0;
 
             src_port      <= 0;
             dest_port     <= 0;
+            udp_length    <= 0;
 
             tuser         <= 0;
         end else begin
@@ -365,9 +379,12 @@ module packet_packer
 
             src_ip_addr   <= src_ip_addr_next;
             dest_ip_addr  <= dest_ip_addr_next;
+            ip_id         <= ip_id_next;
+            ip_length     <= ip_length_next;
 
             src_port      <= src_port_next;
             dest_port     <= dest_port_next;
+            udp_length    <= udp_length_next;
 
             tuser         <= tuser_next;
         end

@@ -10,7 +10,10 @@ module packet_parser
 
     localparam MAC_ADDRESS_WIDTH      = 48,
     localparam IP_ADDRESS_WIDTH       = 32,
+    localparam IP_LENGTH_WIDTH        = 16,
+    localparam IP_ID_WIDTH            = 16,
     localparam PORT_WIDTH             = 16,
+    localparam UDP_LENGTH_WIDTH       = 16,
 
     localparam TKEEP_WIDTH            = TDATA_WIDTH / 8
 )
@@ -33,9 +36,12 @@ module packet_parser
 
     output [IP_ADDRESS_WIDTH - 1:0]       src_ip_addr_out,
     output [IP_ADDRESS_WIDTH - 1:0]       dest_ip_addr_out,
+    output [IP_ID_WIDTH - 1:0]            ip_id_out,
+    output [IP_LENGTH_WIDTH - 1:0]        ip_length_out,
 
     output [PORT_WIDTH - 1:0]             src_port_out,
     output [PORT_WIDTH - 1:0]             dest_port_out,
+    output [UDP_LENGTH_WIDTH - 1:0]       udp_length_out,
 
     output [TDATA_WIDTH - 1:0]            packet_body_out_axis_tdata,
     output [TKEEP_WIDTH - 1:0]            packet_body_out_axis_tkeep,
@@ -226,6 +232,48 @@ module packet_parser
         .parsed_value_ready(dest_ip_addr_ready)
     );
 
+    // ip id
+    wire ip_id_ready;
+
+    axis_parser #( .START_INDEX(144), .END_INDEX(159) ) ip_id_parser
+    (
+        .axis_aclk         (axis_aclk),
+        .axis_resetn       (axis_resetn),
+
+        .axis_tdata        (pretrim_tdata),
+        .axis_tkeep        (pretrim_tkeep),
+        .axis_tuser        (pretrim_tuser),
+        .axis_tready       (pretrim_tready),
+        .axis_tvalid       (pretrim_tvalid),
+        .axis_tlast        (pretrim_tlast),
+
+        .reset             (reset_parsers),
+
+        .parsed_value      (ip_id_out),
+        .parsed_value_ready(ip_id_ready)
+    );
+
+    // ip length
+    wire ip_length_ready;
+
+    axis_parser #( .START_INDEX(128), .END_INDEX(143) ) ip_length_parser
+    (
+        .axis_aclk         (axis_aclk),
+        .axis_resetn       (axis_resetn),
+
+        .axis_tdata        (pretrim_tdata),
+        .axis_tkeep        (pretrim_tkeep),
+        .axis_tuser        (pretrim_tuser),
+        .axis_tready       (pretrim_tready),
+        .axis_tvalid       (pretrim_tvalid),
+        .axis_tlast        (pretrim_tlast),
+
+        .reset             (reset_parsers),
+
+        .parsed_value      (ip_length_out),
+        .parsed_value_ready(ip_length_ready)
+    );
+
     // src port
     wire src_port_ready;
 
@@ -268,6 +316,27 @@ module packet_parser
         .parsed_value_ready(dest_port_ready)
     );
 
+    // udp length
+    wire udp_length_ready;
+
+    axis_parser #( .START_INDEX(304), .END_INDEX(319) ) udp_length_parser
+    (
+        .axis_aclk         (axis_aclk),
+        .axis_resetn       (axis_resetn),
+
+        .axis_tdata        (pretrim_tdata),
+        .axis_tkeep        (pretrim_tkeep),
+        .axis_tuser        (pretrim_tuser),
+        .axis_tready       (pretrim_tready),
+        .axis_tvalid       (pretrim_tvalid),
+        .axis_tlast        (pretrim_tlast),
+
+        .reset             (reset_parsers),
+
+        .parsed_value      (udp_length_out),
+        .parsed_value_ready(udp_length_ready)
+    );
+
     // 6. OUTPUT
 
     wire metadata_ready =
@@ -275,8 +344,11 @@ module packet_parser
         dest_mac_addr_ready &
         src_ip_addr_ready &
         dest_ip_addr_ready &
+        ip_id_ready &
+        ip_length_ready &
         src_port_ready &
-        dest_port_ready;
+        dest_port_ready &
+        udp_length_ready;
 
     assign trimmed_tready = packet_body_out_axis_tready & metadata_ready;
 

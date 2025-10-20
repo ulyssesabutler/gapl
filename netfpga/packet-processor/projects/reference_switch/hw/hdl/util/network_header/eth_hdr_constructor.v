@@ -16,6 +16,6 @@ module eth_hdr_constructor
 
     assign eth_hdr[95:48]  = src_mac_addr;
     assign eth_hdr[47:0]   = dest_mac_addr;
-    assign eth_hdr[111:96] = 16'h0800;      // Type
+    assign eth_hdr[111:96] = 16'h0008;      // Type, IPv4
 
 endmodule
