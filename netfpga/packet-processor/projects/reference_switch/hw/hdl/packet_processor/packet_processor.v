@@ -43,212 +43,56 @@ module packet_processor
     output                     packet_out_axis_tlast
 );
 
+    wire [TKEEP_WIDTH - 1:0] back_mask;
+    wire [TKEEP_WIDTH - 1:0] body_mask;
 
-    // STAGE 1: PACKET PARSER: Parse the headers of the packet to retrieve the packet metadata
-
-    // The metadata wires
-    wire [MAC_ADDRESS_WIDTH - 1:0]      parsed_src_mac_addr;
-    wire [MAC_ADDRESS_WIDTH - 1:0]      parsed_dest_mac_addr;
-
-    wire [IP_ADDRESS_WIDTH - 1:0]       parsed_src_ip_addr;
-    wire [IP_ADDRESS_WIDTH - 1:0]       parsed_dest_ip_addr;
-    wire [IP_ID_WIDTH - 1:0]            parsed_ip_id;
-    wire [IP_LENGTH_WIDTH - 1:0]        parsed_ip_length;
-
-    wire [PORT_WIDTH - 1:0]             parsed_src_port;
-    wire [PORT_WIDTH - 1:0]             parsed_dest_port;
-    wire [UDP_LENGTH_WIDTH - 1:0]       parsed_udp_length;
-
-    // The body stream wires
-    wire [TDATA_WIDTH - 1:0]            parsed_packet_body_axis_tdata;
-    wire [TKEEP_WIDTH - 1:0]            parsed_packet_body_axis_tkeep;
-    wire [TUSER_WIDTH - 1:0]            parsed_packet_body_axis_tuser;
-    wire                                parsed_packet_body_axis_tvalid;
-    wire                                parsed_packet_body_axis_tready;
-    wire                                parsed_packet_body_axis_tlast;
-
-    // Instantiate the parser
-    packet_parser
+    axis_mask_back
     #(
         .TDATA_WIDTH(TDATA_WIDTH),
-        .TUSER_WIDTH(TUSER_WIDTH)
+        .TUSER_WIDTH(TUSER_WIDTH),
+        .BYTES_DROPPED(14 + 20 + 8)
     )
-    parser
+    mask_generator
     (
-        .axis_aclk(axis_aclk),
-        .axis_resetn(axis_resetn),
+        .clock(axis_aclk),
+        .reset_n(axis_resetn),
 
-        .packet_in_axis_tdata(packet_in_axis_tdata),
-        .packet_in_axis_tkeep(packet_in_axis_tkeep),
-        .packet_in_axis_tuser(packet_in_axis_tuser),
-        .packet_in_axis_tvalid(packet_in_axis_tvalid),
-        .packet_in_axis_tready(packet_in_axis_tready),
-        .packet_in_axis_tlast(packet_in_axis_tlast),
+        .in_tdata(packet_in_axis_tdata),
+        .in_tkeep(packet_in_axis_tkeep),
+        .in_tuser(packet_in_axis_tuser),
+        .in_tvalid(packet_in_axis_tvalid),
+        .in_tready(packet_in_axis_tready),
+        .in_tlast(packet_in_axis_tlast),
 
-        .src_mac_addr_out(parsed_src_mac_addr),
-        .dest_mac_addr_out(parsed_dest_mac_addr),
-
-        .src_ip_addr_out(parsed_src_ip_addr),
-        .dest_ip_addr_out(parsed_dest_ip_addr),
-        .ip_id_out(parsed_ip_id),
-        .ip_length_out(parsed_ip_length),
-
-        .src_port_out(parsed_src_port),
-        .dest_port_out(parsed_dest_port),
-        .udp_length_out(parsed_udp_length),
-
-        .packet_body_out_axis_tdata(parsed_packet_body_axis_tdata),
-        .packet_body_out_axis_tkeep(parsed_packet_body_axis_tkeep),
-        .packet_body_out_axis_tuser(parsed_packet_body_axis_tuser),
-        .packet_body_out_axis_tvalid(parsed_packet_body_axis_tvalid),
-        .packet_body_out_axis_tready(parsed_packet_body_axis_tready),
-        .packet_body_out_axis_tlast(parsed_packet_body_axis_tlast)
+        .mask(back_mask)
     );
 
+    assign body_mask = packet_in_axis_tkeep & back_mask;
 
-    // STAGE 2: DATA PREPROCESSOR
 
-    // Output metadata wires
-    wire [MAC_ADDRESS_WIDTH - 1:0]     processed_src_mac_addr;
-    wire [MAC_ADDRESS_WIDTH - 1:0]     processed_dest_mac_addr;
-
-    wire [IP_ADDRESS_WIDTH - 1:0]      processed_src_ip_addr;
-    wire [IP_ADDRESS_WIDTH - 1:0]      processed_dest_ip_addr;
-    wire [IP_ID_WIDTH - 1:0]           processed_ip_id;
-    wire [IP_LENGTH_WIDTH - 1:0]       processed_ip_length;
-
-    wire [PORT_WIDTH - 1:0]            processed_src_port;
-    wire [PORT_WIDTH - 1:0]            processed_dest_port;
-    wire [UDP_LENGTH_WIDTH - 1:0]      processed_udp_length;
-
-    // Output body stream wires
-    wire [TDATA_WIDTH - 1:0]           processed_packet_body_axis_tdata;
-    wire [TKEEP_WIDTH - 1:0]           processed_packet_body_axis_tkeep;
-    wire [TUSER_WIDTH - 1:0]           processed_packet_body_axis_tuser;
-    wire                               processed_packet_body_axis_tvalid;
-    wire                               processed_packet_body_axis_tready;
-    wire                               processed_packet_body_axis_tlast;
-
-    // Instantiate the module
     gapl_wrapper
     #(
         .TDATA_WIDTH(TDATA_WIDTH),
         .TUSER_WIDTH(TUSER_WIDTH)
     )
-    processor
+    dut
     (
         .axis_aclk(axis_aclk),
         .axis_resetn(axis_resetn),
 
-        .src_mac_addr_in(parsed_src_mac_addr),
-        .dest_mac_addr_in(parsed_dest_mac_addr),
+        .packet_body_in_axis_tdata(packet_in_axis_tdata),
+        .packet_body_in_axis_tkeep(body_mask),
+        .packet_body_in_axis_tuser(packet_in_axis_tuser),
+        .packet_body_in_axis_tvalid(packet_in_axis_tvalid),
+        .packet_body_in_axis_tready(packet_in_axis_tready),
+        .packet_body_in_axis_tlast(packet_in_axis_tlast),
 
-        .src_ip_addr_in(parsed_src_ip_addr),
-        .dest_ip_addr_in(parsed_dest_ip_addr),
-        .ip_id_in(parsed_ip_id),
-        .ip_length_in(parsed_ip_length),
-
-        .src_port_in(parsed_src_port),
-        .dest_port_in(parsed_dest_port),
-        .udp_length_in(parsed_udp_length),
-
-        .packet_body_in_axis_tdata(parsed_packet_body_axis_tdata),
-        .packet_body_in_axis_tkeep(parsed_packet_body_axis_tkeep),
-        .packet_body_in_axis_tuser(parsed_packet_body_axis_tuser),
-        .packet_body_in_axis_tvalid(parsed_packet_body_axis_tvalid),
-        .packet_body_in_axis_tready(parsed_packet_body_axis_tready),
-        .packet_body_in_axis_tlast(parsed_packet_body_axis_tlast),
-
-        .src_mac_addr_out(processed_src_mac_addr),
-        .dest_mac_addr_out(processed_dest_mac_addr),
-        .ip_id_out(processed_ip_id),
-        .ip_length_out(processed_ip_length),
-
-        .src_ip_addr_out(processed_src_ip_addr),
-        .dest_ip_addr_out(processed_dest_ip_addr),
-        .udp_length_out(processed_udp_length),
-
-        .src_port_out(processed_src_port),
-        .dest_port_out(processed_dest_port),
-
-        .packet_body_out_axis_tdata(processed_packet_body_axis_tdata),
-        .packet_body_out_axis_tkeep(processed_packet_body_axis_tkeep),
-        .packet_body_out_axis_tuser(processed_packet_body_axis_tuser),
-        .packet_body_out_axis_tvalid(processed_packet_body_axis_tvalid),
-        .packet_body_out_axis_tready(processed_packet_body_axis_tready),
-        .packet_body_out_axis_tlast(processed_packet_body_axis_tlast)
-    );
-
-
-    // STAGE 3: Package the processed data
-    wire [TDATA_WIDTH - 1:0]           packed_axis_tdata;
-    wire [TKEEP_WIDTH - 1:0]           packed_axis_tkeep;
-    wire [TUSER_WIDTH - 1:0]           packed_axis_tuser;
-    wire                               packed_axis_tvalid;
-    wire                               packed_axis_tready;
-    wire                               packed_axis_tlast;
-
-    packet_packer
-    #(
-        .TDATA_WIDTH(TDATA_WIDTH),
-        .TUSER_WIDTH(TUSER_WIDTH)
-    )
-    packer
-    (
-        .axis_aclk(axis_aclk),
-        .axis_resetn(axis_resetn),
-
-        .src_mac_addr_in(processed_src_mac_addr),
-        .dest_mac_addr_in(processed_dest_mac_addr),
-
-        .src_ip_addr_in(processed_src_ip_addr),
-        .dest_ip_addr_in(processed_dest_ip_addr),
-        .ip_id_in(processed_ip_id),
-        .ip_length_in(processed_ip_length),
-
-        .src_port_in(processed_src_port),
-        .dest_port_in(processed_dest_port),
-        .udp_length_in(processed_udp_length),
-
-        .packet_body_in_axis_tdata(processed_packet_body_axis_tdata),
-        .packet_body_in_axis_tkeep(processed_packet_body_axis_tkeep),
-        .packet_body_in_axis_tuser(processed_packet_body_axis_tuser),
-        .packet_body_in_axis_tvalid(processed_packet_body_axis_tvalid),
-        .packet_body_in_axis_tready(processed_packet_body_axis_tready),
-        .packet_body_in_axis_tlast(processed_packet_body_axis_tlast),
-
-        .packet_out_axis_tdata(packed_axis_tdata),
-        .packet_out_axis_tkeep(packed_axis_tkeep),
-        .packet_out_axis_tuser(packed_axis_tuser),
-        .packet_out_axis_tvalid(packed_axis_tvalid),
-        .packet_out_axis_tready(packed_axis_tready),
-        .packet_out_axis_tlast(packed_axis_tlast)
-    );
-
-    // STAGE 4: Flattening
-    axis_flattener
-    #(
-        .TDATA_WIDTH(TDATA_WIDTH),
-        .TUSER_WIDTH(TUSER_WIDTH)
-    )
-    flattener
-    (
-        .axis_aclk(axis_aclk),
-        .axis_resetn(axis_resetn),
-
-        .axis_original_tdata(packed_axis_tdata),
-        .axis_original_tkeep(packed_axis_tkeep),
-        .axis_original_tuser(packed_axis_tuser),
-        .axis_original_tvalid(packed_axis_tvalid),
-        .axis_original_tready(packed_axis_tready),
-        .axis_original_tlast(packed_axis_tlast),
-
-        .axis_flattened_tdata(packet_out_axis_tdata),
-        .axis_flattened_tkeep(packet_out_axis_tkeep),
-        .axis_flattened_tuser(packet_out_axis_tuser),
-        .axis_flattened_tvalid(packet_out_axis_tvalid),
-        .axis_flattened_tready(packet_out_axis_tready),
-        .axis_flattened_tlast(packet_out_axis_tlast)
+        .packet_body_out_axis_tdata(packet_out_axis_tdata),
+        .packet_body_out_axis_tkeep(packet_out_axis_tkeep),
+        .packet_body_out_axis_tuser(packet_out_axis_tuser),
+        .packet_body_out_axis_tvalid(packet_out_axis_tvalid),
+        .packet_body_out_axis_tready(packet_out_axis_tready),
+        .packet_body_out_axis_tlast(packet_out_axis_tlast)
     );
 
 endmodule
