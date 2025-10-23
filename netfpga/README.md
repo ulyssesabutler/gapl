@@ -19,6 +19,11 @@ This is a dependency of Vivado.
 
 Without this, the build will likely fail.
 
+## Editing GAPL code
+
+The GAPL code is located in the `src` directory.
+Specifically, you can edit the `src/packet_body_processor.gapl` file.
+
 ## Compiling GAPL
 
 1. Compile gapl code to Verilog, placed in `netfpga/build/verilog`
@@ -56,6 +61,41 @@ The simulation can be run using `./gradlew :netfpga:runSimulation`.
 ```
 ./gradlew :netfpga:build
 ```
+
+## Flashing the FPGA
+
+1. Log into the host
+- Log into ravnica using `ssh -X uab@172.24.71.241`.
+
+2. Load vivado
+- Use `source /tools/Xilinx/Vivado/2020.1/settings64.sh`
+
+3. Run vivado
+- Use `vivado`
+
+4. Connect to the FPGA
+- Under "Tasks" click "Open Hardware Manager"
+- In the green dialog box, click "Open target"
+- In the dropdown, click "Auto Connect"
+
+5. Flash the bitstream
+- Right click on the part, `xc7vx690t_0 (1)`
+- Click "Program Device"
+- Select the bitstream file
+- Click "Program"
+
+6. Close vivado
+
+## Testing the hardware
+
+More information is available in the packet processor README.
+
+1. Start tcpdump
+- `sudo tcpdump -vvvexxXX -i enp7s0f1 'not (udp port 67 or udp port 68)'`
+
+2. Start the traffic generator
+- It lives in `/home/uab/traffic-generator`
+- `sudo ./generator -t enp7s0f0 -r enp7s0f0 -r enp7s0f1 -s 172.24.71.241 -d 172.24.71.238 -p 1`
 
 ## References
 
