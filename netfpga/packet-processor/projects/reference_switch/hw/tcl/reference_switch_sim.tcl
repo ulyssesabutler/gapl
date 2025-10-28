@@ -185,6 +185,7 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_data_width_converter.v
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_flattener.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_mask_back.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_queue.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_pad_output.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_transmission_splitter.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_transmission_combiner.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/axis/axis_parser.v"

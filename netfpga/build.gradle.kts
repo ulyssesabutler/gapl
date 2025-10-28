@@ -334,7 +334,7 @@ tasks.register<Exec>("runSimulation") {
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("major") as String?) ?: "simple"
-    val minor = (findProperty("minor") as String?) ?: "broadcast"
+    val minor = (findProperty("minor") as String?) ?: "padded"
     val gui   = ((findProperty("gui") as String?) ?: "true").toBoolean()
 
     val guiFlag = if (gui) "--gui" else ""

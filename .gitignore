@@ -44,6 +44,9 @@ bin/
 ### Mac OS ###
 .DS_Store
 
+### Python ###
+**/__pycache__/**
+
 ### Vivado ###
 *.jou
 *.pb

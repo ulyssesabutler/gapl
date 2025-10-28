@@ -105,6 +105,26 @@ def make_VLAN_hdr(vlan = None, id = None, prio = None, **kwargs):
         hdr.prio = prio
     return hdr
 
+############################
+# Function: make_UDP_hdr
+# Keyword Arguments:
+#   src_port, dst_port
+#   checksum (optional; leave None to auto-calc; set 0 for IPv4 zero-checksum tests)
+#   length   (optional; leave None to let Scapy compute)
+# Description: creates and returns a scapy UDP layer
+#              if keyword arguments are not specified, scapy defaults are used
+############################
+def make_UDP_hdr(src_port=None, dst_port=None, checksum=None, length=None, **kwargs):
+    hdr = scapy.UDP()
+    if src_port is not None:
+        hdr.sport = src_port
+    if dst_port is not None:
+        hdr.dport = dst_port
+    if checksum is not None:
+        hdr.chksum = checksum
+    if length is not None:
+        hdr.len = length
+    return hdr
 
 ############################
 # Function: make_IP_pkt
@@ -119,6 +139,48 @@ def make_IP_pkt(pkt_len = 60, **kwargs):
         pkt_len = 60
     pkt = make_MAC_hdr(**kwargs)/make_IP_hdr(**kwargs)/generate_load(pkt_len - 34)
     return pkt
+
+############################
+# Function: make_UDP_pkt
+# Keyword Arguments:
+#   src_MAC, dst_MAC, EtherType            (Ether)
+#   src_IP, dst_IP, TTL                    (IP)
+#   src_port, dst_port                     (UDP)
+#   body                                   (payload as above)
+# Description: creates and returns an Ethernet/IP/UDP packet
+# Notes:
+#   - If src_port/dst_port are omitted, Scapy defaults are used.
+#   - UDP checksum is auto-calculated by Scapy (leave as-is).
+############################
+def make_UDP_pkt(body=None, src_port=None, dst_port=None, **kwargs):
+    ether = make_MAC_hdr(**kwargs)
+    ip    = make_IP_hdr(**kwargs)
+    udp   = make_UDP_hdr(**kwargs)
+
+    if src_port is not None:
+        udp.sport = src_port
+    if dst_port is not None:
+        udp.dport = dst_port
+
+    return ether / ip / udp / make_payload(body)
+
+############################
+# Function: make_padded_UDP_pkt
+# Keyword Arguments:
+#   src_MAC, dst_MAC, EtherType            (Ether)
+#   src_IP, dst_IP, TTL                    (IP)
+#   src_port, dst_port                     (UDP)
+#   body                                   (payload)
+#   pad_left                               (default 22 zero bytes)
+# Description:
+#   Pads the UDP payload on the LEFT with pad_left zero bytes,
+#   then builds a UDP packet via make_UDP_pkt.
+# Notes:
+#   - UDP len/checksum recomputed by Scapy automatically.
+############################
+def make_padded_UDP_pkt(body=None, pad_left=22, **kwargs):
+    padded = (b"\x00" * pad_left) + make_payload(body)
+    return make_UDP_pkt(body=padded, **kwargs)
 
 ############################
 # Function: make_VLAN_pkt
@@ -198,6 +260,29 @@ def make_ARP_request_pkt(**kwargs):
 def make_ARP_reply_pkt(**kwargs):
     pkt = make_MAC_hdr(**kwargs)/make_ARP_hdr(op="is-at", **kwargs)/("\x00"*18)
     return pkt
+
+############################
+# Function: _payload_layer
+# Keyword Arguments: body
+# Description: normalizes 'body' into a Scapy layer
+#   Accepted forms:
+#     - bytes/bytearray
+#     - str (encoded as UTF-8)
+#     - list[int 0..255] (converted to bytes)
+#     - an existing Scapy Packet/Layer (e.g., Raw(...))
+############################
+def make_payload(body):
+    if body is None:
+        return b""
+    if isinstance(body, (bytes, bytearray)):
+        return bytes(body)
+    if isinstance(body, str):
+        return body.encode("utf-8")
+    if isinstance(body, list) and all(isinstance(x, int) and 0 <= x <= 255 for x in body):
+        return bytes(body)
+    if isinstance(body, scapy.Packet):
+        return bytes(scapy.raw(body))
+    raise TypeError(f"Unsupported body type: {type(body)}")
 
 ############################
 # Function: generate_load
