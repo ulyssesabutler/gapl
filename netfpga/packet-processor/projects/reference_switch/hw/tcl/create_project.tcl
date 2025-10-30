@@ -139,6 +139,7 @@ read_verilog "./hdl/util/one_hot_to_count.v"
 read_verilog "./hdl/util/find_last_bit.v"
 read_verilog "./hdl/util/ones_complement_addition.v"
 read_verilog "./hdl/util/ones_complement_sum.v"
+read_verilog "./hdl/util/processor_controller.v"
 
 # util/datatype/
 read_verilog "./hdl/util/datatype/reverse_byte_order.v"
@@ -164,6 +165,7 @@ read_verilog "./hdl/util/axis/axis_transmission_splitter.v"
 read_verilog "./hdl/util/axis/axis_transmission_combiner.v"
 read_verilog "./hdl/util/axis/axis_parser.v"
 read_verilog "./hdl/util/axis/axis_trim_front.v"
+read_verilog "./hdl/util/axis/axis_user_tracker.v"
 
 # util/network_header/
 read_verilog "./hdl/util/network_header/eth_hdr_constructor.v"
