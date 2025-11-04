@@ -8,10 +8,10 @@ module eth_hdr_constructor
     localparam ETH_HDR_WIDTH     = 14 * 8
 )
 (
-    input [MAC_ADDRESS_WIDTH - 1:0] src_mac_addr,
-    input [MAC_ADDRESS_WIDTH - 1:0] dest_mac_addr,
+    input  wire [MAC_ADDRESS_WIDTH - 1:0] src_mac_addr,
+    input  wire [MAC_ADDRESS_WIDTH - 1:0] dest_mac_addr,
 
-    output [ETH_HDR_WIDTH - 1:0]    eth_hdr
+    output wire [ETH_HDR_WIDTH - 1:0]     eth_hdr
 );
 
     assign eth_hdr[95:48]  = src_mac_addr;

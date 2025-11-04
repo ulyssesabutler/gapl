@@ -9,10 +9,10 @@ module generate_mask
 )
 (
     // Module input
-    input  [MASK_WIDTH_BITS - 1:0] start_index,
-    input  [MASK_WIDTH_BITS - 1:0] end_index,
+    input  wire [MASK_WIDTH_BITS - 1:0] start_index,
+    input  wire [MASK_WIDTH_BITS - 1:0] end_index,
 
-    output [MASK_WIDTH - 1:0] mask
+    output wire [MASK_WIDTH - 1:0]      mask
 );
 
     wire [MASK_WIDTH - 1:0] beginning = (1 << (end_index + 1)) - 1;

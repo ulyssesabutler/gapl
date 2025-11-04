@@ -3,8 +3,8 @@ module reverse_byte_order
     parameter BYTE_COUNT = 2
 )
 (
-    input  [(BYTE_COUNT * 8) - 1:0] input_number,
-    output [(BYTE_COUNT * 8) - 1:0] output_number
+    input  wire [(BYTE_COUNT * 8) - 1:0] input_number,
+    output wire [(BYTE_COUNT * 8) - 1:0] output_number
 );
 
     genvar i;

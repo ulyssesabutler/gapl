@@ -7,24 +7,24 @@ module axis_flattener
 )
 (
     // Global Ports
-    input                      axis_aclk,
-    input                      axis_resetn,
+    input  wire                      axis_aclk,
+    input  wire                      axis_resetn,
 
     // Module input
-    input  [TDATA_WIDTH - 1:0] axis_original_tdata,
-    input  [TKEEP_WIDTH - 1:0] axis_original_tkeep,
-    input  [TUSER_WIDTH - 1:0] axis_original_tuser,
-    input                      axis_original_tvalid,
-    output                     axis_original_tready,
-    input                      axis_original_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] axis_original_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] axis_original_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] axis_original_tuser,
+    input  wire                      axis_original_tvalid,
+    output wire                      axis_original_tready,
+    input  wire                      axis_original_tlast,
 
     // Module output
-    output [TDATA_WIDTH - 1:0] axis_flattened_tdata,
-    output [TKEEP_WIDTH - 1:0] axis_flattened_tkeep,
-    output [TUSER_WIDTH - 1:0] axis_flattened_tuser,
-    output                     axis_flattened_tvalid,
-    input                      axis_flattened_tready,
-    output                     axis_flattened_tlast
+    output wire [TDATA_WIDTH - 1:0] axis_flattened_tdata,
+    output wire [TKEEP_WIDTH - 1:0] axis_flattened_tkeep,
+    output wire [TUSER_WIDTH - 1:0] axis_flattened_tuser,
+    output wire                     axis_flattened_tvalid,
+    input  wire                     axis_flattened_tready,
+    output wire                     axis_flattened_tlast
 );
 
     wire read;

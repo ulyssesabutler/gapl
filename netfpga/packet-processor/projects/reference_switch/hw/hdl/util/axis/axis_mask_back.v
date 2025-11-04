@@ -17,19 +17,19 @@ module axis_mask_back
 )
 (
     // Global ports
-    input                      clock,
-    input                      reset_n,
+    input  wire                     clock,
+    input  wire                     reset_n,
 
     // Module input
-    input  [TDATA_WIDTH - 1:0] in_tdata,
-    input  [TKEEP_WIDTH - 1:0] in_tkeep,
-    input  [TUSER_WIDTH - 1:0] in_tuser,
-    input                      in_tvalid,
-    output                     in_tready,
-    input                      in_tlast,
+    input  wire [TDATA_WIDTH - 1:0] in_tdata,
+    input  wire [TKEEP_WIDTH - 1:0] in_tkeep,
+    input  wire [TUSER_WIDTH - 1:0] in_tuser,
+    input  wire                     in_tvalid,
+    output wire                     in_tready,
+    input  wire                     in_tlast,
 
     // Module output
-    output reg [TKEEP_WIDTH - 1:0] mask
+    output reg  [TKEEP_WIDTH - 1:0] mask
 );
 
     reg [31:0] bytes_read;

@@ -5,23 +5,23 @@ module fallthrough_variable_width_queue
     localparam TKEEP_WIDTH = TDATA_WIDTH / 8
 )
 (
-    input                          clk,
-    input                          resetn,
+    input  wire                     clk,
+    input  wire                     resetn,
 
-    input      [TDATA_WIDTH - 1:0] tdata_in,
-    input      [TKEEP_WIDTH - 1:0] tkeep_in,
-    input      [TUSER_WIDTH - 1:0] tuser_in,
-    input                          tlast_in,
-    input                          write,
+    input  wire [TDATA_WIDTH - 1:0] tdata_in,
+    input  wire [TKEEP_WIDTH - 1:0] tkeep_in,
+    input  wire [TUSER_WIDTH - 1:0] tuser_in,
+    input  wire                     tlast_in,
+    input  wire                     write,
 
-    output reg [TDATA_WIDTH - 1:0] tdata_out,
-    output reg [TKEEP_WIDTH - 1:0] tkeep_out,
-    output reg [TUSER_WIDTH - 1:0] tuser_out,
-    output reg                     tlast_out,
-    input                          read,
+    output reg  [TDATA_WIDTH - 1:0] tdata_out,
+    output reg  [TKEEP_WIDTH - 1:0] tkeep_out,
+    output reg  [TUSER_WIDTH - 1:0] tuser_out,
+    output reg                      tlast_out,
+    input  wire                     read,
 
-    output                         can_write,
-    output reg                     can_read
+    output wire                     can_write,
+    output reg                      can_read
 );
 
     // CREATE "MIDDLE"

@@ -23,8 +23,8 @@ module packet_processor
 )
 (
     // Global Ports
-    input                      axis_aclk,
-    input                      axis_resetn,
+    input  wire                axis_aclk,
+    input  wire                axis_resetn,
 
     // Module input
     input  wire [TDATA_WIDTH - 1:0] packet_in_axis_tdata,

@@ -1,8 +1,8 @@
 module last_one_detector
 #(parameter INPUT_SIZE = 32)
 (
-    input  [INPUT_SIZE - 1:0] in,
-    output [INPUT_SIZE - 1:0] one_hot
+    input  wire [INPUT_SIZE - 1:0] in,
+    output wire [INPUT_SIZE - 1:0] one_hot
 );
 
     genvar i;

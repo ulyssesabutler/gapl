@@ -6,8 +6,8 @@ module one_hot_to_count
     localparam NEAREST_POW_2 = 2**$clog2(INPUT_SIZE)
 )
 (
-    input      [INPUT_SIZE - 1:0] one_hot,
-    output reg [INDEX_BITS - 1:0] count // Basically, one indexing
+    input  wire [INPUT_SIZE - 1:0] one_hot,
+    output reg  [INDEX_BITS - 1:0] count // Basically, one indexing
 );
 /*
     wire [INDEX_BITS - 1:0] bit_index;

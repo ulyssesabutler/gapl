@@ -7,24 +7,24 @@ module axis_queue
 )
 (
     // Global Ports
-    input                      axis_aclk,
-    input                      axis_resetn,
+    input  wire                      axis_aclk,
+    input  wire                      axis_resetn,
 
     // Module input
-    input  [TDATA_WIDTH - 1:0] in_tdata,
-    input  [TKEEP_WIDTH - 1:0] in_tkeep,
-    input  [TUSER_WIDTH - 1:0] in_tuser,
-    input                      in_tvalid,
-    output                     in_tready,
-    input                      in_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] in_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] in_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] in_tuser,
+    input  wire                      in_tvalid,
+    output wire                      in_tready,
+    input  wire                      in_tlast,
 
     // Module output
-    output [TDATA_WIDTH - 1:0] out_tdata,
-    output [TKEEP_WIDTH - 1:0] out_tkeep,
-    output [TUSER_WIDTH - 1:0] out_tuser,
-    output                     out_tvalid,
-    input                      out_tready,
-    output                     out_tlast
+    output wire [TDATA_WIDTH - 1:0] out_tdata,
+    output wire [TKEEP_WIDTH - 1:0] out_tkeep,
+    output wire [TUSER_WIDTH - 1:0] out_tuser,
+    output wire                     out_tvalid,
+    input  wire                     out_tready,
+    output wire                     out_tlast
 );
 
     wire queue_nearly_full;

@@ -3,8 +3,8 @@ module population_count
     parameter  IN_WIDTH   = 256,
     localparam WIDTH_BITS = $clog2(IN_WIDTH + 1)
 ) (
-    input      [IN_WIDTH - 1:0]   in,
-    output reg [WIDTH_BITS - 1:0] population
+    input  wire [IN_WIDTH - 1:0]   in,
+    output reg  [WIDTH_BITS - 1:0] population
 );
 
     integer i;

@@ -12,38 +12,38 @@ module axis_3_to_1_arbiter
 )
 (
     // Global Ports
-    input                      axis_aclk,
-    input                      axis_resetn,
+    input  wire                      axis_aclk,
+    input  wire                      axis_resetn,
 
     // Module input
-    input  [TDATA_WIDTH - 1:0] axis_input_0_tdata,
-    input  [TKEEP_WIDTH - 1:0] axis_input_0_tkeep,
-    input  [TUSER_WIDTH - 1:0] axis_input_0_tuser,
-    input                      axis_input_0_tvalid,
-    output                     axis_input_0_tready,
-    input                      axis_input_0_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] axis_input_0_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] axis_input_0_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] axis_input_0_tuser,
+    input  wire                      axis_input_0_tvalid,
+    output wire                      axis_input_0_tready,
+    input  wire                      axis_input_0_tlast,
 
-    input  [TDATA_WIDTH - 1:0] axis_input_1_tdata,
-    input  [TKEEP_WIDTH - 1:0] axis_input_1_tkeep,
-    input  [TUSER_WIDTH - 1:0] axis_input_1_tuser,
-    input                      axis_input_1_tvalid,
-    output                     axis_input_1_tready,
-    input                      axis_input_1_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] axis_input_1_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] axis_input_1_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] axis_input_1_tuser,
+    input  wire                      axis_input_1_tvalid,
+    output wire                      axis_input_1_tready,
+    input  wire                      axis_input_1_tlast,
 
-    input  [TDATA_WIDTH - 1:0] axis_input_2_tdata,
-    input  [TKEEP_WIDTH - 1:0] axis_input_2_tkeep,
-    input  [TUSER_WIDTH - 1:0] axis_input_2_tuser,
-    input                      axis_input_2_tvalid,
-    output                     axis_input_2_tready,
-    input                      axis_input_2_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] axis_input_2_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] axis_input_2_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] axis_input_2_tuser,
+    input  wire                      axis_input_2_tvalid,
+    output wire                      axis_input_2_tready,
+    input  wire                      axis_input_2_tlast,
 
     // Module output
-    output [TDATA_WIDTH - 1:0] axis_output_tdata,
-    output [TKEEP_WIDTH - 1:0] axis_output_tkeep,
-    output [TUSER_WIDTH - 1:0] axis_output_tuser,
-    output                     axis_output_tvalid,
-    input                      axis_output_tready,
-    output                     axis_output_tlast
+    output wire [TDATA_WIDTH - 1:0] axis_output_tdata,
+    output wire [TKEEP_WIDTH - 1:0] axis_output_tkeep,
+    output wire [TUSER_WIDTH - 1:0] axis_output_tuser,
+    output wire                     axis_output_tvalid,
+    input  wire                     axis_output_tready,
+    output wire                     axis_output_tlast
 );  
 
     // Output Queue

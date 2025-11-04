@@ -6,43 +6,43 @@ module axis_transmission_combiner
 )
 (
   // Global Ports
-  input                              axis_aclk,
-  input                              axis_resetn,
+  input  wire                              axis_aclk,
+  input  wire                              axis_resetn,
 
-  input  [TDATA_WIDTH - 1:0]         axis_input_0_tdata,
-  input  [((TDATA_WIDTH / 8)) - 1:0] axis_input_0_tkeep,
-  input  [TUSER_WIDTH-1:0]           axis_input_0_tuser,
-  input                              axis_input_0_tvalid,
-  output                             axis_input_0_tready,
-  input                              axis_input_0_tlast,
+  input  wire  [TDATA_WIDTH - 1:0]         axis_input_0_tdata,
+  input  wire  [((TDATA_WIDTH / 8)) - 1:0] axis_input_0_tkeep,
+  input  wire  [TUSER_WIDTH-1:0]           axis_input_0_tuser,
+  input  wire                              axis_input_0_tvalid,
+  output wire                              axis_input_0_tready,
+  input  wire                              axis_input_0_tlast,
 
-  input  [TDATA_WIDTH - 1:0]         axis_input_1_tdata,
-  input  [((TDATA_WIDTH / 8)) - 1:0] axis_input_1_tkeep,
-  input  [TUSER_WIDTH-1:0]           axis_input_1_tuser,
-  input                              axis_input_1_tvalid,
-  output                             axis_input_1_tready,
-  input                              axis_input_1_tlast,
+  input  wire  [TDATA_WIDTH - 1:0]         axis_input_1_tdata,
+  input  wire  [((TDATA_WIDTH / 8)) - 1:0] axis_input_1_tkeep,
+  input  wire  [TUSER_WIDTH-1:0]           axis_input_1_tuser,
+  input  wire                              axis_input_1_tvalid,
+  output wire                              axis_input_1_tready,
+  input  wire                              axis_input_1_tlast,
 
-  input  [TDATA_WIDTH - 1:0]         axis_input_2_tdata,
-  input  [((TDATA_WIDTH / 8)) - 1:0] axis_input_2_tkeep,
-  input  [TUSER_WIDTH-1:0]           axis_input_2_tuser,
-  input                              axis_input_2_tvalid,
-  output                             axis_input_2_tready,
-  input                              axis_input_2_tlast,
+  input  wire  [TDATA_WIDTH - 1:0]         axis_input_2_tdata,
+  input  wire  [((TDATA_WIDTH / 8)) - 1:0] axis_input_2_tkeep,
+  input  wire  [TUSER_WIDTH-1:0]           axis_input_2_tuser,
+  input  wire                              axis_input_2_tvalid,
+  output wire                              axis_input_2_tready,
+  input  wire                              axis_input_2_tlast,
 
-  input  [TDATA_WIDTH - 1:0]         axis_input_3_tdata,
-  input  [((TDATA_WIDTH / 8)) - 1:0] axis_input_3_tkeep,
-  input  [TUSER_WIDTH-1:0]           axis_input_3_tuser,
-  input                              axis_input_3_tvalid,
-  output                             axis_input_3_tready,
-  input                              axis_input_3_tlast,
+  input  wire  [TDATA_WIDTH - 1:0]         axis_input_3_tdata,
+  input  wire  [((TDATA_WIDTH / 8)) - 1:0] axis_input_3_tkeep,
+  input  wire  [TUSER_WIDTH-1:0]           axis_input_3_tuser,
+  input  wire                              axis_input_3_tvalid,
+  output wire                              axis_input_3_tready,
+  input  wire                              axis_input_3_tlast,
 
-  output [TDATA_WIDTH - 1:0]         axis_combined_tdata,
-  output [((TDATA_WIDTH / 8)) - 1:0] axis_combined_tkeep,
-  output [TUSER_WIDTH - 1:0]         axis_combined_tuser,
-  output                             axis_combined_tvalid,
-  input                              axis_combined_tready,
-  output                             axis_combined_tlast
+  output wire [TDATA_WIDTH - 1:0]          axis_combined_tdata,
+  output wire [((TDATA_WIDTH / 8)) - 1:0]  axis_combined_tkeep,
+  output wire [TUSER_WIDTH - 1:0]          axis_combined_tuser,
+  output wire                              axis_combined_tvalid,
+  input  wire                              axis_combined_tready,
+  output wire                              axis_combined_tlast
 );
 
   // Input queue 0
@@ -196,6 +196,7 @@ module axis_transmission_combiner
   reg                           output_queue_tlast;
   
   reg                           write_to_output_queue;
+  wire                          send_from_module;
   wire                          output_queue_nearly_full;
   wire                          output_queue_empty;
 

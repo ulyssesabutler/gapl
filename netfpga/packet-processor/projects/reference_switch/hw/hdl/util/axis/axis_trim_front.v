@@ -17,24 +17,24 @@ module axis_trim_front
 )
 (
     // Global ports
-    input                      axis_aclk,
-    input                      axis_resetn,
+    input  wire                      axis_aclk,
+    input  wire                      axis_resetn,
 
     // Module input
-    input  [TDATA_WIDTH - 1:0] axis_original_tdata,
-    input  [TKEEP_WIDTH - 1:0] axis_original_tkeep,
-    input  [TUSER_WIDTH - 1:0] axis_original_tuser,
-    input                      axis_original_tvalid,
-    output                     axis_original_tready,
-    input                      axis_original_tlast,
+    input  wire  [TDATA_WIDTH - 1:0] axis_original_tdata,
+    input  wire  [TKEEP_WIDTH - 1:0] axis_original_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0] axis_original_tuser,
+    input  wire                      axis_original_tvalid,
+    output wire                      axis_original_tready,
+    input  wire                      axis_original_tlast,
 
     // Module output
-    output [TDATA_WIDTH - 1:0] axis_trimmed_tdata,
-    output [TKEEP_WIDTH - 1:0] axis_trimmed_tkeep,
-    output [TUSER_WIDTH - 1:0] axis_trimmed_tuser,
-    output                     axis_trimmed_tvalid,
-    input                      axis_trimmed_tready,
-    output                     axis_trimmed_tlast
+    output wire [TDATA_WIDTH - 1:0]  axis_trimmed_tdata,
+    output wire [TKEEP_WIDTH - 1:0]  axis_trimmed_tkeep,
+    output wire [TUSER_WIDTH - 1:0]  axis_trimmed_tuser,
+    output wire                      axis_trimmed_tvalid,
+    input  wire                      axis_trimmed_tready,
+    output wire                      axis_trimmed_tlast
 );
 
 
@@ -52,7 +52,7 @@ module axis_trim_front
     wire                     input_queue_nearly_full;
     wire                     input_queue_empty;
 
-    // Instantiate input queue
+    // Instantiate input  wire queue
     fallthrough_small_fifo
     #(
         .WIDTH(TDATA_WIDTH + TUSER_WIDTH + TKEEP_WIDTH + 1),
@@ -72,14 +72,14 @@ module axis_trim_front
         .clk         (axis_aclk)
     );
 
-    // Set input queue IO wires
+    // Set input  wire queue IO wires
     assign write_to_input_queue = axis_original_tready & axis_original_tvalid;
     assign axis_original_tready = ~input_queue_nearly_full;
 
 
     // 2. OUTPUT QUEUE
 
-    // output queue wires
+    // output wire queue wires
     reg [TDATA_WIDTH - 1:0] output_queue_tdata;
     reg [TKEEP_WIDTH - 1:0] output_queue_tkeep;
     reg [TUSER_WIDTH - 1:0] output_queue_tuser;
@@ -91,7 +91,7 @@ module axis_trim_front
     wire                    output_queue_nearly_full;
     wire                    output_queue_empty;
 
-    // Instantiate input queue
+    // Instantiate input  wire queue
     fallthrough_small_fifo
     #(
         .WIDTH(TDATA_WIDTH + TUSER_WIDTH + TKEEP_WIDTH + 1),
@@ -111,7 +111,7 @@ module axis_trim_front
         .clk         (axis_aclk)
     );
 
-    // Set input queue IO wires
+    // Set input  wire queue IO wires
     assign read_from_output_queue = axis_trimmed_tready & axis_trimmed_tvalid;
     assign axis_trimmed_tvalid    = ~output_queue_empty;
 

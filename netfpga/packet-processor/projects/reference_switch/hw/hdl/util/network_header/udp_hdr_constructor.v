@@ -9,11 +9,11 @@
     localparam UDP_HDR_WIDTH = 8 * 8
  )
  (
-    input  [PORT_WIDTH - 1:0]    src_port,
-    input  [PORT_WIDTH - 1:0]    dest_port,
-    input  [LENGTH_WIDTH - 1:0]  udp_length,
+    input  wire [PORT_WIDTH - 1:0]    src_port,
+    input  wire [PORT_WIDTH - 1:0]    dest_port,
+    input  wire [LENGTH_WIDTH - 1:0]  udp_length,
 
-    output [UDP_HDR_WIDTH - 1:0] udp_hdr
+    output wire [UDP_HDR_WIDTH - 1:0] udp_hdr
  );
 
     assign udp_hdr[15:0]  = src_port;

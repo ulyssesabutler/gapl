@@ -1,8 +1,8 @@
 module byte_to_bit_mask
 #(parameter BYTE_MASK_WIDTH = 32)
 (
-    input [BYTE_MASK_WIDTH - 1:0] byte_mask,
-    output reg [(BYTE_MASK_WIDTH * 8) - 1:0] bit_mask
+    input  wire [BYTE_MASK_WIDTH - 1:0] byte_mask,
+    output reg  [(BYTE_MASK_WIDTH * 8) - 1:0] bit_mask
 );
 
     integer i;

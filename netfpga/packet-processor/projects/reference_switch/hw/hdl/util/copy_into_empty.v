@@ -7,17 +7,17 @@ module copy_into_empty
     localparam DEST_KEEP_WIDTH = DEST_DATA_WIDTH / 8
 )
 (
-    input  [SRC_DATA_WIDTH - 1:0]  src_data_in,
-    input  [SRC_KEEP_WIDTH - 1:0]  src_keep_in,
+    input  wire [SRC_DATA_WIDTH - 1:0]  src_data_in,
+    input  wire [SRC_KEEP_WIDTH - 1:0]  src_keep_in,
 
-    input  [DEST_DATA_WIDTH - 1:0]  dest_data_in,
-    input  [DEST_KEEP_WIDTH - 1:0]  dest_keep_in,
+    input  wire [DEST_DATA_WIDTH - 1:0] dest_data_in,
+    input  wire [DEST_KEEP_WIDTH - 1:0] dest_keep_in,
 
-    output [SRC_DATA_WIDTH - 1:0] src_data_out,
-    output [SRC_KEEP_WIDTH - 1:0] src_keep_out,
+    output wire [SRC_DATA_WIDTH - 1:0]  src_data_out,
+    output wire [SRC_KEEP_WIDTH - 1:0]  src_keep_out,
 
-    output [DEST_DATA_WIDTH - 1:0] dest_data_out,
-    output [DEST_KEEP_WIDTH - 1:0] dest_keep_out
+    output wire [DEST_DATA_WIDTH - 1:0] dest_data_out,
+    output wire [DEST_KEEP_WIDTH - 1:0] dest_keep_out
 );
 
     wire    [31:0] first_non_empty_in_dest_data_out;

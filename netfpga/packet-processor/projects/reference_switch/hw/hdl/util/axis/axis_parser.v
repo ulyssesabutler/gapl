@@ -25,22 +25,22 @@ module axis_parser
 )
 (
     // Global Ports
-    input                       axis_aclk,
-    input                       axis_resetn,
+    input  wire                      axis_aclk,
+    input  wire                      axis_resetn,
 
     // Module input
-    input [TDATA_WIDTH - 1:0]   axis_tdata,
-    input [TKEEP_WIDTH - 1:0]   axis_tkeep,
-    input [TUSER_WIDTH - 1:0]   axis_tuser,
-    input                       axis_tvalid,
-    input                       axis_tready, // Notice that this isn't an output since this module is probing, not receiving.
-    input                       axis_tlast,
+    input  wire [TDATA_WIDTH - 1:0]  axis_tdata,
+    input  wire [TKEEP_WIDTH - 1:0]  axis_tkeep,
+    input  wire [TUSER_WIDTH - 1:0]  axis_tuser,
+    input  wire                      axis_tvalid,
+    input  wire                      axis_tready, // Notice that this isn't an output since this module is probing, not receiving.
+    input  wire                      axis_tlast,
 
-    input                       reset, // Make reset explicit, so output registers aren't cleared too early
+    input  wire                      reset, // Make reset explicit, so output registers aren't cleared too early
 
     // Module output
-    output reg [OUT_SIZE - 1:0] parsed_value,
-    output reg                  parsed_value_ready
+    output reg [OUT_SIZE - 1:0]      parsed_value,
+    output reg                       parsed_value_ready
 );
 
 

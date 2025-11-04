@@ -10,13 +10,13 @@ module ip_hdr_constructor
     localparam ID_WIDTH         = 16
 )
 (
-    input [IP_ADDRESS_WIDTH - 1:0] src_ip_addr,
-    input [IP_ADDRESS_WIDTH - 1:0] dest_ip_addr,
+    input  wire [IP_ADDRESS_WIDTH - 1:0] src_ip_addr,
+    input  wire [IP_ADDRESS_WIDTH - 1:0] dest_ip_addr,
 
-    input [LENGTH_WIDTH - 1:0]     ip_length,
-    input [ID_WIDTH - 1:0]         id,
+    input  wire [LENGTH_WIDTH - 1:0]     ip_length,
+    input  wire [ID_WIDTH - 1:0]         id,
 
-    output [IP_HDR_WIDTH - 1:0]    ip_hdr
+    output wire [IP_HDR_WIDTH - 1:0]    ip_hdr
 );
 
     assign ip_hdr[7:0]     = 8'h45; // Version

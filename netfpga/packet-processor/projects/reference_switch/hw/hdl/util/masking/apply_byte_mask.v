@@ -5,11 +5,11 @@ module apply_byte_mask
     localparam TKEEP_WIDTH = TDATA_WIDTH / 8
 )
 (
-    input  [TDATA_WIDTH - 1:0] processed_data_in,
-    input  [TDATA_WIDTH - 1:0] unprocessed_data_in,
-    input  [TKEEP_WIDTH - 1:0] byte_mask,
+    input  wire [TDATA_WIDTH - 1:0] processed_data_in,
+    input  wire [TDATA_WIDTH - 1:0] unprocessed_data_in,
+    input  wire [TKEEP_WIDTH - 1:0] byte_mask,
 
-    output [TDATA_WIDTH - 1:0] data_out
+    output wire [TDATA_WIDTH - 1:0] data_out
 );
 
     wire [TDATA_WIDTH - 1:0] bit_mask;

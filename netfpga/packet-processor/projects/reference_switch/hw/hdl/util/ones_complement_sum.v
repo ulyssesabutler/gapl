@@ -4,8 +4,8 @@ module ones_complement_sum
     parameter OPERAND_COUNT = 16
 )
 (
-    input  [WIDTH * OPERAND_COUNT - 1:0] operands,
-    output [WIDTH - 1:0]                 sum
+    input  wire [WIDTH * OPERAND_COUNT - 1:0] operands,
+    output wire [WIDTH - 1:0]                 sum
 );
 
     localparam W = WIDTH;

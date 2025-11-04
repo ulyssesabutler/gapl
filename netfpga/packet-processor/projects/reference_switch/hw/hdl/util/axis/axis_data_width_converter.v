@@ -9,24 +9,24 @@ module axis_data_width_converter
 )
 (
     // Global Ports
-    input                          axis_aclk,
-    input                          axis_resetn,
+    input  wire                          axis_aclk,
+    input  wire                          axis_resetn,
 
     // Module input
-    input  [IN_TDATA_WIDTH - 1:0]  axis_original_tdata,
-    input  [IN_TKEEP_WIDTH - 1:0]  axis_original_tkeep,
-    input  [TUSER_WIDTH - 1:0]     axis_original_tuser,
-    input                          axis_original_tvalid,
-    output                         axis_original_tready,
-    input                          axis_original_tlast,
+    input  wire  [IN_TDATA_WIDTH - 1:0]  axis_original_tdata,
+    input  wire  [IN_TKEEP_WIDTH - 1:0]  axis_original_tkeep,
+    input  wire  [TUSER_WIDTH - 1:0]     axis_original_tuser,
+    input  wire                          axis_original_tvalid,
+    output wire                          axis_original_tready,
+    input  wire                          axis_original_tlast,
 
     // Module output
-    output [OUT_TDATA_WIDTH - 1:0] axis_resize_tdata,
-    output [OUT_TKEEP_WIDTH - 1:0] axis_resize_tkeep,
-    output [TUSER_WIDTH - 1:0]     axis_resize_tuser,
-    output                         axis_resize_tvalid,
-    input                          axis_resize_tready,
-    output                         axis_resize_tlast
+    output wire [OUT_TDATA_WIDTH - 1:0] axis_resize_tdata,
+    output wire [OUT_TKEEP_WIDTH - 1:0] axis_resize_tkeep,
+    output wire [TUSER_WIDTH - 1:0]     axis_resize_tuser,
+    output wire                         axis_resize_tvalid,
+    input  wire                         axis_resize_tready,
+    output wire                         axis_resize_tlast
 );
 
     fallthrough_variable_width_queue

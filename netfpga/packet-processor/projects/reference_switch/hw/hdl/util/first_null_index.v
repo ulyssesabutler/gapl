@@ -1,8 +1,8 @@
 module first_null_index
 #(parameter DATA_WIDTH = 32)
 (
-    input      [DATA_WIDTH - 1:0] data,
-    output reg [31:0]             index
+    input  wire [DATA_WIDTH - 1:0] data,
+    output reg  [31:0]             index
 );
 
     reg signed [31:0] i;

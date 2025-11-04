@@ -11,54 +11,54 @@
  */
 module packet_packer
 #(
-    parameter TDATA_WIDTH             = 256,
-    parameter TUSER_WIDTH             = 128,
+    parameter TDATA_WIDTH        = 256,
+    parameter TUSER_WIDTH        = 128,
 
-    localparam TKEEP_WIDTH            = TDATA_WIDTH / 8,
+    localparam TKEEP_WIDTH       = TDATA_WIDTH / 8,
 
-    localparam MAC_ADDRESS_WIDTH      = 48,
-    localparam IP_ADDRESS_WIDTH       = 32,
-    localparam PORT_WIDTH             = 16,
+    localparam MAC_ADDRESS_WIDTH = 48,
+    localparam IP_ADDRESS_WIDTH  = 32,
+    localparam PORT_WIDTH        = 16,
 
-    localparam IP_LENGTH_WIDTH        = 16,
-    localparam IP_ID_WIDTH            = 16,
-    localparam UDP_LENGTH_WIDTH       = 16,
+    localparam IP_LENGTH_WIDTH   = 16,
+    localparam IP_ID_WIDTH       = 16,
+    localparam UDP_LENGTH_WIDTH  = 16,
 
-    localparam ETH_HDR_WIDTH          = 14 * 8,
-    localparam IP_HDR_WIDTH           = 20 * 8,
-    localparam UDP_HDR_WIDTH          = 8 * 8
+    localparam ETH_HDR_WIDTH     = 14 * 8,
+    localparam IP_HDR_WIDTH      = 20 * 8,
+    localparam UDP_HDR_WIDTH     = 8 * 8
 ) (
     // Global Ports
-    input                                axis_aclk,
-    input                                axis_resetn,
+    input  wire                           axis_aclk,
+    input  wire                           axis_resetn,
 
     // Module input
-    input  [MAC_ADDRESS_WIDTH - 1:0]     src_mac_addr_in,
-    input  [MAC_ADDRESS_WIDTH - 1:0]     dest_mac_addr_in,
+    input  wire [MAC_ADDRESS_WIDTH - 1:0] src_mac_addr_in,
+    input  wire [MAC_ADDRESS_WIDTH - 1:0] dest_mac_addr_in,
 
-    input  [IP_ADDRESS_WIDTH - 1:0]      src_ip_addr_in,
-    input  [IP_ADDRESS_WIDTH - 1:0]      dest_ip_addr_in,
-    input  [IP_ID_WIDTH - 1:0]           ip_id_in,
-    input  [IP_LENGTH_WIDTH - 1:0]       ip_length_in,
+    input  wire [IP_ADDRESS_WIDTH - 1:0]  src_ip_addr_in,
+    input  wire [IP_ADDRESS_WIDTH - 1:0]  dest_ip_addr_in,
+    input  wire [IP_ID_WIDTH - 1:0]       ip_id_in,
+    input  wire [IP_LENGTH_WIDTH - 1:0]   ip_length_in,
 
-    input  [PORT_WIDTH - 1:0]            src_port_in,
-    input  [PORT_WIDTH - 1:0]            dest_port_in,
-    input  [UDP_LENGTH_WIDTH - 1:0]      udp_length_in,
+    input  wire [PORT_WIDTH - 1:0]        src_port_in,
+    input  wire [PORT_WIDTH - 1:0]        dest_port_in,
+    input  wire [UDP_LENGTH_WIDTH - 1:0]  udp_length_in,
 
-    input  [TDATA_WIDTH - 1:0]           packet_body_in_axis_tdata,
-    input  [TKEEP_WIDTH - 1:0]           packet_body_in_axis_tkeep,
-    input  [TUSER_WIDTH - 1:0]           packet_body_in_axis_tuser,
-    input                                packet_body_in_axis_tvalid,
-    output                               packet_body_in_axis_tready,
-    input                                packet_body_in_axis_tlast,
+    input  wire [TDATA_WIDTH - 1:0]       packet_body_in_axis_tdata,
+    input  wire [TKEEP_WIDTH - 1:0]       packet_body_in_axis_tkeep,
+    input  wire [TUSER_WIDTH - 1:0]       packet_body_in_axis_tuser,
+    input  wire                           packet_body_in_axis_tvalid,
+    output wire                           packet_body_in_axis_tready,
+    input  wire                           packet_body_in_axis_tlast,
 
     // Module output
-    output [TDATA_WIDTH - 1:0]           packet_out_axis_tdata,
-    output [TKEEP_WIDTH - 1:0]           packet_out_axis_tkeep,
-    output [TUSER_WIDTH - 1:0]           packet_out_axis_tuser,
-    output                               packet_out_axis_tvalid,
-    input                                packet_out_axis_tready,
-    output                               packet_out_axis_tlast
+    output wire [TDATA_WIDTH - 1:0]       packet_out_axis_tdata,
+    output wire [TKEEP_WIDTH - 1:0]       packet_out_axis_tkeep,
+    output wire [TUSER_WIDTH - 1:0]       packet_out_axis_tuser,
+    output wire                           packet_out_axis_tvalid,
+    input  wire                           packet_out_axis_tready,
+    output wire                           packet_out_axis_tlast
 );
 
     // 1. STATES

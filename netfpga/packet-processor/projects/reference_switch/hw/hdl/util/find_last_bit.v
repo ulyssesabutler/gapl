@@ -6,8 +6,8 @@ module find_last_bit
     localparam NEAREST_POW_2 = 2**$clog2(INPUT_SIZE)
 )
 (
-    input  [INPUT_SIZE - 1:0] in,
-    output [INDEX_BITS - 1:0] bit_count // Basically, one indexing
+    input  wire [INPUT_SIZE - 1:0] in,
+    output wire [INDEX_BITS - 1:0] bit_count // Basically, one indexing
 );
 
     wire [INPUT_SIZE - 1:0] last_one_bit_one_hot;
