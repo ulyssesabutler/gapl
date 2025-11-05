@@ -1,8 +1,6 @@
 module processor_controller
 #(
     parameter  TDATA_WIDTH = 256,
-    parameter  TUSER_WIDTH = 128,
-
     localparam TKEEP_WIDTH = TDATA_WIDTH / 8
 ) (
     input  wire                     clock,

@@ -12,13 +12,6 @@ module packet_processor
     parameter TDATA_WIDTH             = 256,
     parameter TUSER_WIDTH             = 128,
 
-    localparam MAC_ADDRESS_WIDTH      = 48,
-    localparam IP_ADDRESS_WIDTH       = 32,
-    localparam IP_LENGTH_WIDTH        = 16,
-    localparam IP_ID_WIDTH            = 16,
-    localparam PORT_WIDTH             = 16,
-    localparam UDP_LENGTH_WIDTH       = 16,
-
     localparam TKEEP_WIDTH            = TDATA_WIDTH / 8
 )
 (
@@ -45,14 +38,12 @@ module packet_processor
 
     reg  [TDATA_WIDTH - 1:0] gapl_in_tdata;
     reg  [TKEEP_WIDTH - 1:0] gapl_in_tkeep;
-    reg  [TUSER_WIDTH - 1:0] gapl_in_tuser;
     reg                      gapl_in_tvalid;
     wire                     gapl_in_tready;
     reg                      gapl_in_tlast;
 
     wire [TDATA_WIDTH - 1:0] gapl_out_tdata;
     wire [TKEEP_WIDTH - 1:0] gapl_out_tkeep;
-    wire [TUSER_WIDTH - 1:0] gapl_out_tuser;
     wire                     gapl_out_tvalid;
     reg                      gapl_out_tready;
     wire                     gapl_out_tlast;
@@ -69,14 +60,12 @@ module packet_processor
 
         .packet_body_in_axis_tdata(gapl_in_tdata),
         .packet_body_in_axis_tkeep(gapl_in_tkeep),
-        .packet_body_in_axis_tuser(gapl_in_tuser),
         .packet_body_in_axis_tvalid(gapl_in_tvalid),
         .packet_body_in_axis_tready(gapl_in_tready),
         .packet_body_in_axis_tlast(gapl_in_tlast),
 
         .packet_body_out_axis_tdata(gapl_out_tdata),
         .packet_body_out_axis_tkeep(gapl_out_tkeep),
-        .packet_body_out_axis_tuser(gapl_out_tuser),
         .packet_body_out_axis_tvalid(gapl_out_tvalid),
         .packet_body_out_axis_tready(gapl_out_tready),
         .packet_body_out_axis_tlast(gapl_out_tlast)
@@ -112,7 +101,6 @@ module packet_processor
     always @(*) begin
         gapl_in_tdata  = 0;
         gapl_in_tkeep  = 0;
-        gapl_in_tuser  = 0;
         gapl_in_tvalid = 0;
         gapl_in_tlast  = 0;
 
@@ -128,13 +116,12 @@ module packet_processor
         if (transmission_count >= 2) begin
             gapl_in_tdata  = packet_in_axis_tdata;
             gapl_in_tkeep  = packet_in_axis_tkeep;
-            gapl_in_tuser  = packet_in_axis_tuser;
             gapl_in_tvalid = packet_in_axis_tvalid;
             gapl_in_tlast  = packet_in_axis_tlast;
 
             packet_out_axis_tdata  = gapl_out_tdata;
             packet_out_axis_tkeep  = gapl_out_tkeep;
-            packet_out_axis_tuser  = gapl_out_tuser;
+            packet_out_axis_tuser  = 0;
             packet_out_axis_tvalid = gapl_out_tvalid;
             packet_out_axis_tlast  = gapl_out_tlast;
 

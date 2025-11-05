@@ -27,7 +27,7 @@ module axis_user_tracker
     input  wire [TDATA_WIDTH - 1:0] egress_in_tdata,
     input  wire [TKEEP_WIDTH - 1:0] egress_in_tkeep,
     input  wire                     egress_in_tvalid,
-    output reg                      egress_in_tready,
+    output wire                     egress_in_tready,
     input  wire                     egress_in_tlast,
 
     output wire [TDATA_WIDTH - 1:0] egress_out_tdata,
@@ -38,13 +38,43 @@ module axis_user_tracker
     output wire                     egress_out_tlast
 );
 
+    wire [TDATA_WIDTH - 1:0] output_queue_tdata;
+    wire [TKEEP_WIDTH - 1:0] output_queue_tkeep;
+    wire [TUSER_WIDTH - 1:0] output_queue_tuser;
+    wire                     output_queue_tvalid;
+    reg                      output_queue_tready;
+    wire                     output_queue_tlast;
+
+    axis_queue
+    #(
+        .TDATA_WIDTH(TDATA_WIDTH),
+        .TUSER_WIDTH(TUSER_WIDTH)
+    ) output_queue (
+        .axis_aclk(clock),
+        .axis_resetn(reset_n),
+
+        .in_tdata(egress_in_tdata),
+        .in_tkeep(egress_in_tkeep),
+        .in_tuser(egress_in_tuser),
+        .in_tvalid(egress_in_tvalid),
+        .in_tready(egress_in_tready),
+        .in_tlast(egress_in_tlast),
+
+        .out_tdata(output_queue_tdata),
+        .out_tkeep(output_queue_tkeep),
+        .out_tuser(output_queue_tuser),
+        .out_tvalid(output_queue_tvalid),
+        .out_tready(output_queue_tready),
+        .out_tlast(output_queue_tlast)
+    );
+
     assign ingress_out_tdata = ingress_in_tdata;
     assign ingress_out_tkeep = ingress_in_tkeep;
     assign ingress_out_tlast = ingress_in_tlast;
 
-    assign egress_out_tdata  = egress_in_tdata;
-    assign egress_out_tkeep  = egress_in_tkeep;
-    assign egress_out_tlast  = egress_in_tlast;
+    assign egress_out_tdata  = output_queue_tdata;
+    assign egress_out_tkeep  = output_queue_tkeep;
+    assign egress_out_tlast  = output_queue_tlast;
 
     // Ingress State
     localparam INGRESS_STATE_WAITING  = 0;
@@ -131,7 +161,7 @@ module axis_user_tracker
         ingress_out_tvalid = 0;
         ingress_in_tready  = 0;
 
-        egress_in_tready   = 0;
+        output_queue_tready   = 0;
         egress_out_tvalid  = 0;
 
         if ((ingress_state == INGRESS_STATE_WAITING) || (ingress_state == INGRESS_STATE_RUNNING)) begin
@@ -141,12 +171,12 @@ module axis_user_tracker
 
         if (egress_state == EGRESS_STATE_WAITING) begin
             if (buffer_written) begin
-                egress_in_tready  = egress_out_tready;
-                egress_out_tvalid = egress_in_tvalid;
+                output_queue_tready  = egress_out_tready;
+                egress_out_tvalid = output_queue_tvalid;
             end
         end else if (egress_state == EGRESS_STATE_RUNNING) begin
-            egress_in_tready  = egress_out_tready;
-            egress_out_tvalid = egress_in_tvalid;
+            output_queue_tready  = egress_out_tready;
+            egress_out_tvalid = output_queue_tvalid;
         end
     end
 
