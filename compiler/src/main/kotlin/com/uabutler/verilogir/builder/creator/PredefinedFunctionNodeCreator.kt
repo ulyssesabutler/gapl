@@ -174,11 +174,21 @@ object PredefinedFunctionNodeCreator {
                                     )
                                 ),
                             ),
-                            elseIfBranches = listOf(),
+                            elseIfBranches = listOf(
+                                IfBranch(
+                                    condition = Reference("enable"),
+                                    then = listOf(
+                                        NonBlockingAssignment(
+                                            variableName = Reference(it.register),
+                                            expression = Reference(it.input),
+                                        )
+                                    ),
+                                )
+                            ),
                             elseStatements = listOf(
                                 NonBlockingAssignment(
                                     variableName = Reference(it.register),
-                                    expression = Reference(it.input),
+                                    expression = Reference(it.register),
                                 )
                             ),
                         )

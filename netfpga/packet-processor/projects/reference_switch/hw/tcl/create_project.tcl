@@ -166,6 +166,7 @@ read_verilog "./hdl/util/axis/axis_transmission_combiner.v"
 read_verilog "./hdl/util/axis/axis_parser.v"
 read_verilog "./hdl/util/axis/axis_trim_front.v"
 read_verilog "./hdl/util/axis/axis_user_tracker.v"
+read_verilog "./hdl/util/axis/axis_mutual_exclusion.v"
 
 # util/network_header/
 read_verilog "./hdl/util/network_header/eth_hdr_constructor.v"

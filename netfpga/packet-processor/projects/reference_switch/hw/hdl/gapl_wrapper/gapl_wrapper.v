@@ -24,6 +24,7 @@ module gapl_wrapper
 
     // Module I/O
     wire                     gapl_enable;
+    wire                     gapl_reset;
 
     wire [TDATA_WIDTH - 1:0] gapl_in_tdata;
     wire [TKEEP_WIDTH - 1:0] gapl_in_tkeep;
@@ -46,6 +47,19 @@ module gapl_wrapper
     wire                     padder_out_tvalid;
     wire                     padder_out_tready;
     wire                     padder_out_tlast;
+
+    // MUX I/O
+    wire [TDATA_WIDTH - 1:0] mux_in_tdata;
+    wire [TKEEP_WIDTH - 1:0] mux_in_tkeep;
+    wire                     mux_in_tvalid;
+    wire                     mux_in_tready;
+    wire                     mux_in_tlast;
+
+    wire [TDATA_WIDTH - 1:0] mux_out_tdata;
+    wire [TKEEP_WIDTH - 1:0] mux_out_tkeep;
+    wire                     mux_out_tvalid;
+    wire                     mux_out_tready;
+    wire                     mux_out_tlast;
 
     axis_pad_output #( .TDATA_WIDTH(TDATA_WIDTH) ) padder
     (
@@ -77,16 +91,54 @@ module gapl_wrapper
         .egress_out_tlast(packet_body_out_axis_tlast)
     );
 
+    axis_mutual_exclusion #(
+        .TDATA_WIDTH(TDATA_WIDTH),
+        .TUSER_WIDTH(1)
+    ) mutual_exclusion (
+        .clock(axis_aclk),
+        .reset_n(axis_resetn),
+
+        .ingress_in_tdata(padder_in_tdata),
+        .ingress_in_tkeep(padder_in_tkeep),
+        .ingress_in_tuser(0),
+        .ingress_in_tvalid(padder_in_tvalid),
+        .ingress_in_tready(padder_in_tready),
+        .ingress_in_tlast(padder_in_tlast),
+
+        .ingress_out_tdata(mux_in_tdata),
+        .ingress_out_tkeep(mux_in_tkeep),
+        .ingress_out_tuser(),
+        .ingress_out_tvalid(mux_in_tvalid),
+        .ingress_out_tready(mux_in_tready),
+        .ingress_out_tlast(mux_in_tlast),
+
+        .module_reset(gapl_reset),
+
+        .egress_in_tdata(mux_out_tdata),
+        .egress_in_tkeep(mux_out_tkeep),
+        .egress_in_tuser(0),
+        .egress_in_tvalid(mux_out_tvalid),
+        .egress_in_tready(mux_out_tready),
+        .egress_in_tlast(mux_out_tlast),
+
+        .egress_out_tdata(padder_out_tdata),
+        .egress_out_tkeep(padder_out_tkeep),
+        .egress_out_tuser(),
+        .egress_out_tvalid(padder_out_tvalid),
+        .egress_out_tready(padder_out_tready),
+        .egress_out_tlast(padder_out_tlast)
+    );
+
     processor_controller #( .TDATA_WIDTH(TDATA_WIDTH) ) controller
     (
         .clock(axis_aclk),
         .reset(~axis_resetn),
 
-        .ingress_in_tdata(padder_in_tdata),
-        .ingress_in_tkeep(padder_in_tkeep),
-        .ingress_in_tvalid(padder_in_tvalid),
-        .ingress_in_tready(padder_in_tready),
-        .ingress_in_tlast(padder_in_tlast),
+        .ingress_in_tdata(mux_in_tdata),
+        .ingress_in_tkeep(mux_in_tkeep),
+        .ingress_in_tvalid(mux_in_tvalid),
+        .ingress_in_tready(mux_in_tready),
+        .ingress_in_tlast(mux_in_tlast),
 
         .ingress_out_tdata(gapl_in_tdata),
         .ingress_out_tkeep(gapl_in_tkeep),
@@ -99,17 +151,17 @@ module gapl_wrapper
         .egress_in_tvalid(gapl_out_tvalid),
         .egress_in_tlast(gapl_out_tlast),
 
-        .egress_out_tdata(padder_out_tdata),
-        .egress_out_tkeep(padder_out_tkeep),
-        .egress_out_tvalid(padder_out_tvalid),
-        .egress_out_tready(padder_out_tready),
-        .egress_out_tlast(padder_out_tlast)
+        .egress_out_tdata(mux_out_tdata),
+        .egress_out_tkeep(mux_out_tkeep),
+        .egress_out_tvalid(mux_out_tvalid),
+        .egress_out_tready(mux_out_tready),
+        .egress_out_tlast(mux_out_tlast)
     );
 
     packet_body_processor gapl_processor
     (
         .clock(axis_aclk),
-        .reset(!axis_resetn),
+        .reset((!axis_resetn) || gapl_reset),
         .enable(gapl_enable),
 
         .i$data(gapl_in_tdata),

@@ -58,16 +58,13 @@ module axis_pad_output
         previous_egress_transmissions_next  = previous_egress_transmissions;
 
         if (ingressing) begin
-            if (ingress_in_tlast) begin
-                previous_ingress_transmissions_next = 0;
-            end else begin
-                previous_ingress_transmissions_next = previous_ingress_transmissions + 1;
-            end
+            previous_ingress_transmissions_next = previous_ingress_transmissions + 1;
         end
 
         if (egressing) begin
             if (egress_out_tlast) begin
-                previous_egress_transmissions_next = 0;
+                previous_ingress_transmissions_next = 0;
+                previous_egress_transmissions_next  = 0;
             end else begin
                 previous_egress_transmissions_next = previous_egress_transmissions + 1;
             end

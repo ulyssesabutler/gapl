@@ -70,13 +70,15 @@ for i in range(4):
 
 num_broadcast = 20
 
+test_cases = ["NOT AN EMAIL"] * 5 + ["AN@EMAIL.ADDRESS"] * 5 + ["NOT AN EMAIL"] * 10
+
 pkts = []
-for i in range(num_broadcast):
+for test_case in test_cases:
     pkt = make_padded_UDP_pkt(src_MAC="aa:bb:cc:dd:ee:ff", dst_MAC=routerMAC[0],
                       EtherType=0x800, src_IP="192.168.0.1", dst_IP="192.168.1.1",
-                      src_port=1, dest_port=1, body=i.to_bytes(4, "big"))
+                      src_port=1, dest_port=1, body=test_case)
 
-    pkt.time = ((i*(1e-8)) + (2e-6))
+    pkt.time = ((1*(1e-8)) + (2e-6))
     pkts.append(pkt)
     if isHW():
         nftest_expect_phy('nf1', pkt)

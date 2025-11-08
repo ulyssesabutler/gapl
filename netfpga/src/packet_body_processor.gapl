@@ -185,13 +185,15 @@ function email_regex_fold(
     replication_factor: integer,
     operation: T, U => U,
 ) i: last(T[replication_factor]) => o: valid(U) {
-    declare state: register(U);
-    i.value, state
+    declare state_reg: register(U);
+    i.value, state_reg
         => combinational_vector_fold(T, U, replication_factor, operation)
-        => state
+        => state_reg
         => o.value;
 
-    i.last => o.valid;
+    i.last
+        => register(boolean)
+        => o.valid;
 }
 
 function email_regex() i: last(character[32]) => o: valid(boolean) {
