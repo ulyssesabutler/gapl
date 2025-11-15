@@ -7,12 +7,15 @@ enum class StandardLibraryFunctions(val identifier: String) {
     BOOLEAN_TO_INT("boolean_to_int"),
     INDEX_LIST("index_list"),
     REPLICATE("replicate"),
+    REPEAT("repeat"),
     UNPAIR("unpair"),
     VECTOR_MAP("vector_map"),
     VECTOR_ZIP("vector_zip"),
     COMBINATIONAL_VECTOR_FOLD("combinational_vector_fold"),
     REPLICATED_FOLD("replicated_fold"),
     VECTOR_ANY("vector_any"),
+    VECTOR_CHUNK("vector_chunk"),
+    VECTOR_FLATTEN("vector_flatten"),
     STREAM_ANY("stream_any"),
     ;
 }
@@ -73,6 +76,14 @@ function ${StandardLibraryFunctions.REPLICATE.identifier}(I: interface, factor: 
     i => o[0];
     if (factor > 1) {
         i => ${StandardLibraryFunctions.REPLICATE.identifier}(I, factor - 1) => o[1:factor - 1];
+    }
+}
+
+function ${StandardLibraryFunctions.REPEAT.identifier}(I: interface, factor: integer, operation: I => I) i: I => o: I {
+    if (factor > 1) {
+        i => operation => ${StandardLibraryFunctions.REPEAT.identifier}(I, factor - 1, operation) => o;
+    } else {
+        i => operation => o;
     }
 }
 
@@ -143,6 +154,22 @@ function ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(
 function ${StandardLibraryFunctions.VECTOR_ANY.identifier}(size: integer) i: boolean[size] => o: boolean {
     declare false_v: literal(1, 0);
     i, false_v[0] => ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_FOLD.identifier}(boolean, boolean, size, or()) => o;
+}
+
+function ${StandardLibraryFunctions.VECTOR_CHUNK.identifier}(I: interface, size: integer, count: integer) i: I[size * count] => o: I[size][count] {
+    i[0:size - 1] => o[0];
+
+    if (count > 1) {
+        i[size:size * count - 1] => ${StandardLibraryFunctions.VECTOR_CHUNK.identifier}(I, size, count - 1) => o[1:count - 1];
+    }
+}
+
+function ${StandardLibraryFunctions.VECTOR_FLATTEN.identifier}(I: interface, size: integer, count: integer) i: I[size][count] => o: I[size * count] {
+    i[0] => o[0:size - 1];
+    
+    if (count > 1) {
+        i[1:count - 1] => ${StandardLibraryFunctions.VECTOR_FLATTEN.identifier}(I, size, count - 1) => o[size:size * count - 1];
+    }
 }
 
 function ${StandardLibraryFunctions.STREAM_ANY.identifier}() i: boolean() => o: boolean() {
