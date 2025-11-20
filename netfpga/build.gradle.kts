@@ -73,6 +73,9 @@ val gaplSourcesProp = (findProperty("gaplSources") as String?)
                 "-PgaplSources=my_top.gapl,subdir/alu.gapl"
     )
 
+val delayModelPath = findProperty("delayModel") as String?
+val delayModelFile = delayModelPath?.let { File(gaplSrcRoot, it) }
+
 val gaplTargetRelPaths: List<String> = gaplSourcesProp
     .split(',')
     .map { it.trim() }
@@ -164,10 +167,23 @@ tasks.register("generateGaplVerilog") {
             val verilogFile = outDir.resolve(targetVerilogName(gapl))
             println("Compiling ${gapl.relativeTo(gaplSrcRoot)} -> ${verilogFile.name}")
 
+            val compilerCommand = buildList {
+                add(compiler.absolutePath)
+                add("-i")
+                add(gapl.absolutePath)
+                add("-o")
+                add(verilogFile.absolutePath)
+
+                if (delayModelFile != null) {
+                    add("-retime")
+                    add(delayModelFile.absolutePath)
+                }
+            }
+
             val err = java.io.ByteArrayOutputStream()
             val result = project.exec {
                 isIgnoreExitValue = true
-                commandLine(compiler.absolutePath, "-i", gapl.absolutePath, "-o", verilogFile.absolutePath)
+                commandLine(compilerCommand)
                 errorOutput = err
                 standardOutput = System.out
             }
