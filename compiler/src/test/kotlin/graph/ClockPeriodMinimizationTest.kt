@@ -1,7 +1,9 @@
 package graph
 
+import com.uabutler.util.Logger
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -12,6 +14,11 @@ class ClockPeriodMinimizationTest {
      *   - We still need tests to ensure uneven weights are handled correctly
      *   - A test with uneven branches is probably not necessary, but wouldn't hurt
      */
+
+    @BeforeEach
+    fun `setup logger`() {
+        Logger.setLevel(Logger.Level.WARN)
+    }
 
     @Test
     fun `retime chain`() {

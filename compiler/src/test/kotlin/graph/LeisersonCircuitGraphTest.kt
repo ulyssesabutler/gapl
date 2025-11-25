@@ -1,12 +1,19 @@
 package graph
 
+import com.uabutler.util.Logger
 import graph.TestUtil.createGraph
 import graph.TestUtil.getSublistSums
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 
 class LeisersonCircuitGraphTest {
+
+    @BeforeEach
+    fun `setup logger`() {
+        Logger.setLevel(Logger.Level.WARN)
+    }
 
     @Test
     fun `create graph with cycle`() {

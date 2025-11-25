@@ -1,8 +1,10 @@
 package com.uabutler
 
+import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
 import java.io.File
+import kotlin.math.exp
 import kotlin.system.exitProcess
 
 fun parseArgs(args: Array<String>): Map<String, List<String>> {
@@ -53,6 +55,9 @@ fun printHelp() {
     println("  Standard Library")
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
+    println("  Logging Level")
+    println("    Usage:       -v [DEBUG|INFO|WARN|ERROR]")
+    println("    Description: The logging level. Defaults to INFO.")
 }
 
 object BuildInfo {
@@ -65,6 +70,28 @@ fun printVersion() {
 
 fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
+
+    if (parsedArgs.containsKey("-v")) {
+        val level = parsedArgs["-v"]?.first()
+
+        if (level == null) {
+            println("Error: Logging level not specified")
+            exitProcess(1)
+        }
+
+        when (level.uppercase()) {
+            "DEBUG" -> Logger.setLevel(Logger.Level.DEBUG)
+            "INFO" -> Logger.setLevel(Logger.Level.INFO)
+            "WARN" -> Logger.setLevel(Logger.Level.WARN)
+            "ERROR" -> Logger.setLevel(Logger.Level.ERROR)
+            else -> {
+                println("Error: Invalid logging level: $level")
+                exitProcess(1)
+            }
+        }
+    } else {
+        Logger.setLevel(Logger.Level.INFO)
+    }
 
     if (parsedArgs.containsKey("-h")) {
         printHelp()
