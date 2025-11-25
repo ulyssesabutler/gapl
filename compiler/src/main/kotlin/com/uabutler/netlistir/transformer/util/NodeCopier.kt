@@ -13,6 +13,7 @@ import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.Wire
+import com.uabutler.util.Logger
 
 object NodeCopier {
 
@@ -128,7 +129,29 @@ object NodeCopier {
 
     fun copyBodyNode(bodyNode: BodyNode, invocationIdentifier: String, newParent: Module): CreatedNode<BodyNode> {
         return when (bodyNode) {
-            is ModuleInvocationNode -> throw Exception("This is a bug in the compiler. Module invocation nodes should have been inlined")
+            is ModuleInvocationNode -> {
+                // This shouldn't be a bug with breadth-first
+                // throw Exception("This is a bug in the compiler. Module invocation nodes should have been inlined")
+                val node = ModuleInvocationNode(
+                    identifier = copiedIdentifier(invocationIdentifier, bodyNode.name()),
+                    parentModule = newParent,
+                    inputWireVectorGroupsBuilder = { parentNode ->
+                        bodyNode.inputWireVectorGroups.map {
+                            InputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                        }
+                    },
+                    outputWireVectorGroupsBuilder = { parentNode ->
+                        bodyNode.outputWireVectorGroups.map {
+                            OutputWireVectorGroup(it.identifier, parentNode, it.gaplStructure)
+                        }
+                    },
+                    invocation = bodyNode.invocation,
+                ).also { newParent.addBodyNode(it) }
+
+                val wirePairs = createWirePairs(node, bodyNode)
+
+                CreatedNode(node, wirePairs)
+            }
             is PassThroughNode -> {
                 val node = PassThroughNode(
                     identifier = copiedIdentifier(invocationIdentifier, bodyNode.name()),

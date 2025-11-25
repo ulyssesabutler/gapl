@@ -1,5 +1,7 @@
 package com.uabutler.util.graph
 
+import com.uabutler.util.Logger
+
 open class LeisersonCircuitGraph<G, N, E>(
     val value: G,
     nodes: Collection<Node<N>>,
@@ -32,8 +34,8 @@ open class LeisersonCircuitGraph<G, N, E>(
 
     fun computeClockPeriod() = computeCombinationalDelays().values.max()
 
-    fun computePossibleClockPeriods(): Collection<Int> {
-        return nodes.asSequence()
+    fun computePossibleClockPeriods() = Logger.run("Computing possible clock periods") {
+        nodes.asSequence()
             .map { node ->
                 shortestPathsFromNode(
                     root = node,
@@ -46,6 +48,7 @@ open class LeisersonCircuitGraph<G, N, E>(
             .flatMap { it.asSequence() }
             .map { (node, distance) -> node.weight - distance.second }
             .toSet()
+            .also { Logger.debug { "Found ${it.size} possible clock periods" } }
     }
 
     fun retimed() = Retiming.minimizeClockPeriod(this)

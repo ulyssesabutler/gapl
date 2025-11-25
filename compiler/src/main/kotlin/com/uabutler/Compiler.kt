@@ -10,6 +10,7 @@ import com.uabutler.netlistir.transformer.Retimer
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
 import com.uabutler.util.PropagationDelay
 import com.uabutler.resolver.Resolver
+import com.uabutler.util.Logger
 import com.uabutler.util.standardLibary
 import com.uabutler.verilogir.builder.VerilogBuilder
 
@@ -23,21 +24,41 @@ object Compiler {
     )
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
-        val transformers = buildList {
-            if (options.flatten) add(Flattener)
+        val transformers = Logger.run("Building Transformer List") {
+            buildList {
+                if (options.flatten) {
+                    Logger.debug { "Flattener" }
+                    add(Flattener)
+                }
 
-            if (options.includeStdLib) add(StandardLibraryFilter)
+                if (options.includeStdLib) {
+                    Logger.debug { "Standard Library Filter" }
+                    add(StandardLibraryFilter)
+                }
 
-            if (options.literalSimplification) add(LiteralSimplifier)
+                if (options.literalSimplification) {
+                    Logger.debug { "Literal Simplifier" }
+                    add(LiteralSimplifier)
+                }
 
-            add(PassThroughRemover)
+                Logger.debug { "PassThrough Remover" }
+                add(PassThroughRemover)
 
-            if (options.retime != null) add(Retimer(options.retime))
+                if (options.retime != null) {
+                    Logger.debug { "Retimer" }
+                    add(Retimer(options.retime))
+                }
 
-            add(Renamer)
+                Logger.debug { "Renamer" }
+                add(Renamer)
+            }
         }
 
-        return transformers.fold(inputNetlist) { intermediate, transformer -> transformer.transform(intermediate) }
+        return Logger.run("Running Transformers") {
+            transformers.fold(inputNetlist) { intermediate, transformer ->
+                Logger.run("Running ${transformer::class.simpleName}", Logger.Level.INFO) { transformer.transform(intermediate) }
+            }
+        }
     }
 
     fun preprocessor(gapl: String, options: Options) = buildString {
@@ -47,15 +68,15 @@ object Compiler {
 
     fun compile(gapl: String, options: Options): String {
         val initialNetlistModules = gapl
-            .let { preprocessor(it, options) }
-            .let { Parser.fromString(it).program() }
-            .let { Resolver.cstToAst(it) }
-            .let { ModuleBuilder(it).buildAllModules() }
+            .let { Logger.run("Preprocessing", Logger.Level.INFO) { preprocessor(it, options) } }
+            .let { Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(it).program() } }
+            .let { Logger.run("Resolver", Logger.Level.INFO) { Resolver.cstToAst(it) } }
+            .let { Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(it).buildAllModules() } }
 
-        val transformedModules = runNetlistTransformers(initialNetlistModules, options)
+        val transformedModules = Logger.run("Transformers", Logger.Level.INFO) { runNetlistTransformers(initialNetlistModules, options) }
 
-        val verilogIrModules = transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) }
-        return verilogIrModules.joinToString("\n") { it.verilogSerialize() }
+        val verilogIrModules = Logger.run("Verilog IR Builder", Logger.Level.INFO) { transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) } }
+        return Logger.run("Verilog Serializer", Logger.Level.INFO) { verilogIrModules.joinToString("\n") { it.verilogSerialize() } }
     }
 
 }

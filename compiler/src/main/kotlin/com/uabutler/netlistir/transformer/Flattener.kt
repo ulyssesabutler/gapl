@@ -17,6 +17,8 @@ import com.uabutler.netlistir.transformer.util.NodeCopier
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNodeToPassThroughNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNodeToPassThroughNode
+import com.uabutler.util.Logger
+import com.uabutler.util.Timer
 
 object Flattener: Transformer {
     private class Helper(val original: List<Module>) {
@@ -24,6 +26,7 @@ object Flattener: Transformer {
         val flattenedModules = mutableMapOf<Module.Invocation, Module>()
 
         fun rootModules(): List<Module> {
+            Logger.start("Finding Root Modules")
             val couldBeRoot = original.associate { it.invocation to true }.toMutableMap()
 
             val invocations = original.flatMap { it.getBodyNodes() }
@@ -33,17 +36,22 @@ object Flattener: Transformer {
 
             invocations.forEach { couldBeRoot[it] = false }
 
-            return couldBeRoot.filterValues { it }.keys.map { modules[it]!! }
+            return couldBeRoot.filterValues { it }.keys
+                .onEach { Logger.debug { "Found root module: ${it.gaplFunctionName}" } }
+                .map { modules[it]!! }
+                .also { Logger.finish() }
         }
 
-        fun inlineModuleInvocation(node: ModuleInvocationNode) {
+        fun depthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
             val currentModule = node.parentModule
-            val inliningModule = flattenModule(modules[node.invocation]!!)
+            val inliningModule = depthFirstFlattenModule(modules[node.invocation]!!)
+            // Logger.debug { "Inlining ${node.invocation} into ${currentModule.invocation}" }
 
             var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
 
             // STEP 1a: Create the IO Nodes. We create a PassThrough node for each IO Node in the inlining module
+            Timer.start("Step 1a")
             val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
                 val createdNode = copyInputNodeToPassThroughNode(inputNode, invocationIdentifier, currentModule)
                 wirePairs += createdNode.wirePairs
@@ -55,9 +63,11 @@ object Flattener: Transformer {
                 wirePairs += createdNode.wirePairs
                 outputNode.name() to createdNode.node
             }
+            Timer.stop("Step 1a")
 
             // STEP 1b: Disconnect the ModuleInvocationNode and connect the new PassThroughNodes for each IO Node
             //  Note: These will have no equivalent in the "wire pairs" list
+            Timer.start("Step 1b")
             val inputGroupLookup = node.inputWireVectorGroups.associateBy { it.identifier }
             inputNodes.keys.forEach { variableName ->
                 val currentGroup = inputGroupLookup[variableName]!!
@@ -84,8 +94,10 @@ object Flattener: Transformer {
                     }
                 }
             }
+            Timer.stop("Step 1b")
 
             // Step 2a: Create an identical body node in the current module for each node in the inlining module
+            Timer.start("Step 2a")
             val bodyNodes = inliningModule.getBodyNodes().map {
                 val createdNode = copyBodyNode(it, invocationIdentifier, currentModule)
                 wirePairs += createdNode.wirePairs
@@ -94,8 +106,10 @@ object Flattener: Transformer {
 
             val inliningInput = wirePairs.input.associate { it.current to it.inlining }
             val currentOutput = wirePairs.output.associate { it.inlining to it.current }
+            Timer.stop("Step 2a")
 
             // Step 2b: Connect each new node in the new module based on the connections in the inlining module
+            Timer.start("Step 2b")
             (bodyNodes + outputNodes.values).forEach { node ->
                 node.inputWires().forEach { inputWire ->
                     val correspondingOfCurrentInput = inliningInput[inputWire]!!
@@ -104,24 +118,132 @@ object Flattener: Transformer {
                     currentModule.connect(inputWire, correspondingOfSource)
                 }
             }
+            Timer.stop("Step 2b")
 
             currentModule.removeNode(node)
         }
 
-        fun flattenModule(module: Module): Module {
+        fun depthFirstFlattenModule(module: Module): Module {
             if (module.invocation in flattenedModules) return module
 
             module.getBodyNodes()
                 .filterIsInstance<ModuleInvocationNode>()
-                .forEach { inlineModuleInvocation(it) }
+                .forEach { depthFirstInlineModuleInvocation(it) }
 
             flattenedModules[module.invocation] = module
 
             return module
         }
 
+        fun breadthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
+            val invocationIdentifier = node.name()
+            val currentModule = node.parentModule
+            val inliningModule = modules[node.invocation]!!
+
+            var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
+
+            // STEP 1a: Create the IO Nodes. We create a PassThrough node for each IO Node in the inlining module
+            Timer.start("Step 1a")
+            val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
+                val createdNode = copyInputNodeToPassThroughNode(inputNode, invocationIdentifier, currentModule)
+                wirePairs += createdNode.wirePairs
+                inputNode.name() to createdNode.node
+            }
+
+            val outputNodes = inliningModule.getOutputNodes().associate { outputNode ->
+                val createdNode = copyOutputNodeToPassThroughNode(outputNode, invocationIdentifier, currentModule)
+                wirePairs += createdNode.wirePairs
+                outputNode.name() to createdNode.node
+            }
+            Timer.stop("Step 1a")
+
+            // STEP 1b: Disconnect the ModuleInvocationNode and connect the new PassThroughNodes for each IO Node
+            //  Note: These will have no equivalent in the "wire pairs" list
+            Timer.start("Step 1b")
+            val inputGroupLookup = node.inputWireVectorGroups.associateBy { it.identifier }
+            inputNodes.keys.forEach { variableName ->
+                val currentGroup = inputGroupLookup[variableName]!!
+                val newNodeGroup = inputNodes[variableName]!!.inputWireVectorGroups.first()
+
+                currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
+                    val currentWireSource = currentModule.getConnectionForInputWire(currentWire).source
+                    currentModule.disconnect(currentWire)
+                    currentModule.connect(newWire, currentWireSource)
+                }
+            }
+
+            val outputGroupLookup = node.outputWireVectorGroups.associateBy { it.identifier }
+            outputNodes.keys.forEach { variableName ->
+                val currentGroup = outputGroupLookup[variableName]!!
+                val newNodeGroup = outputNodes[variableName]!!.outputWireVectorGroups.first()
+
+                currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
+                    val currentWireConnections = currentModule.getConnectionsForOutputWire(currentWire)
+
+                    currentWireConnections.forEach { connection ->
+                        currentModule.disconnect(connection.sink)
+                        currentModule.connect(connection.sink, newWire)
+                    }
+                }
+            }
+            Timer.stop("Step 1b")
+
+            // Step 2a: Create an identical body node in the current module for each node in the inlining module
+            Timer.start("Step 2a")
+            val bodyNodes = inliningModule.getBodyNodes().map {
+                val createdNode = copyBodyNode(it, invocationIdentifier, currentModule)
+                wirePairs += createdNode.wirePairs
+                createdNode.node
+            }
+
+            val inliningInput = wirePairs.input.associate { it.current to it.inlining }
+            val currentOutput = wirePairs.output.associate { it.inlining to it.current }
+            Timer.stop("Step 2a")
+
+            // Step 2b: Connect each new node in the new module based on the connections in the inlining module
+            Timer.start("Step 2b")
+            (bodyNodes + outputNodes.values).forEach { node ->
+                node.inputWires().forEach { inputWire ->
+                    val correspondingOfCurrentInput = inliningInput[inputWire]!!
+                    val sourceOfCorresponding = inliningModule.getConnectionForInputWire(correspondingOfCurrentInput).source
+                    val correspondingOfSource = currentOutput[sourceOfCorresponding]!!
+                    currentModule.connect(inputWire, correspondingOfSource)
+                }
+            }
+            Timer.stop("Step 2b")
+
+            currentModule.removeNode(node)
+        }
+
+        fun breadthFirstFlattenModule(module: Module): Module {
+            var nodesToInline = module.getBodyNodes().filterIsInstance<ModuleInvocationNode>()
+            var iterations = 1
+
+            while (nodesToInline.isNotEmpty()) {
+                nodesToInline.forEach { breadthFirstInlineModuleInvocation(it) }
+                nodesToInline = module.getBodyNodes().filterIsInstance<ModuleInvocationNode>()
+                iterations++
+            }
+
+            Logger.debug { "Flattened module ${module.invocation.gaplFunctionName} in $iterations iterations" }
+
+            return module
+        }
+
         fun flatten(): List<Module> {
-            return rootModules().onEach { flattenModule(it) }
+            Timer.create("Step 1a")
+            Timer.create("Step 1b")
+            Timer.create("Step 2a")
+            Timer.create("Step 2b")
+
+            return rootModules().onEach { breadthFirstFlattenModule(it) }.also {
+                Logger.run("Flattening component times") {
+                    Logger.debug { "Step 1a: ${Timer.getTimes("Step 1a")}" }
+                    Logger.debug { "Step 1b: ${Timer.getTimes("Step 1b")}" }
+                    Logger.debug { "Step 2a: ${Timer.getTimes("Step 2a")}" }
+                    Logger.debug { "Step 2b: ${Timer.getTimes("Step 2b")}" }
+                }
+            }
         }
     }
 

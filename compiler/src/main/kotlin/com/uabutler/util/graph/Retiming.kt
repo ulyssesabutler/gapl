@@ -10,32 +10,34 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
             Logger.start("Retiming for clock period $clockPeriod")
             val retiming = Retiming(graph)
 
+            Logger.debug { "Running ${graph.nodes.size - 1} iterations" }
             repeat(graph.nodes.size - 1) {
-                Logger.debug("Iteration $it")
                 retiming.generateNewCircuit().computeCombinationalDelays().forEach { (node, delay) ->
                     if (delay > clockPeriod) retiming.increaseNodeLag(node)
                 }
             }
 
             val clockPeriodOfRetimedGraph = retiming.generateNewCircuit().computeClockPeriod()
-            Logger.debug("Clock period of retimed graph: $clockPeriodOfRetimedGraph")
+            Logger.debug { "Clock period of retimed graph: $clockPeriodOfRetimedGraph" }
 
-            return (if (clockPeriodOfRetimedGraph <= clockPeriod) retiming else null).also { Logger.finish() }
+            return (if (clockPeriodOfRetimedGraph <= clockPeriod) retiming else null).also {
+                Logger.debug { "Retiming ${if (it == null) "was not" else "was"} successful" }
+                Logger.finish()
+            }
         }
 
         fun <G, N, E> minimizeClockPeriod(graph: LeisersonCircuitGraph<G, N, E>): LeisersonCircuitGraph<G,N, E> {
             Logger.start("Retiming")
-            Logger.debug("Initial register count: ${graph.edges.sumOf { it.weight }}")
-            Logger.debug("Initial clock period: ${graph.computeClockPeriod()}")
+            Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
+            Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
 
-            Logger.start("Initial edge weights")
-            graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
-                Logger.debug("${edges.size} edges with weight $weight")
+            Logger.run("Initial Edge Weights") {
+                graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                    Logger.debug { "${edges.size} edges with weight $weight" }
+                }
             }
-            Logger.finish()
 
             val possibleClockPeriods = graph.computePossibleClockPeriods()
-            Logger.debug("Possible clock periods: $possibleClockPeriods")
 
             val cache = mutableMapOf<Int, Retiming<G, N, E>?>()
             fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) { retimeForClockPeriod(graph, clockPeriod) }
@@ -49,14 +51,14 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
                 .minBy { it.key }
                 .value!!.generateNewCircuit()
                 .also {
-                    Logger.debug("Final register count: ${it.edges.sumOf { it.weight }}")
-                    Logger.debug("Final clock period: ${it.computeClockPeriod()}")
+                    Logger.debug { "Final register count: ${it.edges.sumOf { it.weight }}" }
+                    Logger.debug { "Final clock period: ${it.computeClockPeriod()}" }
 
-                    Logger.start("Final edge weights")
-                    it.edges.groupBy { it.weight }.forEach { (weight, edges) ->
-                        Logger.debug("${edges.size} edges with weight $weight")
+                    Logger.run("Final edge weights") {
+                        it.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                            Logger.debug { "${edges.size} edges with weight $weight" }
+                        }
                     }
-                    Logger.finish()
 
                     Logger.finish()
                 }

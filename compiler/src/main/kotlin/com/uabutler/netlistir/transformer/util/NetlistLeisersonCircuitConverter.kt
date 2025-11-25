@@ -146,9 +146,9 @@ object NetlistLeisersonCircuitConverter {
             emptyList()
         }
 
-        Logger.debug("Node Count: ${nodes.size}")
-        Logger.debug("Edge Count: ${edges.size}")
-        Logger.debug("Loop Edge Count: ${loopEdges.size}")
+        Logger.debug { "Node Count: ${nodes.size}" }
+        Logger.debug { "Edge Count: ${edges.size}" }
+        Logger.debug { "Loop Edge Count: ${loopEdges.size}" }
 
         return LeisersonCircuitGraph(
             value = module,

@@ -10,7 +10,7 @@ object Renamer: Transformer {
         var counter = 0
         fun genNodeName() = "node${counter++}"
 
-        Logger.debug("Renaming ${original.getBodyNodes().size} nodes")
+        Logger.debug { "Renaming ${original.getBodyNodes().size} nodes" }
         original.getBodyNodes().forEach { it.rename(genNodeName()) }
 
         return original.also { Logger.finish() }
