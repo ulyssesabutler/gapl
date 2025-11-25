@@ -223,6 +223,9 @@ function aes_encrypt() i: wire[128], key: wire[128] => o: wire[128]
         => aes_encrypt_block()
         // Add register to force retiming
         => register(aes_block)
+        => register(aes_block)
+        => register(aes_block)
+        => register(aes_block)
         => o_block;
 }
 

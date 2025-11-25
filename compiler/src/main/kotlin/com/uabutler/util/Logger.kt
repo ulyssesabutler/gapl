@@ -43,7 +43,8 @@ object Logger {
     }
 
     fun finish() {
-        debug("FINISHED ${stack.removeLast().name} in ${System.currentTimeMillis() - stack.last().startTime}ms")
+        val current = stack.removeLast()
+        debug("FINISHED ${current.name} in ${System.currentTimeMillis() - current.startTime}ms")
     }
 
 }

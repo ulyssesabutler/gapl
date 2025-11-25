@@ -2,9 +2,11 @@ package com.uabutler.netlistir.transformer.util
 
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
+import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.Node
+import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
@@ -13,6 +15,7 @@ import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
+import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 import kotlin.sequences.forEach
@@ -95,7 +98,8 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
-    fun fromModule(module: Module, delay: PropagationDelay): LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>> {
+    fun fromModule(module: Module, delay: PropagationDelay, maintainTiming: Boolean): LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>> {
+        Logger.start("Converting from module to Leiserson circuit graph")
         val nodes = module.getNodes()
             .filter { !isRegisterNode(it) }
             .associateWith { moduleNode ->
@@ -124,11 +128,33 @@ object NetlistLeisersonCircuitConverter {
                 )
             }
 
+        val loopEdges = if (maintainTiming) {
+            val inputNodes = nodes.values.filter { it.value is InputNode }
+            val outputNodes = nodes.values.filter { it.value is OutputNode }
+
+            val cartesianProduct = inputNodes.associateWith { outputNodes }.flatMap { (inputNode, outputNodes) -> outputNodes.map { outputNode -> inputNode to outputNode } }
+
+            cartesianProduct.map {
+                WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>(
+                    source = it.second,
+                    sink = it.first,
+                    weight = 0,
+                    value = emptyList(),
+                )
+            }
+        } else {
+            emptyList()
+        }
+
+        Logger.debug("Node Count: ${nodes.size}")
+        Logger.debug("Edge Count: ${edges.size}")
+        Logger.debug("Loop Edge Count: ${loopEdges.size}")
+
         return LeisersonCircuitGraph(
             value = module,
             nodes = nodes.values,
-            edges = edges,
-        )
+            edges = edges + loopEdges,
+        ).also { Logger.finish() }
     }
 
     private fun addWeightedConnection(module: Module, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {

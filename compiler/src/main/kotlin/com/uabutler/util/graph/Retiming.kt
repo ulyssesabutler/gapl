@@ -26,6 +26,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
         fun <G, N, E> minimizeClockPeriod(graph: LeisersonCircuitGraph<G, N, E>): LeisersonCircuitGraph<G,N, E> {
             Logger.start("Retiming")
             Logger.debug("Initial register count: ${graph.edges.sumOf { it.weight }}")
+            Logger.debug("Initial clock period: ${graph.computeClockPeriod()}")
 
             Logger.start("Initial edge weights")
             graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
@@ -49,6 +50,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
                 .value!!.generateNewCircuit()
                 .also {
                     Logger.debug("Final register count: ${it.edges.sumOf { it.weight }}")
+                    Logger.debug("Final clock period: ${it.computeClockPeriod()}")
 
                     Logger.start("Final edge weights")
                     it.edges.groupBy { it.weight }.forEach { (weight, edges) ->

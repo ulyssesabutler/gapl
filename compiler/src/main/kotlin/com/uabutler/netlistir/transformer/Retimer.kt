@@ -23,7 +23,7 @@ class Retimer(val delay: PropagationDelay): Transformer {
         val modulesToSkip = moduleRetimability[false] ?: emptyList()
 
         val retimedModules = modulesToRetime
-            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay) }
+            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, true) }
             .map { it.retimed() }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
 
