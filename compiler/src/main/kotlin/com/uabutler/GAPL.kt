@@ -81,8 +81,8 @@ fun main(args : Array<String>) {
 
         when (level.uppercase()) {
             "DEBUG" -> Logger.setLevel(Logger.Level.DEBUG)
-            "INFO" -> Logger.setLevel(Logger.Level.INFO)
-            "WARN" -> Logger.setLevel(Logger.Level.WARN)
+            "INFO"  -> Logger.setLevel(Logger.Level.INFO)
+            "WARN"  -> Logger.setLevel(Logger.Level.WARN)
             "ERROR" -> Logger.setLevel(Logger.Level.ERROR)
             else -> {
                 println("Error: Invalid logging level: $level")
