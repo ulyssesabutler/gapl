@@ -1,5 +1,6 @@
 #include "Vtest.h"
 #include <verilated.h>
+#include <verilated_vcd_c.h>
 
 #include <algorithm>
 #include <cctype>
@@ -15,6 +16,8 @@
 
 using Wide128 = std::array<uint32_t, 4>;
 
+static VerilatedVcdC* waveform = nullptr;
+
 // Simple simulation time for Verilator
 static vluint64_t sim_time = 0;
 double sc_time_stamp() { return sim_time; }
@@ -23,10 +26,12 @@ double sc_time_stamp() { return sim_time; }
 static void tick(Vtest* top) {
     top->clock = 0;
     top->eval();
+    if (waveform) waveform->dump(sim_time);
     ++sim_time;
 
     top->clock = 1;
     top->eval();
+    if (waveform) waveform->dump(sim_time);
     ++sim_time;
 }
 
@@ -140,7 +145,7 @@ std::vector<OutputInterface> simulate(
     for (const auto& in : inputs) {
         drive_inputs(top, in);
 
-        top->eval();
+        tick(top);
 
         outputs.push_back(capture_output(top));
     }
@@ -176,13 +181,38 @@ bool checkSimulationSuccess(
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
 
+    std::string waveformPath;
+    if (argc > 1) waveformPath = argv[1];
+
     Vtest* top = new Vtest();
 
+    if (!waveformPath.empty()) {
+        Verilated::traceEverOn(true);
+        waveform = new VerilatedVcdC;
+        top->trace(waveform, 99);      // trace depth
+        waveform->open(waveformPath.c_str());
+    }
+
     std::vector<TestVector> testVectors = {
+        {
+            "000102030405060708090a0b0c0d0e0f",
+            "000102030405060708090a0b0c0d0e0f",
+            "0a940bb5416ef045f1c39458c653ea5a"
+        },
+        {
+            "00112233445566778899aabbccddeeff",
+            "00112233445566778899aabbccddeeff",
+            "62f679be2bf0d931641e039ca3401bb2"
+        },
         {
             "00112233445566778899aabbccddeeff",
             "000102030405060708090a0b0c0d0e0f",
             "69c4e0d86a7b0430d8cdb78070b4c55a"
+        },
+        {
+            "000102030405060708090a0b0c0d0e0f",
+            "00112233445566778899aabbccddeeff",
+            "279fb74a7572135e8f9b8ef6d1eee003"
         },
         {
             "00000000000000000000000000000000",
@@ -199,6 +229,13 @@ int main(int argc, char** argv) {
     std::vector<OutputInterface> outputs = simulate(top, inputs);
 
     top->final();
+
+    if (waveform) {
+        waveform->close();
+        delete waveform;
+        waveform = nullptr;
+    }
+
     delete top;
 
     bool testPass = checkSimulationSuccess(expectedOutputs, outputs);

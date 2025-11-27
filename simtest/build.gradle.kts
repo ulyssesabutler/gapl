@@ -12,6 +12,7 @@ plugins {
 data class TestProperties(
     var flatten: Boolean = true,
     var literalSimplication: Boolean = true,
+    var waveform: Boolean = false,
     var topModule: String? = null,
     var retimeDelayModel: String? = null,
     val additionalCompilerFlags: MutableList<String> = mutableListOf(),
@@ -36,6 +37,7 @@ fun loadTestProperties(testDirectory: File): TestProperties {
         when (name.toString()) {
             "flatten" -> testProperties.flatten = value.toString().toBoolean()
             "literalSimplication" -> testProperties.literalSimplication = value.toString().toBoolean()
+            "waveform" -> testProperties.waveform = value.toString().toBoolean()
             "topModule" -> testProperties.topModule = value.toString()
             "retime" -> if (value.toString().toBoolean()) testProperties.retimeDelayModel = testDirectory.listFiles()!!.first { it.isFile && it.name == "delay.yaml" }.absolutePath
             "additionalCompilerFlags" -> testProperties.additionalCompilerFlags += value.toString().split(",")
@@ -99,6 +101,7 @@ fun createVerilatorSimCommand(testDir: File, verilogFiles: List<File>, cppFiles:
         add("--exe")
         addAll(cppFiles.map { it.absolutePath })
         addAll(listOf("--build", "-o", exeName))
+        if (properties.waveform) add("--trace")
 
         addAll(properties.additionalVerilatorFlags)
         removeAll(properties.removeVerilatorFlags)
@@ -177,6 +180,8 @@ tasks.register("runSimulation") {
         var hasFailure = false
 
         testsRoot.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.forEach { testDir ->
+            val testProperties = loadTestProperties(testDir)
+
             val objDir = layout.buildDirectory.dir("tests/${testDir.name}/cpp").get().asFile
             val cppFiles = testDir.listFiles { f -> f.isFile && f.extension.lowercase() == "cpp" }?.toList().orEmpty()
 
@@ -195,11 +200,20 @@ tasks.register("runSimulation") {
                 return@forEach
             }
 
+            // The output waveform
+            val waveformDir = layout.buildDirectory.dir("tests/${testDir.name}/waveform").get().asFile
+            val waveformFile = if (testProperties.waveform) {
+                waveformDir.mkdirs()
+                File(waveformDir, "${testDir.name}.vcd")
+            } else {
+                null
+            }
+
             // Use Verilator to build the executable directly, leveraging the generated model and wrapper(s)
             val buildErr = ByteArrayOutputStream()
             val buildRes = exec {
                 isIgnoreExitValue = true
-                commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, loadTestProperties(testDir)))
+                commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, testProperties))
                 errorOutput = buildErr
                 standardOutput = buildErr
             }
@@ -226,7 +240,7 @@ tasks.register("runSimulation") {
             val runErr = ByteArrayOutputStream()
             val runRes = exec {
                 isIgnoreExitValue = true
-                commandLine(exe.absolutePath)
+                commandLine(listOfNotNull(exe.absolutePath, waveformFile?.absolutePath))
                 errorOutput = runErr
                 standardOutput = runErr
             }
