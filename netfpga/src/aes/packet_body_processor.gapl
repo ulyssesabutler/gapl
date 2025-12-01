@@ -18,8 +18,8 @@ function from_aes_block() i: aes_block => o: wire[128]
 
 function rotate_word() i: aes_block_column => o: aes_block_column
 {
-    i[0]   => o[3];
-    i[1:3] => o[0:2];
+    i[3]   => o[0];
+    i[0:2] => o[1:3];
 }
 
 function rotate_word_by(factor: integer) i: aes_block_column => o: aes_block_column
@@ -57,22 +57,22 @@ function round_key(round_number: integer) previous_key: aes_block => current_key
         // On the first round, use the user-provided key directly
         previous_key => current_key;
     } else {
-        previous_key[3] => rotate_word()
-                        => substitute_word(s_box())
+        previous_key[0] => declare rotate_word_node: rotate_word()
+                        => declare substitute_word_node: substitute_word(s_box())
                         => declare transformed_last_column: aes_block_column;
 
-        round_constant(round_number - 1) => declare current_round_constant: aes_block_column;
+        declare round_constant_node: round_constant(round_number - 1) => declare current_round_constant: aes_block_column;
 
         transformed_last_column, current_round_constant => word_addition() => declare last_column_with_round_constant: aes_block_column;
 
         declare updated_key: aes_block;
 
-        last_column_with_round_constant, previous_key[0] => word_addition() => updated_key[0];
+        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key[3];
 
-        updated_key[0:2], previous_key[1:3]
+        updated_key[1:3], previous_key[0:2]
             => vector_zip(aes_block_column, aes_block_column, 3)
             => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
-            => updated_key[1:3];
+            => updated_key[0:2];
 
         updated_key => current_key;
     }
@@ -104,10 +104,10 @@ function rotate_rows() i: aes_block => o: aes_block
 
     declare shifted: aes_block;
 
-    transposed[0]                      => shifted[0];
-    transposed[1] => rotate_word_by(1) => shifted[1];
-    transposed[2] => rotate_word_by(2) => shifted[2];
-    transposed[3] => rotate_word_by(3) => shifted[3];
+    transposed[3]                      => shifted[3];
+    transposed[2] => rotate_word_by(1) => shifted[2];
+    transposed[1] => rotate_word_by(2) => shifted[1];
+    transposed[0] => rotate_word_by(3) => shifted[0];
 
     shifted => transpose() => o;
 }
@@ -133,42 +133,43 @@ function byte_addition_4() i1: aes_block_item, i2: aes_block_item, i3: aes_block
 {
     i1, i2 => bitwise_xor(8) => declare first_half: aes_block_item;
     i3, i4 => bitwise_xor(8) => declare second_half: aes_block_item;
-    first_half, second_half => bitwise_or(8) => o;
+    first_half, second_half => bitwise_xor(8) => o;
 }
 
-function mix_column(column_number: integer) block: aes_block, column: aes_block_column => o: aes_block_column
+function mix_column() column: aes_block_column => o: aes_block_column
 {
-    block[column_number][0] => gf_multiply_2() => declare i00: aes_block_item;
-    block[column_number][1] => gf_multiply_3() => declare i01: aes_block_item;
-    block[column_number][2] =>                    declare i02: aes_block_item;
-    block[column_number][3] =>                    declare i03: aes_block_item;
-    i00, i01, i02, i03 => byte_addition_4() => o[0];
+    column[3] => gf_multiply_2() => declare i00: aes_block_item;
+    column[2] => gf_multiply_3() => declare i01: aes_block_item;
+    column[1] =>                    declare i02: aes_block_item;
+    column[0] =>                    declare i03: aes_block_item;
+    i00, i01, i02, i03 => byte_addition_4() => o[3];
 
-    block[column_number][0] =>                    declare i10: aes_block_item;
-    block[column_number][1] => gf_multiply_2() => declare i11: aes_block_item;
-    block[column_number][2] => gf_multiply_3() => declare i12: aes_block_item;
-    block[column_number][3] =>                    declare i13: aes_block_item;
-    i10, i11, i12, i13 => byte_addition_4() => o[1];
+    column[3] =>                    declare i10: aes_block_item;
+    column[2] => gf_multiply_2() => declare i11: aes_block_item;
+    column[1] => gf_multiply_3() => declare i12: aes_block_item;
+    column[0] =>                    declare i13: aes_block_item;
+    i10, i11, i12, i13 => byte_addition_4() => o[2];
 
-    block[column_number][0] =>                    declare i20: aes_block_item;
-    block[column_number][1] =>                    declare i21: aes_block_item;
-    block[column_number][2] => gf_multiply_2() => declare i22: aes_block_item;
-    block[column_number][3] => gf_multiply_3() => declare i23: aes_block_item;
-    i20, i21, i22, i23 => byte_addition_4() => o[2];
+    column[3] =>                    declare i20: aes_block_item;
+    column[2] =>                    declare i21: aes_block_item;
+    column[1] => gf_multiply_2() => declare i22: aes_block_item;
+    column[0] => gf_multiply_3() => declare i23: aes_block_item;
+    i20, i21, i22, i23 => byte_addition_4() => o[1];
 
-    block[column_number][0] => gf_multiply_3() => declare i30: aes_block_item;
-    block[column_number][1] =>                    declare i31: aes_block_item;
-    block[column_number][2] =>                    declare i32: aes_block_item;
-    block[column_number][3] => gf_multiply_2() => declare i33: aes_block_item;
-    i30, i31, i32, i33 => byte_addition_4() => o[3];
+    column[3] => gf_multiply_3() => declare i30: aes_block_item;
+    column[2] =>                    declare i31: aes_block_item;
+    column[1] =>                    declare i32: aes_block_item;
+    column[0] => gf_multiply_2() => declare i33: aes_block_item;
+    i30, i31, i32, i33 => byte_addition_4() => o[0];
 }
+
 
 function mix_columns() i: aes_block => o: aes_block
 {
-    i, i[0] => mix_column(0) => o[0];
-    i, i[1] => mix_column(1) => o[1];
-    i, i[2] => mix_column(2) => o[2];
-    i, i[3] => mix_column(3) => o[3];
+    i[0] => mix_column(0) => o[0];
+    i[1] => mix_column(1) => o[1];
+    i[2] => mix_column(2) => o[2];
+    i[3] => mix_column(3) => o[3];
 }
 
 function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_key: aes_block => o: aes_block, current_round_key: aes_block
@@ -176,12 +177,12 @@ function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_k
     declare block: aes_block;
 
     if (round_number > 0) {
-        i => substitute_block(s_box())
-          => rotate_rows()
+        i => declare substitute_block_node: substitute_block(s_box())
+          => declare rotate_rows_node: rotate_rows()
           => declare unmixed_block: aes_block;
 
         if (round_number != 10) {
-            unmixed_block => mix_columns() => block;
+            unmixed_block => declare mix_columns_node: mix_columns() => block;
         } else {
             unmixed_block => block;
         }
@@ -189,8 +190,8 @@ function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_k
         i => block;
     }
 
-    previous_round_key => round_key(round_number) => declare round_key_block: aes_block;
-    block, round_key_block => declare test: block_addition() => o;
+    previous_round_key => declare round_key_node: round_key(round_number) => declare round_key_block: aes_block;
+    block, round_key_block => declare block_addition_node: block_addition() => o;
     round_key_block => current_round_key;
 }
 
@@ -199,10 +200,10 @@ function aes_encrypt_from_round(from_round_number: integer) i: aes_block, key: a
     declare after_round_key: aes_block;
     declare after_round_body: aes_block;
 
-    i, key => aes_encrypt_round(from_round_number) => after_round_body, after_round_key;
+    i, key => declare aes_encrypt_round_current: aes_encrypt_round(from_round_number) => after_round_body, after_round_key;
 
     if (from_round_number < 10) {
-        after_round_body, key => aes_encrypt_from_round(from_round_number + 1) => o;
+        after_round_body, after_round_key => declare aes_encrypt_round_recursive: aes_encrypt_from_round(from_round_number + 1) => o;
     } else {
         after_round_body => o;
     }
@@ -210,22 +211,17 @@ function aes_encrypt_from_round(from_round_number: integer) i: aes_block, key: a
 
 function aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
 {
-    i, key => aes_encrypt_from_round(0) => o;
+    i, key => declare aes_encrypt_from_round_0_node: aes_encrypt_from_round(0) => o;
 }
 
-function aes_encrypt() i: wire[128], key: wire[128] => o: wire[128]
+function test() i: wire[128], key: wire[128] => o: wire[128]
 {
-    i => to_aes_block() => declare i_block: aes_block;
-    key => to_aes_block() => declare key_block: aes_block;
-    declare o_block: aes_block => from_aes_block() => o;
+    i => declare i_to_aes_block_node: to_aes_block() => declare i_block: aes_block;
+    key => declare key_to_aes_block_node: to_aes_block() => declare key_block: aes_block;
+    declare o_block: aes_block => declare o_from_aes_block_node: from_aes_block() => o;
 
     i_block, key_block
-        => aes_encrypt_block()
-        // Add register to force retiming
-        => register(aes_block)
-        => register(aes_block)
-        => register(aes_block)
-        => register(aes_block)
+        => declare aes_encrypt_block_node: aes_encrypt_block()
         => o_block;
 }
 

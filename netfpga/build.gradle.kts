@@ -36,6 +36,9 @@ val vitisPath  = optPropOrEnv("vitisPath",  "VITIS_PATH",  "/tools/Xilinx/Vitis/
 // Project name within SUME projects
 val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_switch")
 
+// Program Name
+val programName = propOrEnv("programName", "PROGRAM_NAME", "regex")
+
 // Derived paths
 val projects         = "$sumeFolder/projects"
 val contribProjects  = "$sumeFolder/contrib-projects"
@@ -64,12 +67,12 @@ val pythonPath = listOf(
     "$sumeFolder/tools/scripts/NFTest"
 ).joinToString(":")
 
-val gaplSrcRoot = layout.projectDirectory.dir("src").asFile
+val gaplSrcRoot = layout.projectDirectory.dir("src/$programName").asFile
 
-// Comma-separated list of .gapl files relative to netfpga/src/, e.g. "foo.gapl,subdir/bar.gapl"
+// Comma-separated list of .gapl files relative to netfpga/src/PROGRAM_NAME, e.g. "foo.gapl,subdir/bar.gapl"
 val gaplSourcesProp = (findProperty("gaplSources") as String?)
     ?: throw GradleException(
-        "Missing -PgaplSources. Provide a comma-separated list of .gapl files relative to netfpga/src/, e.g. " +
+        "Missing -PgaplSources. Provide a comma-separated list of .gapl files relative to netfpga/src/$programName, e.g. " +
                 "-PgaplSources=my_top.gapl,subdir/alu.gapl"
     )
 
@@ -89,8 +92,8 @@ val gaplTargetFiles: List<File> = gaplTargetRelPaths.map { rel ->
     val f = File(gaplSrcRoot, rel)
     when {
         !rel.endsWith(".gapl") -> throw GradleException("Target must be a .gapl file: $rel")
-        !ensureUnder(gaplSrcRoot, f) -> throw GradleException("Target not under src/: $rel -> ${f.absolutePath}")
-        !f.exists() -> throw GradleException("Missing .gapl file under src/: $rel (looked at ${f.absolutePath})")
+        !ensureUnder(gaplSrcRoot, f) -> throw GradleException("Target not under src/$programName: $rel -> ${f.absolutePath}")
+        !f.exists() -> throw GradleException("Missing .gapl file under src/$programName: $rel (looked at ${f.absolutePath})")
         else -> f
     }
 }
@@ -147,7 +150,7 @@ tasks.register<Exec>("printEnv") {
 
 tasks.register("generateGaplVerilog") {
     group = "netfpga"
-    description = "Compile specified *.gapl (under src/) to Verilog into build/verilog"
+    description = "Compile specified *.gapl (under src/$programName) to Verilog into build/verilog"
     dependsOn(":compiler:installDist")
 
     // Incremental inputs/outputs
@@ -398,7 +401,7 @@ tasks.register<Delete>("uninstallGaplVerilog") {
             return@doFirst
         }
 
-        // For each target path relative to netfpga/src/, decide the installed .v name
+        // For each target path relative to netfpga/src/PROGRAM_NAME, decide the installed .v name
         val toDelete = targetsProp.split(',')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
