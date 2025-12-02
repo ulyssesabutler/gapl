@@ -214,7 +214,7 @@ function aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
     i, key => declare aes_encrypt_from_round_0_node: aes_encrypt_from_round(0) => o;
 }
 
-function test() i: wire[128], key: wire[128] => o: wire[128]
+function packet_body_processor() i: wire[128], key: wire[128] => o: wire[128]
 {
     i => declare i_to_aes_block_node: to_aes_block() => declare i_block: aes_block;
     key => declare key_to_aes_block_node: to_aes_block() => declare key_block: aes_block;

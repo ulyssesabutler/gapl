@@ -69,35 +69,20 @@ val pythonPath = listOf(
 
 val gaplSrcRoot = layout.projectDirectory.dir("src/$programName").asFile
 
-// Comma-separated list of .gapl files relative to netfpga/src/PROGRAM_NAME, e.g. "foo.gapl,subdir/bar.gapl"
-val gaplSourcesProp = (findProperty("gaplSources") as String?)
-    ?: throw GradleException(
-        "Missing -PgaplSources. Provide a comma-separated list of .gapl files relative to netfpga/src/$programName, e.g. " +
-                "-PgaplSources=my_top.gapl,subdir/alu.gapl"
-    )
-
 val delayModelPath = findProperty("delayModel") as String?
 val delayModelFile = delayModelPath?.let { File(gaplSrcRoot, it) }
-
-val gaplTargetRelPaths: List<String> = gaplSourcesProp
-    .split(',')
-    .map { it.trim() }
-    .filter { it.isNotEmpty() }
 
 // Validate: under src, exists, and ends with .gapl
 fun ensureUnder(parent: File, child: File): Boolean =
     child.canonicalPath.startsWith(parent.canonicalPath + File.separator)
 
-val gaplTargetFiles: List<File> = gaplTargetRelPaths.map { rel ->
-    val f = File(gaplSrcRoot, rel)
-    when {
-        !rel.endsWith(".gapl") -> throw GradleException("Target must be a .gapl file: $rel")
-        !ensureUnder(gaplSrcRoot, f) -> throw GradleException("Target not under src/$programName: $rel -> ${f.absolutePath}")
-        !f.exists() -> throw GradleException("Missing .gapl file under src/$programName: $rel (looked at ${f.absolutePath})")
-        else -> f
-    }
+val gaplTargetFile = File(gaplSrcRoot, "processor.gapl").also {
+    if (!it.exists()) throw GradleException("Missing .gapl file under src/$programName (looked at ${it.absolutePath})")
 }
 
+val gaplWrapperFile = File(gaplSrcRoot, "wrapper.v").also {
+    if (!it.exists()) throw GradleException("Missing .v wrapper file under src/$programName (looked at ${it.absolutePath})")
+}
 
 // Output directory for generated Verilog
 val gaplVerilogOut = layout.buildDirectory.dir("verilog")
@@ -150,11 +135,11 @@ tasks.register<Exec>("printEnv") {
 
 tasks.register("generateGaplVerilog") {
     group = "netfpga"
-    description = "Compile specified *.gapl (under src/$programName) to Verilog into build/verilog"
+    description = "Compile specified *.gapl and copy wrapper.v (under src/$programName) to Verilog into build/verilog"
     dependsOn(":compiler:installDist")
 
     // Incremental inputs/outputs
-    inputs.files(gaplTargetFiles)
+    inputs.files(gaplTargetFile, gaplWrapperFile)
     outputs.dir(gaplVerilogOut)
 
     doLast {
@@ -165,61 +150,67 @@ tasks.register("generateGaplVerilog") {
         val outDir = gaplVerilogOut.get().asFile
         outDir.mkdirs()
 
-        var hasFailure = false
-        gaplTargetFiles.forEach { gapl ->
-            val verilogFile = outDir.resolve(targetVerilogName(gapl))
-            println("Compiling ${gapl.relativeTo(gaplSrcRoot)} -> ${verilogFile.name}")
+        val verilogFile = outDir.resolve(targetVerilogName(gaplTargetFile))
+        println("Compiling ${gaplTargetFile.relativeTo(gaplSrcRoot)} -> ${verilogFile.name}")
 
-            val compilerCommand = buildList {
-                add(compiler.absolutePath)
-                add("-i")
-                add(gapl.absolutePath)
-                add("-o")
-                add(verilogFile.absolutePath)
+        val compilerCommand = buildList {
+            add(compiler.absolutePath)
+            add("-i")
+            add(gaplTargetFile.absolutePath)
+            add("-o")
+            add(verilogFile.absolutePath)
 
-                if (delayModelFile != null) {
-                    add("-retime")
-                    add(delayModelFile.absolutePath)
-                }
-            }
-
-            val err = java.io.ByteArrayOutputStream()
-            val result = project.exec {
-                isIgnoreExitValue = true
-                commandLine(compilerCommand)
-                errorOutput = err
-                standardOutput = System.out
-            }
-            if (result.exitValue != 0) {
-                hasFailure = true
-                println("❌ Failed to compile ${gapl.relativeTo(gaplSrcRoot)}")
-                println("---- Compiler Error Output ----")
-                println(err.toString().trim())
-                println("--------------------------------")
+            if (delayModelFile != null) {
+                add("-retime")
+                add(delayModelFile.absolutePath)
             }
         }
-        if (hasFailure) throw GradleException("One or more specified .gapl files failed to compile")
+
+        val err = java.io.ByteArrayOutputStream()
+        val result = project.exec {
+            isIgnoreExitValue = true
+            commandLine(compilerCommand)
+            errorOutput = err
+            standardOutput = System.out
+        }
+        if (result.exitValue != 0) {
+            println("❌ Failed to compile ${gaplTargetFile.relativeTo(gaplSrcRoot)}")
+            println("---- Compiler Error Output ----")
+            println(err.toString().trim())
+            println("--------------------------------")
+            throw GradleException("${gaplTargetFile.absolutePath} failed to compile")
+        }
+
+        val wrapperOutFile = outDir.resolve(targetVerilogName(gaplWrapperFile))
+        println("Copying ${gaplWrapperFile.relativeTo(gaplSrcRoot)} -> ${wrapperOutFile.name}")
+        gaplWrapperFile.copyTo(wrapperOutFile, overwrite = true)
     }
 }
 
 tasks.register<Copy>("installGaplVerilog") {
     group = "netfpga"
-    description = "Install generated Verilog for specified .gapl files into \$NF_DESIGN_DIR/hw/hdl"
+    description = "Install generated Verilog for specified .gapl files (and wrapper.v) into \$NF_DESIGN_DIR/hw/hdl"
     dependsOn("generateGaplVerilog")
 
-    // Copy only the produced .v for the requested targets
     val outDirProvider = gaplVerilogOut
+
     from(provider {
-        val outDir = outDirProvider.get().asFile
-        gaplTargetFiles.map { outDir.resolve(targetVerilogName(it)) }
+        outDirProvider.get().asFile.resolve(targetVerilogName(gaplTargetFile))
+    })
+    from(provider {
+        outDirProvider.get().asFile.resolve(targetVerilogName(gaplWrapperFile))
     })
     into(provider { file("$nfDesignDir/hw/hdl") })
 
     // Incremental wiring
-    inputs.files(gaplTargetFiles)
-    outputs.files(provider {
-        gaplTargetFiles.map { file("$nfDesignDir/hw/hdl/${targetVerilogName(it)}") }
-    })
+    inputs.files(
+        outDirProvider.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) },
+        outDirProvider.map { it.asFile.resolve(targetVerilogName(gaplWrapperFile)) },
+    )
+    outputs.files(
+        file("$nfDesignDir/hw/hdl/${targetVerilogName(gaplTargetFile)}"),
+        file("$nfDesignDir/hw/hdl/${targetVerilogName(gaplWrapperFile)}"),
+    )
 }
 
 // :netfpga:makeInit ---
@@ -383,7 +374,6 @@ tasks.register<Exec>("runSimulation") {
     """.trimIndent()))
 }
 
-// Remove generated/installed Verilog from $NF_DESIGN_DIR/hw/hdl
 tasks.register<Delete>("uninstallGaplVerilog") {
     group = "netfpga"
     description = "Remove Verilog installed from -PgaplSources under \$NF_DESIGN_DIR/hw/hdl"
@@ -395,24 +385,14 @@ tasks.register<Delete>("uninstallGaplVerilog") {
             return@doFirst
         }
 
-        val targetsProp = findProperty("gaplSources") as String?
-        if (targetsProp.isNullOrBlank()) {
-            println("[uninstallGaplVerilog] No -PgaplSources provided; skipping file removal.")
-            return@doFirst
-        }
+        val wrapperInstalled = nfHdlDir.resolve(targetVerilogName(gaplWrapperFile))
+        val processorInstalled = nfHdlDir.resolve(targetVerilogName(gaplTargetFile))
 
-        // For each target path relative to netfpga/src/PROGRAM_NAME, decide the installed .v name
-        val toDelete = targetsProp.split(',')
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { rel ->
-                val relFile = File(rel)
-                val vName = targetVerilogName(relFile)
-                nfHdlDir.resolve(vName)
+        listOf(wrapperInstalled, processorInstalled).forEach { f ->
+            if (f.exists()) {
+                println("[uninstallGaplVerilog] Deleting ${f.relativeToOrSelf(nfHdlDir)}")
+                delete(f)
             }
-
-        toDelete.forEach { f ->
-            if (f.exists()) { delete(f) }
         }
     }
 }
