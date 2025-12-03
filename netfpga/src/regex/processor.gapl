@@ -38,30 +38,6 @@ function email_regex_is_character_in_set(set_size: integer)
         => result;
 }
 
-/*
-function email_regex_is_numeric() i: character => o: boolean
-{
-    declare set: pair(character, character)[1];
-
-    literal(8, 48) => set[0].first;
-    literal(8, 57) => set[0].second;
-
-    i, set => email_regex_is_character_in_set(1) => o;
-}
-*/
-
-/*
-function email_regex_is_alpha() i: character => o: boolean
-{
-    declare set: pair(character, character)[1];
-
-    literal(8, 65) => set[0].first;
-    literal(8, 90) => set[0].second;
-
-    i, set => email_regex_is_character_in_set(1) => o;
-}
-*/
-
 function email_regex_is_local() i: character => o: boolean
 {
     declare set: pair(character, character)[5];
@@ -107,13 +83,6 @@ function email_regex_is_url() i: character => o: boolean
 
     i, set => email_regex_is_character_in_set(3) => o;
 }
-
-/*
-function email_regex_is_tld() i: character => o: boolean
-{
-    i => email_regex_is_alpha() => o;
-}
-*/
 
 function email_regex_is_url_separator() i: character => o: boolean
 {
@@ -208,10 +177,11 @@ function email_regex() i: last(character[32]) => o: valid(boolean) {
 interface netfpga_packet_body {
     data: byte[32];
     keep: boolean[32];
+    valid: boolean;
     last: boolean;
 }
 
-function packet_body_processor() i: netfpga_packet_body => o: valid(netfpga_packet_body) {
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
     declare email_input: last(character[32])
         => email_regex()
         => declare email_output: valid(boolean);
@@ -219,16 +189,16 @@ function packet_body_processor() i: netfpga_packet_body => o: valid(netfpga_pack
     i.data => email_input.value;
     i.last => email_input.last;
 
-    email_output.value                      => o.value.data[31][0];
-    literal(7, 0)                           => o.value.data[31][1:7];
-    literal(8, 0) => replicate(wire[8], 31) => o.value.data[0:30];
+    email_output.value                      => o.data[31][0];
+    literal(7, 0)                           => o.data[31][1:7];
+    literal(8, 0) => replicate(wire[8], 31) => o.data[0:30];
 
     literal(1, 1)
         => vector_to_wire()
         => replicate(wire, 32)
-        => o.value.keep;
+        => o.keep;
 
-    literal(1, 1) => vector_to_wire()       => o.value.last;
+    literal(1, 1) => vector_to_wire()       => o.last;
 
     email_output.valid                      => o.valid;
 }

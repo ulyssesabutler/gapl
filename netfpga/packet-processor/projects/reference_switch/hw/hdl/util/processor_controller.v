@@ -14,9 +14,10 @@ module processor_controller
 
     output wire [TDATA_WIDTH - 1:0] ingress_out_tdata,
     output wire [TKEEP_WIDTH - 1:0] ingress_out_tkeep,
+    output wire                     ingress_out_tvalid,
     output wire                     ingress_out_tlast,
 
-    output wire                     enable,
+    output reg                      enable,
 
     input  wire [TDATA_WIDTH - 1:0] egress_in_tdata,
     input  wire [TKEEP_WIDTH - 1:0] egress_in_tkeep,
@@ -117,8 +118,6 @@ module processor_controller
     end
 
     // Enabling
-    reg enable;
-
     always @(*) begin
         enable = 0;
 
@@ -138,6 +137,7 @@ module processor_controller
     // Hook-up ingress and egress
     assign ingress_out_tdata  = input_queue_tdata;
     assign ingress_out_tkeep  = input_queue_tkeep;
+    assign ingress_out_tvalid = input_queue_tvalid;
     assign input_queue_tready = enable; // Don't send if the module is disabled
     assign ingress_out_tlast  = input_queue_tlast;
 

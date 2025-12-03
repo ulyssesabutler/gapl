@@ -124,6 +124,16 @@ function replicate(I: interface, factor: integer) i: I => o: I[factor] {
 ```
 
 ```
+function repeat(I: interface, factor: integer, operation: I => I) i: I => o: I {
+    if (factor > 1) {
+        i => operation => repeat(I, factor - 1, operation) => o;
+    } else {
+        i => operation => o;
+    }
+}
+```
+
+```
 function unpair(
     T: interface,
     U: interface,
@@ -205,6 +215,27 @@ function vector_any(size: integer) i: boolean[size] => o: boolean {
     declare false_v: literal(1, 0);
     i, false_v[0] => combinational_vector_fold(boolean, boolean, size, or()) => o;
 }
+```
+
+```
+function vector_chunk(I: interface, size: integer, count: integer) i: I[size * count] => o: I[size][count] {
+    i[0:size - 1] => o[0];
+
+    if (count > 1) {
+        i[size:size * count - 1] => vector_chunk(I, size, count - 1) => o[1:count - 1];
+    }
+}
+```
+
+```
+function vector_flatten(I: interface, size: integer, count: integer) i: I[size][count] => o: I[size * count] {
+    i[0] => o[0:size - 1];
+    
+    if (count > 1) {
+        i[1:count - 1] => vector_flatten(I, size, count - 1) => o[size:size * count - 1];
+    }
+}
+
 ```
 
 ```

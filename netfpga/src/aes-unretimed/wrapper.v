@@ -28,7 +28,6 @@ module gapl_wrapper
 
     wire [TDATA_WIDTH - 1:0] gapl_in_tdata;
     wire [TKEEP_WIDTH - 1:0] gapl_in_tkeep;
-    wire                     gapl_in_tvalid;
     wire                     gapl_in_tlast;
 
     wire [TDATA_WIDTH - 1:0] gapl_out_tdata;
@@ -142,7 +141,6 @@ module gapl_wrapper
         .ingress_in_tlast(mux_in_tlast),
 
         .ingress_out_tdata(gapl_in_tdata),
-        .ingress_out_tvalid(gapl_in_tvalid),
         .ingress_out_tkeep(gapl_in_tkeep),
         .ingress_out_tlast(gapl_in_tlast),
 
@@ -160,21 +158,49 @@ module gapl_wrapper
         .egress_out_tlast(mux_out_tlast)
     );
 
-    packet_body_processor gapl_processor
+    // GAPL PROCESSOR
+
+    // Wires
+    wire [127:0] key = 128'b0;
+
+    wire [127:0] plaintext_first_half;
+    wire [127:0] plaintext_second_half;
+
+    wire [127:0] ciphertext_first_half;
+    wire [127:0] ciphertext_second_half;
+
+    // Connections
+    assign plaintext_first_half  = gapl_in_tdata[127:0];
+    assign plaintext_second_half = gapl_in_tdata[255:128];
+
+    assign gapl_out_tdata[127:0] = ciphertext_first_half;
+    assign gapl_out_tdata[255:128] = ciphertext_second_half;
+
+    assign gapl_out_tkeep = gapl_in_tkeep;
+    assign gapl_out_tlast = gapl_in_tlast;
+
+    assign gapl_out_tvalid = 1;
+
+    packet_body_processor gapl_processor_first_half
     (
         .clock(axis_aclk),
         .reset((!axis_resetn) || gapl_reset),
         .enable(gapl_enable),
 
-        .i$data(gapl_in_tdata),
-        .i$valid(gapl_in_tvalid),
-        .i$keep(gapl_in_tkeep),
-        .i$last(gapl_in_tlast),
+        .i(plaintext_first_half),
+        .key(key),
+        .o(ciphertext_first_half)
+    );
 
-        .o$data(gapl_out_tdata),
-        .o$valid(gapl_out_tvalid),
-        .o$keep(gapl_out_tkeep),
-        .o$last(gapl_out_tlast)
+    packet_body_processor gapl_processor_second_half
+    (
+        .clock(axis_aclk),
+        .reset((!axis_resetn) || gapl_reset),
+        .enable(gapl_enable),
+
+        .i(plaintext_second_half),
+        .key(key),
+        .o(ciphertext_second_half)
     );
 
 endmodule

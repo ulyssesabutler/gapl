@@ -166,10 +166,10 @@ function mix_column() column: aes_block_column => o: aes_block_column
 
 function mix_columns() i: aes_block => o: aes_block
 {
-    i[0] => mix_column(0) => o[0];
-    i[1] => mix_column(1) => o[1];
-    i[2] => mix_column(2) => o[2];
-    i[3] => mix_column(3) => o[3];
+    i[0] => mix_column() => o[0];
+    i[1] => mix_column() => o[1];
+    i[2] => mix_column() => o[2];
+    i[3] => mix_column() => o[3];
 }
 
 function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_key: aes_block => o: aes_block, current_round_key: aes_block
@@ -209,20 +209,81 @@ function aes_encrypt_from_round(from_round_number: integer) i: aes_block, key: a
     }
 }
 
+/*
 function aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
 {
     i, key => declare aes_encrypt_from_round_0_node: aes_encrypt_from_round(0) => o;
 }
+*/
 
-function packet_body_processor() i: wire[128], key: wire[128] => o: wire[128]
+/*
+function abridged_aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
+{
+    declare output_key: aes_block;
+
+    i, key
+        => declare aes_encrypt_round_0:  aes_encrypt_round(0)
+        => declare aes_encrypt_round_1:  aes_encrypt_round(1)
+        => declare aes_encrypt_round_10: aes_encrypt_round(10)
+        => o, output_key;
+}
+*/
+
+function single_round_aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
+{
+    declare output_key: aes_block;
+
+    i, key
+        => declare aes_encrypt_round_1:  aes_encrypt_round(1)
+        => o, output_key;
+}
+
+function aes_encrypt() i: wire[128], key: wire[128] => o: wire[128]
 {
     i => declare i_to_aes_block_node: to_aes_block() => declare i_block: aes_block;
     key => declare key_to_aes_block_node: to_aes_block() => declare key_block: aes_block;
     declare o_block: aes_block => declare o_from_aes_block_node: from_aes_block() => o;
 
     i_block, key_block
-        => declare aes_encrypt_block_node: aes_encrypt_block()
+        => declare aes_encrypt_block_node: single_round_aes_encrypt_block()
         => o_block;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
+    literal(128, 0) => declare key: wire[128];
+
+    declare encrypt_1_input:  wire[128];
+    declare encrypt_1_output: wire[128];
+    encrypt_1_input, key => declare aes_encrypt_1_node: aes_encrypt() => encrypt_1_output;
+
+    declare encrypt_2_input:  wire[128];
+    declare encrypt_2_output: wire[128];
+    encrypt_2_input, key => declare aes_encrypt_2_node: aes_encrypt() => encrypt_2_output;
+
+    declare input_register: register(netfpga_packet_body);
+    declare output_register: register(netfpga_packet_body);
+
+    i => input_register;
+    output_register => o;
+
+    input_register.data[0:127] => encrypt_1_input;
+    input_register.data[128:255] => encrypt_2_input;
+
+    encrypt_1_output => output_register.data[0:127];
+    encrypt_2_output => output_register.data[128:255];
+
+    input_register.keep  => output_register.keep;
+    input_register.valid => output_register.valid;
+    input_register.last  => output_register.last;
 }
 
 function round_constant(round_number: integer) null => o: aes_block_column

@@ -1,0 +1,519 @@
+interface aes_block_item wire[8]
+interface aes_block_column aes_block_item[4]
+interface aes_block aes_block_column[4]
+
+function to_aes_block() i: wire[128] => o: aes_block
+{
+    i => vector_chunk(wire, 8, 16)
+      => vector_chunk(aes_block_item, 4, 4)
+      => o;
+}
+
+function from_aes_block() i: aes_block => o: wire[128]
+{
+    i => vector_flatten(aes_block_item, 4, 4)
+      => vector_flatten(wire, 8, 16)
+      => o;
+}
+
+function rotate_word() i: aes_block_column => o: aes_block_column
+{
+    i[3]   => o[0];
+    i[0:2] => o[1:3];
+}
+
+function rotate_word_by(factor: integer) i: aes_block_column => o: aes_block_column
+{
+    i => repeat(aes_block_column, factor, rotate_word()) => o;
+}
+
+function substitute_word(substitution: aes_block_item => aes_block_item) i: aes_block_column => o: aes_block_column
+{
+    i => vector_map(aes_block_item, aes_block_item, 4, substitution) => o;
+}
+
+function substitute_block(substitution: aes_block_item => aes_block_item) i: aes_block => o: aes_block
+{
+    i => vector_map(aes_block_column, aes_block_column, 4, substitute_word(substitution)) => o;
+}
+
+function word_addition() i1: aes_block_column, i2: aes_block_column => o: aes_block_column
+{
+    i1, i2 => vector_zip(aes_block_item, aes_block_item, 4)
+           => vector_map(pair(aes_block_item, aes_block_item), aes_block_item, 4, unpair(aes_block_item, aes_block_item, aes_block_item, bitwise_xor(8)))
+           => o;
+}
+
+function block_addition() i1: aes_block, i2: aes_block => o: aes_block
+{
+    i1, i2 => vector_zip(aes_block_column, aes_block_column, 4)
+           => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 4, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
+           => o;
+}
+
+function round_key(round_number: integer) previous_key: aes_block => current_key: aes_block
+{
+    if (round_number == 0) {
+        // On the first round, use the user-provided key directly
+        previous_key => current_key;
+    } else {
+        previous_key[0] => declare rotate_word_node: rotate_word()
+                        => declare substitute_word_node: substitute_word(s_box())
+                        => declare transformed_last_column: aes_block_column;
+
+        declare round_constant_node: round_constant(round_number - 1) => declare current_round_constant: aes_block_column;
+
+        transformed_last_column, current_round_constant => word_addition() => declare last_column_with_round_constant: aes_block_column;
+
+        declare updated_key: aes_block;
+
+        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key[3];
+
+        updated_key[1:3], previous_key[0:2]
+            => vector_zip(aes_block_column, aes_block_column, 3)
+            => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
+            => updated_key[0:2];
+
+        updated_key => current_key;
+    }
+}
+function transpose() i: aes_block => o: aes_block
+{
+    // Doing this recursively is hard
+    i[0][0] => o[0][0];
+    i[1][0] => o[0][1];
+    i[2][0] => o[0][2];
+    i[3][0] => o[0][3];
+    i[0][1] => o[1][0];
+    i[1][1] => o[1][1];
+    i[2][1] => o[1][2];
+    i[3][1] => o[1][3];
+    i[0][2] => o[2][0];
+    i[1][2] => o[2][1];
+    i[2][2] => o[2][2];
+    i[3][2] => o[2][3];
+    i[0][3] => o[3][0];
+    i[1][3] => o[3][1];
+    i[2][3] => o[3][2];
+    i[3][3] => o[3][3];
+}
+
+function rotate_rows() i: aes_block => o: aes_block
+{
+    i => transpose() => declare transposed: aes_block;
+
+    declare shifted: aes_block;
+
+    transposed[3]                      => shifted[3];
+    transposed[2] => rotate_word_by(1) => shifted[2];
+    transposed[1] => rotate_word_by(2) => shifted[1];
+    transposed[0] => rotate_word_by(3) => shifted[0];
+
+    shifted => transpose() => o;
+}
+
+// Full multiplication isn't actually needed for AES. Only the constants 2 and 3 are used for encryption.
+function gf_multiply_2() i: aes_block_item => o: aes_block_item
+{
+    i, literal(8, 1) => left_shift(8) => declare shifted: aes_block_item;
+
+    i[7] => replicate(wire, 8) => declare mask: aes_block_item;
+    literal(8, 27), mask => bitwise_and(8) => declare optional_constant: aes_block_item;
+
+    shifted, optional_constant => bitwise_xor(8) => o;
+}
+
+function gf_multiply_3() i: aes_block_item => o: aes_block_item
+{
+    i => gf_multiply_2() => declare doubled: aes_block_item;
+    doubled, i => bitwise_xor(8) => o;
+}
+
+function byte_addition_4() i1: aes_block_item, i2: aes_block_item, i3: aes_block_item, i4: aes_block_item => o: aes_block_item
+{
+    i1, i2 => bitwise_xor(8) => declare first_half: aes_block_item;
+    i3, i4 => bitwise_xor(8) => declare second_half: aes_block_item;
+    first_half, second_half => bitwise_xor(8) => o;
+}
+
+function mix_column() column: aes_block_column => o: aes_block_column
+{
+    column[3] => gf_multiply_2() => declare i00: aes_block_item;
+    column[2] => gf_multiply_3() => declare i01: aes_block_item;
+    column[1] =>                    declare i02: aes_block_item;
+    column[0] =>                    declare i03: aes_block_item;
+    i00, i01, i02, i03 => byte_addition_4() => o[3];
+
+    column[3] =>                    declare i10: aes_block_item;
+    column[2] => gf_multiply_2() => declare i11: aes_block_item;
+    column[1] => gf_multiply_3() => declare i12: aes_block_item;
+    column[0] =>                    declare i13: aes_block_item;
+    i10, i11, i12, i13 => byte_addition_4() => o[2];
+
+    column[3] =>                    declare i20: aes_block_item;
+    column[2] =>                    declare i21: aes_block_item;
+    column[1] => gf_multiply_2() => declare i22: aes_block_item;
+    column[0] => gf_multiply_3() => declare i23: aes_block_item;
+    i20, i21, i22, i23 => byte_addition_4() => o[1];
+
+    column[3] => gf_multiply_3() => declare i30: aes_block_item;
+    column[2] =>                    declare i31: aes_block_item;
+    column[1] =>                    declare i32: aes_block_item;
+    column[0] => gf_multiply_2() => declare i33: aes_block_item;
+    i30, i31, i32, i33 => byte_addition_4() => o[0];
+}
+
+
+function mix_columns() i: aes_block => o: aes_block
+{
+    i[0] => mix_column() => o[0];
+    i[1] => mix_column() => o[1];
+    i[2] => mix_column() => o[2];
+    i[3] => mix_column() => o[3];
+}
+
+function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_key: aes_block => o: aes_block, current_round_key: aes_block
+{
+    declare block: aes_block;
+
+    if (round_number > 0) {
+        i => declare substitute_block_node: substitute_block(s_box())
+          => declare rotate_rows_node: rotate_rows()
+          => declare unmixed_block: aes_block;
+
+        if (round_number != 10) {
+            unmixed_block => declare mix_columns_node: mix_columns() => block;
+        } else {
+            unmixed_block => block;
+        }
+    } else {
+        i => block;
+    }
+
+    previous_round_key => declare round_key_node: round_key(round_number) => declare round_key_block: aes_block;
+    block, round_key_block => declare block_addition_node: block_addition() => o;
+    round_key_block => current_round_key;
+}
+
+function aes_encrypt_from_round(from_round_number: integer) i: aes_block, key: aes_block => o: aes_block
+{
+    declare after_round_key: aes_block;
+    declare after_round_body: aes_block;
+
+    i, key => declare aes_encrypt_round_current: aes_encrypt_round(from_round_number) => after_round_body, after_round_key;
+
+    if (from_round_number < 10) {
+        after_round_body, after_round_key => declare aes_encrypt_round_recursive: aes_encrypt_from_round(from_round_number + 1) => o;
+    } else {
+        after_round_body => o;
+    }
+}
+
+function aes_encrypt_block() i: aes_block, key: aes_block => o: aes_block
+{
+    i, key => declare aes_encrypt_from_round_0_node: aes_encrypt_from_round(0) => o;
+}
+
+function packet_body_processor() i: wire[128], key: wire[128] => o: wire[128]
+{
+    i => declare i_to_aes_block_node: to_aes_block() => declare i_block: aes_block;
+    key => declare key_to_aes_block_node: to_aes_block() => declare key_block: aes_block;
+    declare o_block: aes_block => declare o_from_aes_block_node: from_aes_block() => o;
+
+    i_block, key_block
+        => declare aes_encrypt_block_node: aes_encrypt_block()
+        => o_block;
+}
+
+function round_constant(round_number: integer) null => o: aes_block_column
+{
+    if (round_number == 0) {
+        literal(8,   1) => o[3];
+    } else if (round_number == 1) {
+        literal(8,   2) => o[3];
+    } else if (round_number == 2) {
+        literal(8,   4) => o[3];
+    } else if (round_number == 3) {
+        literal(8,   8) => o[3];
+    } else if (round_number == 4) {
+        literal(8,  16) => o[3];
+    } else if (round_number == 5) {
+        literal(8,  32) => o[3];
+    } else if (round_number == 6) {
+        literal(8,  64) => o[3];
+    } else if (round_number == 7) {
+        literal(8, 128) => o[3];
+    } else if (round_number == 8) {
+        literal(8,  27) => o[3];
+    } else if (round_number == 9) {
+        literal(8,  54) => o[3];
+    }
+
+    literal(8, 0) => o[0];
+    literal(8, 0) => o[1];
+    literal(8, 0) => o[2];
+}
+
+function s_box() i: aes_block_item => o: aes_block_item
+{
+    declare constants: aes_block_item[256];
+
+    literal(8,  99) => constants[  0];
+    literal(8, 124) => constants[  1];
+    literal(8, 119) => constants[  2];
+    literal(8, 123) => constants[  3];
+    literal(8, 242) => constants[  4];
+    literal(8, 107) => constants[  5];
+    literal(8, 111) => constants[  6];
+    literal(8, 197) => constants[  7];
+    literal(8,  48) => constants[  8];
+    literal(8,   1) => constants[  9];
+    literal(8, 103) => constants[ 10];
+    literal(8,  43) => constants[ 11];
+    literal(8, 254) => constants[ 12];
+    literal(8, 215) => constants[ 13];
+    literal(8, 171) => constants[ 14];
+    literal(8, 118) => constants[ 15];
+    literal(8, 202) => constants[ 16];
+    literal(8, 130) => constants[ 17];
+    literal(8, 201) => constants[ 18];
+    literal(8, 125) => constants[ 19];
+    literal(8, 250) => constants[ 20];
+    literal(8,  89) => constants[ 21];
+    literal(8,  71) => constants[ 22];
+    literal(8, 240) => constants[ 23];
+    literal(8, 173) => constants[ 24];
+    literal(8, 212) => constants[ 25];
+    literal(8, 162) => constants[ 26];
+    literal(8, 175) => constants[ 27];
+    literal(8, 156) => constants[ 28];
+    literal(8, 164) => constants[ 29];
+    literal(8, 114) => constants[ 30];
+    literal(8, 192) => constants[ 31];
+    literal(8, 183) => constants[ 32];
+    literal(8, 253) => constants[ 33];
+    literal(8, 147) => constants[ 34];
+    literal(8,  38) => constants[ 35];
+    literal(8,  54) => constants[ 36];
+    literal(8,  63) => constants[ 37];
+    literal(8, 247) => constants[ 38];
+    literal(8, 204) => constants[ 39];
+    literal(8,  52) => constants[ 40];
+    literal(8, 165) => constants[ 41];
+    literal(8, 229) => constants[ 42];
+    literal(8, 241) => constants[ 43];
+    literal(8, 113) => constants[ 44];
+    literal(8, 216) => constants[ 45];
+    literal(8,  49) => constants[ 46];
+    literal(8,  21) => constants[ 47];
+    literal(8,   4) => constants[ 48];
+    literal(8, 199) => constants[ 49];
+    literal(8,  35) => constants[ 50];
+    literal(8, 195) => constants[ 51];
+    literal(8,  24) => constants[ 52];
+    literal(8, 150) => constants[ 53];
+    literal(8,   5) => constants[ 54];
+    literal(8, 154) => constants[ 55];
+    literal(8,   7) => constants[ 56];
+    literal(8,  18) => constants[ 57];
+    literal(8, 128) => constants[ 58];
+    literal(8, 226) => constants[ 59];
+    literal(8, 235) => constants[ 60];
+    literal(8,  39) => constants[ 61];
+    literal(8, 178) => constants[ 62];
+    literal(8, 117) => constants[ 63];
+    literal(8,   9) => constants[ 64];
+    literal(8, 131) => constants[ 65];
+    literal(8,  44) => constants[ 66];
+    literal(8,  26) => constants[ 67];
+    literal(8,  27) => constants[ 68];
+    literal(8, 110) => constants[ 69];
+    literal(8,  90) => constants[ 70];
+    literal(8, 160) => constants[ 71];
+    literal(8,  82) => constants[ 72];
+    literal(8,  59) => constants[ 73];
+    literal(8, 214) => constants[ 74];
+    literal(8, 179) => constants[ 75];
+    literal(8,  41) => constants[ 76];
+    literal(8, 227) => constants[ 77];
+    literal(8,  47) => constants[ 78];
+    literal(8, 132) => constants[ 79];
+    literal(8,  83) => constants[ 80];
+    literal(8, 209) => constants[ 81];
+    literal(8,   0) => constants[ 82];
+    literal(8, 237) => constants[ 83];
+    literal(8,  32) => constants[ 84];
+    literal(8, 252) => constants[ 85];
+    literal(8, 177) => constants[ 86];
+    literal(8,  91) => constants[ 87];
+    literal(8, 106) => constants[ 88];
+    literal(8, 203) => constants[ 89];
+    literal(8, 190) => constants[ 90];
+    literal(8,  57) => constants[ 91];
+    literal(8,  74) => constants[ 92];
+    literal(8,  76) => constants[ 93];
+    literal(8,  88) => constants[ 94];
+    literal(8, 207) => constants[ 95];
+    literal(8, 208) => constants[ 96];
+    literal(8, 239) => constants[ 97];
+    literal(8, 170) => constants[ 98];
+    literal(8, 251) => constants[ 99];
+    literal(8,  67) => constants[100];
+    literal(8,  77) => constants[101];
+    literal(8,  51) => constants[102];
+    literal(8, 133) => constants[103];
+    literal(8,  69) => constants[104];
+    literal(8, 249) => constants[105];
+    literal(8,   2) => constants[106];
+    literal(8, 127) => constants[107];
+    literal(8,  80) => constants[108];
+    literal(8,  60) => constants[109];
+    literal(8, 159) => constants[110];
+    literal(8, 168) => constants[111];
+    literal(8,  81) => constants[112];
+    literal(8, 163) => constants[113];
+    literal(8,  64) => constants[114];
+    literal(8, 143) => constants[115];
+    literal(8, 146) => constants[116];
+    literal(8, 157) => constants[117];
+    literal(8,  56) => constants[118];
+    literal(8, 245) => constants[119];
+    literal(8, 188) => constants[120];
+    literal(8, 182) => constants[121];
+    literal(8, 218) => constants[122];
+    literal(8,  33) => constants[123];
+    literal(8,  16) => constants[124];
+    literal(8, 255) => constants[125];
+    literal(8, 243) => constants[126];
+    literal(8, 210) => constants[127];
+    literal(8, 205) => constants[128];
+    literal(8,  12) => constants[129];
+    literal(8,  19) => constants[130];
+    literal(8, 236) => constants[131];
+    literal(8,  95) => constants[132];
+    literal(8, 151) => constants[133];
+    literal(8,  68) => constants[134];
+    literal(8,  23) => constants[135];
+    literal(8, 196) => constants[136];
+    literal(8, 167) => constants[137];
+    literal(8, 126) => constants[138];
+    literal(8,  61) => constants[139];
+    literal(8, 100) => constants[140];
+    literal(8,  93) => constants[141];
+    literal(8,  25) => constants[142];
+    literal(8, 115) => constants[143];
+    literal(8,  96) => constants[144];
+    literal(8, 129) => constants[145];
+    literal(8,  79) => constants[146];
+    literal(8, 220) => constants[147];
+    literal(8,  34) => constants[148];
+    literal(8,  42) => constants[149];
+    literal(8, 144) => constants[150];
+    literal(8, 136) => constants[151];
+    literal(8,  70) => constants[152];
+    literal(8, 238) => constants[153];
+    literal(8, 184) => constants[154];
+    literal(8,  20) => constants[155];
+    literal(8, 222) => constants[156];
+    literal(8,  94) => constants[157];
+    literal(8,  11) => constants[158];
+    literal(8, 219) => constants[159];
+    literal(8, 224) => constants[160];
+    literal(8,  50) => constants[161];
+    literal(8,  58) => constants[162];
+    literal(8,  10) => constants[163];
+    literal(8,  73) => constants[164];
+    literal(8,   6) => constants[165];
+    literal(8,  36) => constants[166];
+    literal(8,  92) => constants[167];
+    literal(8, 194) => constants[168];
+    literal(8, 211) => constants[169];
+    literal(8, 172) => constants[170];
+    literal(8,  98) => constants[171];
+    literal(8, 145) => constants[172];
+    literal(8, 149) => constants[173];
+    literal(8, 228) => constants[174];
+    literal(8, 121) => constants[175];
+    literal(8, 231) => constants[176];
+    literal(8, 200) => constants[177];
+    literal(8,  55) => constants[178];
+    literal(8, 109) => constants[179];
+    literal(8, 141) => constants[180];
+    literal(8, 213) => constants[181];
+    literal(8,  78) => constants[182];
+    literal(8, 169) => constants[183];
+    literal(8, 108) => constants[184];
+    literal(8,  86) => constants[185];
+    literal(8, 244) => constants[186];
+    literal(8, 234) => constants[187];
+    literal(8, 101) => constants[188];
+    literal(8, 122) => constants[189];
+    literal(8, 174) => constants[190];
+    literal(8,   8) => constants[191];
+    literal(8, 186) => constants[192];
+    literal(8, 120) => constants[193];
+    literal(8,  37) => constants[194];
+    literal(8,  46) => constants[195];
+    literal(8,  28) => constants[196];
+    literal(8, 166) => constants[197];
+    literal(8, 180) => constants[198];
+    literal(8, 198) => constants[199];
+    literal(8, 232) => constants[200];
+    literal(8, 221) => constants[201];
+    literal(8, 116) => constants[202];
+    literal(8,  31) => constants[203];
+    literal(8,  75) => constants[204];
+    literal(8, 189) => constants[205];
+    literal(8, 139) => constants[206];
+    literal(8, 138) => constants[207];
+    literal(8, 112) => constants[208];
+    literal(8,  62) => constants[209];
+    literal(8, 181) => constants[210];
+    literal(8, 102) => constants[211];
+    literal(8,  72) => constants[212];
+    literal(8,   3) => constants[213];
+    literal(8, 246) => constants[214];
+    literal(8,  14) => constants[215];
+    literal(8,  97) => constants[216];
+    literal(8,  53) => constants[217];
+    literal(8,  87) => constants[218];
+    literal(8, 185) => constants[219];
+    literal(8, 134) => constants[220];
+    literal(8, 193) => constants[221];
+    literal(8,  29) => constants[222];
+    literal(8, 158) => constants[223];
+    literal(8, 225) => constants[224];
+    literal(8, 248) => constants[225];
+    literal(8, 152) => constants[226];
+    literal(8,  17) => constants[227];
+    literal(8, 105) => constants[228];
+    literal(8, 217) => constants[229];
+    literal(8, 142) => constants[230];
+    literal(8, 148) => constants[231];
+    literal(8, 155) => constants[232];
+    literal(8,  30) => constants[233];
+    literal(8, 135) => constants[234];
+    literal(8, 233) => constants[235];
+    literal(8, 206) => constants[236];
+    literal(8,  85) => constants[237];
+    literal(8,  40) => constants[238];
+    literal(8, 223) => constants[239];
+    literal(8, 140) => constants[240];
+    literal(8, 161) => constants[241];
+    literal(8, 137) => constants[242];
+    literal(8,  13) => constants[243];
+    literal(8, 191) => constants[244];
+    literal(8, 230) => constants[245];
+    literal(8,  66) => constants[246];
+    literal(8, 104) => constants[247];
+    literal(8,  65) => constants[248];
+    literal(8, 153) => constants[249];
+    literal(8,  45) => constants[250];
+    literal(8,  15) => constants[251];
+    literal(8, 176) => constants[252];
+    literal(8,  84) => constants[253];
+    literal(8, 187) => constants[254];
+    literal(8,  22) => constants[255];
+
+    i, constants => mux(aes_block_item, 256, 8) => o;
+}
