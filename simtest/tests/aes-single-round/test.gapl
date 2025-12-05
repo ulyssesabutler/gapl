@@ -77,7 +77,6 @@ function round_key(round_number: integer) previous_key: aes_block => current_key
         updated_key => current_key;
     }
 }
-
 function transpose() i: aes_block => o: aes_block
 {
     // Doing this recursively is hard
@@ -238,7 +237,7 @@ function single_round_aes_encrypt_block() i: aes_block, key: aes_block => o: aes
       => o;
 }
 
-function aes_encrypt() i: wire[128], key: wire[128] => o: wire[128]
+function test() i: wire[128], key: wire[128] => o: wire[128]
 {
     i => declare i_to_aes_block_node: to_aes_block() => declare i_block: aes_block;
     key => declare key_to_aes_block_node: to_aes_block() => declare key_block: aes_block;
@@ -247,53 +246,6 @@ function aes_encrypt() i: wire[128], key: wire[128] => o: wire[128]
     i_block, key_block
         => declare aes_encrypt_block_node: single_round_aes_encrypt_block()
         => o_block;
-}
-
-function reverse_byte_order() i: wire[256] => o: wire[256] {
-    i => vector_chunk(wire, 8, 32)
-      => reverse(wire[8], 32)
-      => vector_flatten(wire, 8, 32)
-      => o;
-}
-
-/* NETFPGA PACKET BODY PROCESSOR */
-
-interface netfpga_packet_body {
-    data: wire[256];
-    keep: boolean[32];
-    valid: boolean;
-    last: boolean;
-}
-
-function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
-    literal(128, 0) => declare key: wire[128];
-
-    declare encrypt_1_input:  wire[128];
-    declare encrypt_1_output: wire[128];
-    encrypt_1_input, key => declare aes_encrypt_1_node: aes_encrypt() => encrypt_1_output;
-
-    declare encrypt_2_input:  wire[128];
-    declare encrypt_2_output: wire[128];
-    encrypt_2_input, key => declare aes_encrypt_2_node: aes_encrypt() => encrypt_2_output;
-
-    declare input_register: register(netfpga_packet_body);
-    declare output_register: register(netfpga_packet_body);
-
-    i => input_register;
-    output_register => o;
-
-    input_register.data => declare reverse_input_data: reverse_byte_order();
-    declare reverse_output_data: reverse_byte_order() => output_register.data;
-
-    reverse_input_data[0:127] => encrypt_1_input;
-    reverse_input_data[128:255] => encrypt_2_input;
-
-    encrypt_1_output => reverse_output_data[0:127];
-    encrypt_2_output => reverse_output_data[128:255];
-
-    input_register.keep  => output_register.keep;
-    input_register.valid => output_register.valid;
-    input_register.last  => output_register.last;
 }
 
 function round_constant(round_number: integer) null => o: aes_block_column

@@ -134,6 +134,17 @@ function repeat(I: interface, factor: integer, operation: I => I) i: I => o: I {
 ```
 
 ```
+function reverse(I: interface, size: integer) i: I[size] => o: I[size] {
+    i[size - 1] => o[0];
+    i[0]        => o[size - 1];
+    
+    if (size > 2) {
+        i[1:size - 2] => reverse(I, size - 2) => o[1:size - 2];
+    }
+}
+```
+
+```
 function unpair(
     T: interface,
     U: interface,

@@ -70,7 +70,7 @@ for i in range(4):
 
 num_broadcast = 20
 
-test_cases = ["NOT AN EMAIL"] * 5 + ["AN@EMAIL.ADDRESS"] * 5 + ["NOT AN EMAIL"] * 10
+test_cases = ["00112233445566778899AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQRRSSTTUUVV"] * 5
 
 pkts = []
 for test_case in test_cases:

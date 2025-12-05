@@ -8,6 +8,7 @@ enum class StandardLibraryFunctions(val identifier: String) {
     INDEX_LIST("index_list"),
     REPLICATE("replicate"),
     REPEAT("repeat"),
+    REVERSE("reverse"),
     UNPAIR("unpair"),
     VECTOR_MAP("vector_map"),
     VECTOR_ZIP("vector_zip"),
@@ -84,6 +85,15 @@ function ${StandardLibraryFunctions.REPEAT.identifier}(I: interface, factor: int
         i => operation => ${StandardLibraryFunctions.REPEAT.identifier}(I, factor - 1, operation) => o;
     } else {
         i => operation => o;
+    }
+}
+
+function ${StandardLibraryFunctions.REVERSE.identifier}(I: interface, size: integer) i: I[size] => o: I[size] {
+    i[size - 1] => o[0];
+    i[0]        => o[size - 1];
+    
+    if (size > 2) {
+        i[1:size - 2] => ${StandardLibraryFunctions.REVERSE.identifier}(I, size - 2) => o[1:size - 2];
     }
 }
 
