@@ -1,0 +1,105 @@
+import java.util.Properties
+
+plugins {
+    base
+}
+
+val executableName = "generator"
+
+val sources = listOf(
+    "main.cpp",
+    "network/packet.cpp",
+    "network/socket.cpp",
+    "util/hex.cpp",
+    "util/options.cpp",
+    "util/string_utils.cpp",
+)
+
+val generatorBinary = layout.buildDirectory.file("bin/$executableName")
+val configFile = project.file("generator.properties")
+
+tasks.register<Exec>("buildGenerator") {
+    group = "build"
+    description = "Compile C++ traffic generator"
+
+    inputs.files(sources.map { file(it) })
+    outputs.file(generatorBinary)
+
+    doFirst {
+        val outFile = generatorBinary.get().asFile
+        outFile.parentFile.mkdirs()
+
+        val cmd = mutableListOf(
+            "g++",
+            "-pthread",
+            "-o",
+            outFile.absolutePath
+        ).apply {
+            addAll(sources)
+        }
+
+        commandLine(cmd)
+    }
+}
+
+tasks.named("build") {
+    dependsOn("buildGenerator")
+}
+
+fun loadGeneratorArgsFromConfig(): Pair<Boolean, List<String>> {
+    if (!configFile.exists()) {
+        throw GradleException(
+            "Config file not found: ${configFile.path}. " +
+                    "Create it with keys: txInterface, rxInterface, srcIp, dstIp, port[, useSudo]."
+        )
+    }
+
+    val props = Properties().apply {
+        configFile.inputStream().use { load(it) }
+    }
+
+    fun prop(name: String): String =
+        props.getProperty(name)
+            ?: throw GradleException("Missing '$name' in ${configFile.path}")
+
+    val useSudo = props.getProperty("useSudo")?.toBoolean() ?: false
+
+    val args = listOf(
+        "-t", prop("transmittingInterface"),
+        "-r", prop("receivingInterface"),
+        "-s", prop("sourceIP"),
+        "-d", prop("destinationIP"),
+        "-p", prop("port"),
+    )
+
+    return useSudo to args
+}
+
+tasks.register<Exec>("runGenerator") {
+    group = "application"
+    description = "Run the traffic generator using generator.properties"
+    dependsOn("buildGenerator")
+
+    // Changing the config should make Gradle rerun this
+    inputs.file(configFile)
+
+    workingDir = projectDir
+
+    doFirst {
+        val (useSudo, argsFromConfig) = loadGeneratorArgsFromConfig()
+        val exe = generatorBinary.get().asFile.absolutePath
+
+        // Allow an override via -PuseSudo if you want
+        val overrideUseSudo = (findProperty("useSudo") as String?)?.toBoolean()
+        val finalUseSudo = overrideUseSudo ?: useSudo
+
+        val cmd = buildList {
+            if (finalUseSudo) add("sudo")
+            add(exe)
+            addAll(argsFromConfig)
+        }
+
+        println("Running: ${cmd.joinToString(" ")}")
+        commandLine(cmd)
+    }
+}
