@@ -46,11 +46,11 @@ tasks.named("build") {
     dependsOn("buildGenerator")
 }
 
-fun loadGeneratorArgsFromConfig(): Pair<Boolean, List<String>> {
+fun loadGeneratorArgsFromConfig(): List<String> {
     if (!configFile.exists()) {
         throw GradleException(
             "Config file not found: ${configFile.path}. " +
-                    "Create it with keys: txInterface, rxInterface, srcIp, dstIp, port[, useSudo]."
+                    "Create it with keys: txInterface, rxInterface, srcIp, dstIp, port."
         )
     }
 
@@ -62,8 +62,6 @@ fun loadGeneratorArgsFromConfig(): Pair<Boolean, List<String>> {
         props.getProperty(name)
             ?: throw GradleException("Missing '$name' in ${configFile.path}")
 
-    val useSudo = props.getProperty("useSudo")?.toBoolean() ?: false
-
     val args = listOf(
         "-t", prop("transmittingInterface"),
         "-r", prop("receivingInterface"),
@@ -72,7 +70,7 @@ fun loadGeneratorArgsFromConfig(): Pair<Boolean, List<String>> {
         "-p", prop("port"),
     )
 
-    return useSudo to args
+    return args
 }
 
 tasks.register<Exec>("runGenerator") {
@@ -86,15 +84,10 @@ tasks.register<Exec>("runGenerator") {
     workingDir = projectDir
 
     doFirst {
-        val (useSudo, argsFromConfig) = loadGeneratorArgsFromConfig()
+        val argsFromConfig = loadGeneratorArgsFromConfig()
         val exe = generatorBinary.get().asFile.absolutePath
 
-        // Allow an override via -PuseSudo if you want
-        val overrideUseSudo = (findProperty("useSudo") as String?)?.toBoolean()
-        val finalUseSudo = overrideUseSudo ?: useSudo
-
         val cmd = buildList {
-            if (finalUseSudo) add("sudo")
             add(exe)
             addAll(argsFromConfig)
         }
