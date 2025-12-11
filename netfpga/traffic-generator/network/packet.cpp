@@ -125,14 +125,40 @@ void send_packet(int socket_fd, char* buffer, ssize_t data_size, const std::stri
     }
 }
 
-void receive_packet(int socket_fd, char* buffer, size_t buffer_size, ssize_t& data_size)
+bool receive_packet(int socket_fd, char* buffer, size_t buffer_size, ssize_t& data_size, int timeout_ms)
 {
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(socket_fd, &readfds);
+
+    struct timeval tv;
+    tv.tv_sec  = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+    // Wait for data to be available on the socket
+    int ret = select(socket_fd + 1, &readfds, nullptr, nullptr, &tv);
+    if (ret < 0)
+    {
+        perror("select failed");
+        exit(-1);
+    }
+
+    if (ret == 0)
+    {
+        // Timeout: no data available
+        data_size = 0;
+        return false;
+    }
+
+    // Data is ready to read
     data_size = recvfrom(socket_fd, buffer, buffer_size, 0, nullptr, nullptr);
     if (data_size < 0)
     {
         perror("Error receiving packet");
         exit(-1);
     }
+
+    return true; // successfully received a packet
 }
 
 // Thanks be to the bots

@@ -49,7 +49,11 @@ void transmit_thread(
     while (true)
     {
         ssize_t data_size;
-        receive_packet(socket_fd, buffer, sizeof(buffer), data_size);
+        if (!receive_packet(socket_fd, buffer, sizeof(buffer), data_size, 3000))
+        {
+            std::cout << interface_name << ": " << "Timed out waiting for packet" << std::endl;
+            return;
+        }
 
         const uint8_t* payload = nullptr;
         size_t payload_len = 0;
