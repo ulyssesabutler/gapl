@@ -31,7 +31,7 @@ void transmit_thread(
 
         std::cout << interface_name << ": "
             << "Sending packet " << msg << ", " << packet_size << " bytes of data: "
-            << buffer_to_hex(buffer, packet_size) << std::endl;
+            << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), packet_size) << std::endl;
 
         // Send the packet
         send_packet(socket_fd, buffer, packet_size, dest_ip, port);
@@ -50,11 +50,24 @@ void transmit_thread(
         ssize_t data_size;
         receive_packet(socket_fd, buffer, sizeof(buffer), data_size);
 
-        if (is_filtered_packet(buffer, data_size)) continue;
+        const uint8_t* payload = nullptr;
+        size_t payload_len = 0;
+        uint16_t src_port = 0;
+        uint16_t dst_port = 0;
+
+        // 1) Drop anything that's not IPv4+UDP
+        if (!extract_udp_payload(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(data_size), payload, payload_len, src_port, dst_port))
+            continue;
+
+        if (is_dhcp_packet(src_port, dst_port))
+            continue;
 
         std::cout << interface_name << ": "
             << "Received " << data_size << " bytes of data: "
-            << buffer_to_hex(buffer, data_size) << std::endl;
+            << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size)
+            << " Body: "
+            << buffer_to_hex(payload, payload_len)
+            << std::endl;
     }
 }
 

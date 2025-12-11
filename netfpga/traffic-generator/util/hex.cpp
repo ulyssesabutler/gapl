@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-std::string buffer_to_hex(char* buffer, ssize_t buffer_size)
+std::string buffer_to_hex(const uint8_t* buffer, ssize_t buffer_size)
 {
     std::stringstream ss;
     for (size_t i = 0; i < buffer_size; ++i)

@@ -4,14 +4,16 @@
 
 #include "packet.h"
 
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-#include <arpa/inet.h>
-#include <net/ethernet.h>
+#include <algorithm>
 #include <string>
 #include <cstring>
 #include <cstdint>
 #include <vector>
+#include <netinet/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <arpa/inet.h>
+#include <net/ethernet.h>
 
 uint16_t checksum16(const void* data, size_t len) {
     const uint8_t* p = static_cast<const uint8_t*>(data);
@@ -192,5 +194,95 @@ bool is_filtered_packet(const char* buffer, size_t length)
         return true; // it's a DHCP packet
     }
 
+    return false;
+}
+
+bool extract_udp_payload(
+    const uint8_t* frame,
+    size_t len,
+    const uint8_t*& payload,
+    size_t& payload_len,
+    uint16_t& src_port,
+    uint16_t& dst_port
+) {
+    // 1. Ethernet header
+    if (len < sizeof(ethhdr)) {
+        return false;
+    }
+
+    ethhdr eth{};
+    std::memcpy(&eth, frame, sizeof(eth));
+
+    uint16_t eth_type = ntohs(eth.h_proto);
+    if (eth_type != ETH_P_IP) {
+        // Not IPv4
+        return false;
+    }
+
+    size_t offset = sizeof(ethhdr);
+
+    // 2. IPv4 header
+    if (len < offset + sizeof(iphdr)) {
+        return false;
+    }
+
+    iphdr ip{};
+    std::memcpy(&ip, frame + offset, sizeof(ip));
+
+    if (ip.version != 4) {
+        return false;
+    }
+
+    if (ip.ihl < 5) { // ihl is in 32-bit words
+        return false;
+    }
+
+    if (ip.protocol != IPPROTO_UDP) {
+        // Not UDP
+        return false;
+    }
+
+    size_t ip_header_len = static_cast<size_t>(ip.ihl) * 4;
+    if (len < offset + ip_header_len + sizeof(udphdr)) {
+        return false;
+    }
+
+    offset += ip_header_len;
+
+    // 3. UDP header
+    udphdr udp{};
+    std::memcpy(&udp, frame + offset, sizeof(udp));
+
+    src_port = ntohs(udp.uh_sport);
+    dst_port = ntohs(udp.uh_dport);
+
+    // 4. Payload
+    offset += sizeof(udphdr);
+    if (len < offset) {
+        return false;
+    }
+
+    // UDP length from header (includes UDP header)
+    uint16_t udp_len = ntohs(udp.uh_ulen);
+    size_t max_payload_by_len = 0;
+
+    if (udp_len >= sizeof(udphdr)) {
+        max_payload_by_len = static_cast<size_t>(udp_len) - sizeof(udphdr);
+    }
+
+    // Actual bytes available in this captured frame
+    size_t available = len - offset;
+
+    // Payload length is the smaller of what header claims and what we captured
+    payload_len = std::min(max_payload_by_len, available);
+    payload = frame + offset;
+
+    return true;
+}
+
+bool is_dhcp_packet(uint16_t src_port, uint16_t dst_port)
+{
+    if (src_port == 67 || src_port == 68) return true;
+    if (dst_port == 67 || dst_port == 68) return true;
     return false;
 }

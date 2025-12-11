@@ -15,6 +15,14 @@ void create_padded_udp_packet(char* buffer, const std::string& src_ip_addr, cons
 void send_packet(int socket_fd, char* buffer, ssize_t data_size, const std::string& dest_ip_addr, uint dest_port);
 void receive_packet(int socket_fd, char* buffer, size_t buffer_size, ssize_t& data_size);
 
-bool is_filtered_packet(const char* buffer, size_t length);
+bool extract_udp_payload(
+    const uint8_t* frame,
+    size_t len,
+    const uint8_t*& payload,
+    size_t& payload_len,
+    uint16_t& src_port,
+    uint16_t& dst_port
+);
+bool is_dhcp_packet(uint16_t src_port, uint16_t dst_port);
 
 #endif //TRAFFIC_GENERATOR_PACKET_H
