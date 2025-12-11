@@ -280,6 +280,27 @@ bool extract_udp_payload(
     return true;
 }
 
+bool extract_padded_udp_payload(
+    const uint8_t* frame,
+    size_t len,
+    const uint8_t*& payload,
+    size_t& payload_len,
+    uint16_t& src_port,
+    uint16_t& dst_port
+) {
+        if (!extract_udp_payload(frame, len, payload, payload_len, src_port, dst_port))
+            return false;
+
+        size_t header_size = len - payload_len;
+        size_t padding = (32 - (header_size % 32)) % 32;
+
+        if (payload_len <= padding) return false;
+
+        payload_len -= padding;
+        payload += padding;
+        return true;
+}
+
 bool is_dhcp_packet(uint16_t src_port, uint16_t dst_port)
 {
     if (src_port == 67 || src_port == 68) return true;

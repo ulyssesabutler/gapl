@@ -23,6 +23,14 @@ bool extract_udp_payload(
     uint16_t& src_port,
     uint16_t& dst_port
 );
+bool extract_padded_udp_payload(
+    const uint8_t* frame,
+    size_t len,
+    const uint8_t*& payload,
+    size_t& payload_len,
+    uint16_t& src_port,
+    uint16_t& dst_port
+);
 bool is_dhcp_packet(uint16_t src_port, uint16_t dst_port);
 
 #endif //TRAFFIC_GENERATOR_PACKET_H

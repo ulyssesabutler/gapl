@@ -56,7 +56,7 @@ void transmit_thread(
         uint16_t dst_port = 0;
 
         // 1) Drop anything that's not IPv4+UDP
-        if (!extract_udp_payload(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(data_size), payload, payload_len, src_port, dst_port))
+        if (!extract_padded_udp_payload(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(data_size), payload, payload_len, src_port, dst_port))
             continue;
 
         if (is_dhcp_packet(src_port, dst_port))
