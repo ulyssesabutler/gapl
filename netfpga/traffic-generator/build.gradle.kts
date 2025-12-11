@@ -17,6 +17,8 @@ val sources = listOf(
 
 val generatorBinary = layout.buildDirectory.file("bin/$executableName")
 val configFile = project.file("generator.properties")
+val testInputs = findProperty("testInputs") as String?
+val testExpectedOutputs = findProperty("testExpectedOutputs") as String?
 
 tasks.register<Exec>("buildGenerator") {
     group = "build"
@@ -70,7 +72,10 @@ fun loadGeneratorArgsFromConfig(): List<String> {
         "-p", prop("port"),
     )
 
-    return args
+    val inputs = (testInputs?.split(",") ?: emptyList()).flatMap { listOf("-i", it) }
+    val expectedOutputs = (testExpectedOutputs?.split(",") ?: emptyList()).flatMap { listOf("-o", it) }
+
+    return args + inputs + expectedOutputs
 }
 
 tasks.register<Exec>("runGenerator") {

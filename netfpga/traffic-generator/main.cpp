@@ -8,19 +8,22 @@
 #include "util/hex.h"
 #include "util/options.h"
 
-void transmit_thread(int socket_fd, const std::string interface_name, const std::string& src_ip, const std::string& dest_ip, uint port)
-{
+void transmit_thread(
+    int socket_fd,
+    const std::string interface_name,
+    const std::string& src_ip,
+    const std::string& dest_ip,
+    uint port,
+    const std::vector<std::string>& messages
+) {
     char buffer[65536];
-
-    std::vector<std::string> messages;
-
-    messages.insert(messages.end(), 1, std::string("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"));
-    messages.insert(messages.end(), 1, std::string("012345ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
 
     for (const auto& msg : messages)
     {
-        const char* data = msg.data();         // pointer to the string bytes
-        const size_t data_size = msg.size();   // number of bytes
+        std::vector<uint8_t> hex_data = string_to_hex(msg);
+
+        const char* data = reinterpret_cast<const char*>(hex_data.data());
+        const size_t data_size = hex_data.size();
 
         // Create the packet
         size_t packet_size = 0;
@@ -35,8 +38,11 @@ void transmit_thread(int socket_fd, const std::string interface_name, const std:
     }
 }
 
-[[noreturn]] void receive_thread(int socket_fd, const std::string& interface_name)
-{
+[[noreturn]] void receive_thread(
+    int socket_fd,
+    const std::string& interface_name,
+    const std::vector<std::string>& expected_messages
+) {
     char buffer[65536];
 
     while (true)
@@ -63,7 +69,7 @@ int main(int argc, char** argv)
     for (const std::string& interface_name: options.receive_interfaces)
     {
         std::cout << "  Creating receiver for " << interface_name << std::endl;
-        receivers.emplace_back(receive_thread, create_receive_socket(interface_name), interface_name);
+        receivers.emplace_back(receive_thread, create_receive_socket(interface_name), interface_name, options.expected_outputs);
         std::cout << "    Done" << std::endl;
     }
 
@@ -77,7 +83,8 @@ int main(int argc, char** argv)
         interface_name,
         options.src_ip_addr,
         options.dest_ip_addr,
-        options.port
+        options.port,
+        options.inputs
     );
     std::cout << "    Done" << std::endl;
 

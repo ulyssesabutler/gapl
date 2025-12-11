@@ -14,6 +14,8 @@ typedef struct
     std::string transmit_interface;
     std::string src_ip_addr;
     std::string dest_ip_addr;
+    std::vector<std::string> inputs;
+    std::vector<std::string> expected_outputs;
     int port;
 } options;
 
