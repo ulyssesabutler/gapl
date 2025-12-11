@@ -16,7 +16,7 @@ void print_options(const options& opts)
     std::cout << "  Source IP Address:       " << opts.src_ip_addr << std::endl;
     std::cout << "  Destination IP Address:  " << opts.dest_ip_addr << std::endl;
     std::cout << "  Port:                    " << opts.port << std::endl;
-    std::cout << "  Inputs:                   " << vec_to_string(opts.inputs) << std::endl;
+    std::cout << "  Inputs:                  " << vec_to_string(opts.inputs) << std::endl;
     std::cout << "  Expected Outputs:        " << vec_to_string(opts.expected_outputs) << std::endl;
 }
 
