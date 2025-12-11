@@ -90,7 +90,7 @@ void receive_thread(
             << "  Full Packet:      " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size) << '\n'
             << "  Message:          " << buffer_to_hex(payload, payload_len) << '\n'
             << "  Expected Message: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(expected_data), expected_data_size) << '\n'
-            << "  Match?:           " << do_messages_match << '\n';
+            << "  Match?:           " << (do_messages_match ? "yes" : "no") << '\n';
 
         std::cout << log_string.str() << std::flush;
     }
