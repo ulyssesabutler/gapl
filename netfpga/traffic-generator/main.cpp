@@ -30,10 +30,14 @@ void transmit_thread(
         size_t packet_size = 0;
         create_padded_udp_packet(buffer, src_ip, dest_ip, port, port, data, data_size, packet_size);
 
-        std::cout << interface_name << ": "
+        std::stringstream log_string;
+
+        log_string << interface_name << ": "
             << "Sending " << packet_size << " bytes of data: " << '\n'
             << "  Full Packet: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), packet_size) << '\n'
-            << "  Message:     " << buffer_to_hex(reinterpret_cast<const uint8_t*>(data), data_size) << std::endl;
+            << "  Message:     " << buffer_to_hex(reinterpret_cast<const uint8_t*>(data), data_size) << '\n';
+
+        std::cout << log_string.str() << std::flush;
 
         // Send the packet
         send_packet(socket_fd, buffer, packet_size, dest_ip, port);
@@ -79,12 +83,16 @@ void receive_thread(
 
         if (!do_messages_match) any_failures = true;
 
-        std::cout << interface_name << ": "
+        std::stringstream log_string;
+
+        log_string << interface_name << ": "
             << "Received " << data_size << " bytes of data: " << '\n'
             << "  Full Packet:      " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size) << '\n'
             << "  Message:          " << buffer_to_hex(payload, payload_len) << '\n'
             << "  Expected Message: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(expected_data), expected_data_size) << '\n'
-            << "  Match?:           " << do_messages_match << std::endl;
+            << "  Match?:           " << do_messages_match << '\n';
+
+        std::cout << log_string.str() << std::flush;
     }
 }
 
