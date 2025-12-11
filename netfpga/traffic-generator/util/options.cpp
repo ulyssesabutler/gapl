@@ -43,7 +43,7 @@ options get_options(int argc, char** argv)
     std::string port;
 
     int input;
-    while ((input = getopt(argc, argv, "s:d:t:r:p:h:i:o")) != -1)
+    while ((input = getopt(argc, argv, "s:d:t:r:p:i:o:h")) != -1)
     {
         switch (input)
         {
