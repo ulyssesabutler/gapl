@@ -2,6 +2,7 @@
 #include <thread>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 #include "network/socket.h"
 #include "network/packet.h"
@@ -32,26 +33,33 @@ void transmit_thread(
         std::cout << interface_name << ": "
             << "Sending " << packet_size << " bytes of data: " << '\n'
             << "  Full Packet: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), packet_size) << '\n'
-            << "  Message: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(data), data_size) << std::endl;
+            << "  Message:     " << buffer_to_hex(reinterpret_cast<const uint8_t*>(data), data_size) << std::endl;
 
         // Send the packet
         send_packet(socket_fd, buffer, packet_size, dest_ip, port);
     }
 }
 
-[[noreturn]] void receive_thread(
+void receive_thread(
     int socket_fd,
     const std::string& interface_name,
-    const std::vector<std::string>& expected_messages
+    const std::vector<std::string>& expected_messages,
+    bool& any_failures
 ) {
     char buffer[65536];
 
-    while (true)
+    for (const auto& expected_message : expected_messages)
     {
+        std::vector<uint8_t> expected_output_hex_data = string_to_hex(expected_message);
+
+        const char* expected_data = reinterpret_cast<const char*>(expected_output_hex_data.data());
+        const size_t expected_data_size = expected_output_hex_data.size();
+
         ssize_t data_size;
         if (!receive_packet(socket_fd, buffer, sizeof(buffer), data_size, 3000))
         {
             std::cout << interface_name << ": " << "Timed out waiting for packet" << std::endl;
+            any_failures = true;
             return;
         }
 
@@ -67,15 +75,23 @@ void transmit_thread(
         if (is_dhcp_packet(src_port, dst_port))
             continue;
 
+        bool do_messages_match = (payload_len == expected_data_size) && (memcmp(payload, expected_data, payload_len) == 0);
+
+        if (!do_messages_match) any_failures = true;
+
         std::cout << interface_name << ": "
             << "Received " << data_size << " bytes of data: " << '\n'
-            << "  Full Packet: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size) << '\n'
-            << "  Message: " << buffer_to_hex(payload, payload_len) << std::endl;
+            << "  Full Packet:      " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size) << '\n'
+            << "  Message:          " << buffer_to_hex(payload, payload_len) << '\n'
+            << "  Expected Message: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(expected_data), expected_data_size) << '\n'
+            << "  Match?:           " << do_messages_match << std::endl;
     }
 }
 
 int main(int argc, char** argv)
 {
+    bool any_receiver_failures = false;
+
     options options = get_options(argc, argv);
     std::cout << "Using parameters..." << std::endl;
     print_options(options);
@@ -85,7 +101,7 @@ int main(int argc, char** argv)
     for (const std::string& interface_name: options.receive_interfaces)
     {
         std::cout << "  Creating receiver for " << interface_name << std::endl;
-        receivers.emplace_back(receive_thread, create_receive_socket(interface_name), interface_name, options.expected_outputs);
+        receivers.emplace_back(receive_thread, create_receive_socket(interface_name), interface_name, options.expected_outputs, std::ref(any_receiver_failures));
         std::cout << "    Done" << std::endl;
     }
 
@@ -107,5 +123,5 @@ int main(int argc, char** argv)
     for (std::thread& receiver: receivers) receiver.join();
     transmitter.join();
 
-    return 0;
+    return any_receiver_failures ? 1 : 0;
 }
