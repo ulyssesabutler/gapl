@@ -30,8 +30,9 @@ void transmit_thread(
         create_padded_udp_packet(buffer, src_ip, dest_ip, port, port, data, data_size, packet_size);
 
         std::cout << interface_name << ": "
-            << "Sending packet " << msg << ", " << packet_size << " bytes of data: "
-            << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), packet_size) << std::endl;
+            << "Sending " << packet_size << " bytes of data: " << '\n'
+            << "  Full Packet: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), packet_size) << '\n'
+            << "  Message: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(data), data_size) << std::endl;
 
         // Send the packet
         send_packet(socket_fd, buffer, packet_size, dest_ip, port);
@@ -63,11 +64,9 @@ void transmit_thread(
             continue;
 
         std::cout << interface_name << ": "
-            << "Received " << data_size << " bytes of data: "
-            << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size)
-            << " Body: "
-            << buffer_to_hex(payload, payload_len)
-            << std::endl;
+            << "Received " << data_size << " bytes of data: " << '\n'
+            << "  Full Packet: " << buffer_to_hex(reinterpret_cast<const uint8_t*>(buffer), data_size) << '\n'
+            << "  Message: " << buffer_to_hex(payload, payload_len) << std::endl;
     }
 }
 
