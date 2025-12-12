@@ -343,9 +343,9 @@ tasks.register<Exec>("runSimulation") {
     dependsOn("installGaplVerilog")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
-    val major = (findProperty("major") as String?) ?: "simple"
-    val minor = (findProperty("minor") as String?) ?: "padded"
-    val gui   = ((findProperty("gui") as String?) ?: "true").toBoolean()
+    val major = (findProperty("netfpgaSimTestMajor") as String?) ?: "simple"
+    val minor = (findProperty("netfpgaSimTestMinor") as String?) ?: "padded"
+    val gui   = ((findProperty("netfpgaSimTestGui") as String?) ?: "true").toBoolean()
 
     val guiFlag = if (gui) "--gui" else ""
 

@@ -180,7 +180,7 @@ def make_UDP_pkt(body=None, src_port=None, dst_port=None, **kwargs):
 ############################
 def make_padded_UDP_pkt(body=None, pad_left=22, **kwargs):
     padded = (b"\x00" * pad_left) + make_payload(body)
-    return make_UDP_pkt(body=padded, **kwargs)
+    return make_UDP_pkt(body=padded, checksum=0, **kwargs)
 
 ############################
 # Function: make_VLAN_pkt
