@@ -22,5 +22,5 @@ include(
     "gapl-example", // Use compiler to convert this gapl code into verilog
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
     "netfpga", // Use generated verilog, along with a test harness, to test design on NetFPGA
-    "netfpga:traffic-generator"
+    "netfpga:hw-test"
 )

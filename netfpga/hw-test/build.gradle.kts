@@ -20,7 +20,7 @@ val configFile = project.file("generator.properties")
 val testInputs = findProperty("testInputs") as String?
 val testExpectedOutputs = findProperty("testExpectedOutputs") as String?
 
-tasks.register<Exec>("buildGenerator") {
+tasks.register<Exec>("buildTest") {
     group = "build"
     description = "Compile C++ traffic generator"
 
@@ -45,7 +45,7 @@ tasks.register<Exec>("buildGenerator") {
 }
 
 tasks.named("build") {
-    dependsOn("buildGenerator")
+    dependsOn("buildTest")
 }
 
 fun loadGeneratorArgsFromConfig(): List<String> {
@@ -78,10 +78,10 @@ fun loadGeneratorArgsFromConfig(): List<String> {
     return args + inputs + expectedOutputs
 }
 
-tasks.register<Exec>("runGenerator") {
+tasks.register<Exec>("runTest") {
     group = "application"
     description = "Run the traffic generator using generator.properties"
-    dependsOn("buildGenerator")
+    dependsOn("buildTest")
 
     // Changing the config should make Gradle rerun this
     inputs.file(configFile)
