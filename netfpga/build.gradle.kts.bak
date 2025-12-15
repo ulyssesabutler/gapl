@@ -93,9 +93,6 @@ fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension +
 val compilerPath = project(":compiler")
     .layout.buildDirectory.file("install/gapl/bin/gapl")
 
-val testInputs = findProperty("testInputs") as String?
-val testExpectedOutputs = findProperty("testExpectedOutputs") as String?
-
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
 
@@ -415,119 +412,6 @@ tasks.register<Exec>("makeClean") {
         make -s -C "${'$'}SUME_FOLDER" clean
         make -s -C "${'$'}NF_DESIGN_DIR" clean
     """.trimIndent()))
-}
-
-val verilatorBin = optPropOrEnv("verilator", "VERILATOR", "verilator")!!
-
-val kernelTestDir = layout.projectDirectory.dir("kernel-test").asFile
-val kernelTestMain = kernelTestDir.resolve("test.cpp")
-
-fun inferVerilatorTopFromMain(main: File): String {
-    if (!main.exists()) throw GradleException("kernel-test test.cpp not found at ${main.absolutePath}")
-    val text = main.readText()
-    val m = Regex("#include\\s+\\\"V([A-Za-z_][A-Za-z0-9_]*)\\.h\\\"").find(text)
-    return m?.groupValues?.get(1)
-        ?: throw GradleException(
-            "Could not infer Verilator top module from ${main.absolutePath}. " +
-                "Expected an include like #include \"V<top>.h\". " +
-                "Pass -PverilatorTop=<top-module> to override."
-        )
-}
-
-val kernelTestCppSources = fileTree(kernelTestDir) {
-    include("**/*.cpp")
-}.files.sortedBy { it.absolutePath }
-
-val kernelTestHeaders = fileTree(kernelTestDir) {
-    include("**/*.h", "**/*.hpp")
-}.files.sortedBy { it.absolutePath }
-
-val verilatorKernelOutDir = layout.buildDirectory.dir("verilator/kernel-test")
-val verilatorKernelExe = verilatorKernelOutDir.map { it.asFile.resolve("kernel_test") }
-
-tasks.register<Exec>("buildKernelTest") {
-    group = "verilator"
-    description = "Build kernel-test Verilator executable from generated GAPL Verilog + C++ wrapper"
-    dependsOn("generateGaplVerilog")
-
-    val vProcProvider = gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) }
-
-    inputs.files(vProcProvider)
-    inputs.files(kernelTestCppSources)
-    inputs.files(kernelTestHeaders)
-    outputs.file(verilatorKernelExe)
-
-    doFirst {
-        val outDir = verilatorKernelOutDir.get().asFile
-        outDir.mkdirs()
-
-        val top = "packet_body_processor"
-
-        val vProc = vProcProvider.get()
-
-        val cppArgs = kernelTestCppSources.joinToString(" ") { "\"${it.absolutePath}\"" }
-        val incDirs = listOf(
-            kernelTestDir,
-            kernelTestDir.resolve("util")
-        ).filter { it.exists() }
-            .joinToString(" ") { "-I\\\"${it.absolutePath}\\\"" }
-
-        commandLine(bash("""
-            set -euo pipefail
-
-            "$verilatorBin" --version
-
-            # Build into: $outDir
-            "$verilatorBin" -Wall -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL --trace --cc \
-              --top-module "$top" \
-              --Mdir "$outDir" \
-              "$vProc" \
-              --exe $cppArgs \
-              -CFLAGS "-std=c++17 $incDirs" \
-              --build -j 0 \
-              -o kernel_test
-        """.trimIndent()))
-    }
-}
-
-tasks.register<Exec>("runKernelTest") {
-    group = "verilator"
-    description = "Run kernel-test executable built with Verilator"
-    dependsOn("buildKernelTest")
-    outputs.upToDateWhen { false } // always run
-
-    doFirst {
-        val outDir = verilatorKernelOutDir.get().asFile
-        val exe = verilatorKernelExe.get()
-        if (!exe.exists()) throw GradleException("kernel-test executable not found at ${exe.absolutePath}")
-
-        // Read properties at execution time (so -P... works reliably)
-        val testInputsProp = (project.findProperty("testInputs") as String?)?.trim().orEmpty()
-        val testExpectedProp = (project.findProperty("testExpectedOutputs") as String?)?.trim().orEmpty()
-
-        fun splitCsv(s: String): List<String> =
-            s.split(',')
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-
-        val inputs = splitCsv(testInputsProp)
-        val expected = splitCsv(testExpectedProp)
-
-        // Waveform output (VCD, since --trace)
-        val waveFile = layout.buildDirectory
-            .file("verilator/kernel-test/kernel_test.vcd")
-            .get().asFile
-        waveFile.parentFile.mkdirs()
-
-        // Build argv: -i <...> ... -o <...> ... -w <file>
-        val args = mutableListOf<String>()
-        inputs.forEach { args += listOf("-i", it) }
-        expected.forEach { args += listOf("-o", it) }
-        args += listOf("-w", waveFile.absolutePath)
-
-        workingDir = outDir
-        commandLine(listOf(exe.absolutePath) + args)
-    }
 }
 
 // Wire lifecycle
