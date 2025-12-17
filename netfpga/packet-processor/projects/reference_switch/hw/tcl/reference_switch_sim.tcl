@@ -166,6 +166,7 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/find_last_bit.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/ones_complement_addition.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/ones_complement_sum.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/processor_controller.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/reverse_bytes.v"
 
 # util/datatype/
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/util/datatype/reverse_byte_order.v"
@@ -206,7 +207,7 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_processor.v"
 
 # GAPL: Ensure gradle.properties, reference_switch_sim.tcl, create_project.tcl are updated together
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/GAPLprocessor.v"
-read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/GAPLwrapper.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/gapl_wrapper.v"
 
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/nf_datapath.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_sim.v"

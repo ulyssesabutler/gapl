@@ -140,6 +140,7 @@ read_verilog "./hdl/util/find_last_bit.v"
 read_verilog "./hdl/util/ones_complement_addition.v"
 read_verilog "./hdl/util/ones_complement_sum.v"
 read_verilog "./hdl/util/processor_controller.v"
+read_verilog "./hdl/util/reverse_bytes.v"
 
 # util/datatype/
 read_verilog "./hdl/util/datatype/reverse_byte_order.v"
@@ -180,7 +181,7 @@ read_verilog "./hdl/packet_processor/packet_processor.v"
 
 # GAPL: Ensure gradle.properties, reference_switch_sim.tcl, create_project.tcl are updated together
 read_verilog "./hdl/GAPLprocessor.v"
-read_verilog "./hdl/GAPLwrapper.v"
+read_verilog "./hdl/gapl_wrapper.v"
 
 read_verilog "./hdl/nf_datapath.v"
 read_verilog "./hdl/top.v"

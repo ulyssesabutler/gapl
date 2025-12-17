@@ -80,10 +80,6 @@ val gaplTargetFile = File(gaplSrcRoot, "processor.gapl").also {
     if (!it.exists()) throw GradleException("Missing .gapl file under src/$programName (looked at ${it.absolutePath})")
 }
 
-val gaplWrapperFile = File(gaplSrcRoot, "wrapper.v").also {
-    if (!it.exists()) throw GradleException("Missing .v wrapper file under src/$programName (looked at ${it.absolutePath})")
-}
-
 // Output directory for generated Verilog
 val gaplVerilogOut = layout.buildDirectory.dir("verilog")
 
@@ -142,7 +138,7 @@ tasks.register("generateGaplVerilog") {
     dependsOn(":compiler:installDist")
 
     // Incremental inputs/outputs
-    inputs.files(gaplTargetFile, gaplWrapperFile)
+    inputs.files(gaplTargetFile)
     outputs.dir(gaplVerilogOut)
 
     doLast {
@@ -183,10 +179,6 @@ tasks.register("generateGaplVerilog") {
             println("--------------------------------")
             throw GradleException("${gaplTargetFile.absolutePath} failed to compile")
         }
-
-        val wrapperOutFile = outDir.resolve(targetVerilogName(gaplWrapperFile))
-        println("Copying ${gaplWrapperFile.relativeTo(gaplSrcRoot)} -> ${wrapperOutFile.name}")
-        gaplWrapperFile.copyTo(wrapperOutFile, overwrite = true)
     }
 }
 
@@ -200,19 +192,14 @@ tasks.register<Copy>("installGaplVerilog") {
     from(provider {
         outDirProvider.get().asFile.resolve(targetVerilogName(gaplTargetFile))
     })
-    from(provider {
-        outDirProvider.get().asFile.resolve(targetVerilogName(gaplWrapperFile))
-    })
     into(provider { file("$nfDesignDir/hw/hdl") })
 
     // Incremental wiring
     inputs.files(
         outDirProvider.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) },
-        outDirProvider.map { it.asFile.resolve(targetVerilogName(gaplWrapperFile)) },
     )
     outputs.files(
         file("$nfDesignDir/hw/hdl/${targetVerilogName(gaplTargetFile)}"),
-        file("$nfDesignDir/hw/hdl/${targetVerilogName(gaplWrapperFile)}"),
     )
 }
 
@@ -388,10 +375,9 @@ tasks.register<Delete>("uninstallGaplVerilog") {
             return@doFirst
         }
 
-        val wrapperInstalled = nfHdlDir.resolve(targetVerilogName(gaplWrapperFile))
         val processorInstalled = nfHdlDir.resolve(targetVerilogName(gaplTargetFile))
 
-        listOf(wrapperInstalled, processorInstalled).forEach { f ->
+        listOf(processorInstalled).forEach { f ->
             if (f.exists()) {
                 println("[uninstallGaplVerilog] Deleting ${f.relativeToOrSelf(nfHdlDir)}")
                 delete(f)

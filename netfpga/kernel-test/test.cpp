@@ -148,21 +148,23 @@ std::vector<OutputInterface> make_expected_outputs(const std::vector<std::string
 }
 
 static void default_inputs(Vpacket_body_processor* top) {
-    for (int w = 0; w < 4; ++w) top->i__024data[w] = 0;
-    top->i__024keep = 0;
-    top->i__024last = false;
+    for (int w = 0; w < 8; ++w) top->i__024data[w] = 0;
+    top->i__024valid = false;
+    top->i__024keep  = 0;
+    top->i__024last  = false;
 }
 
 static void drive_inputs(Vpacket_body_processor* top, const InputInterface& in) {
-    for (int w = 0; w < 4; ++w) top->i__024data[w] = in.data[w];
-    top->i__024keep = in.keep;
-    top->i__024last = in.last;
+    for (int w = 0; w < 8; ++w) top->i__024data[w] = in.data[w];
+    top->i__024valid = true;
+    top->i__024keep  = in.keep;
+    top->i__024last  = in.last;
 }
 
 static OutputInterface capture_output(Vpacket_body_processor* top) {
     OutputInterface out;
 
-    for (int w = 0; w < 4; ++w) out.data[w] = top->o__024data[w];
+    for (int w = 0; w < 8; ++w) out.data[w] = top->o__024data[w];
     out.keep = top->o__024keep;
     out.last = top->o__024last;
 
@@ -172,7 +174,8 @@ static OutputInterface capture_output(Vpacket_body_processor* top) {
 // Simulation function
 std::vector<OutputInterface> simulate(
     Vpacket_body_processor* top,
-    const std::vector<InputInterface>& inputs
+    const std::vector<InputInterface>& inputs,
+    size_t expected_output_count
 ) {
     std::vector<OutputInterface> outputs;
     
@@ -187,14 +190,42 @@ std::vector<OutputInterface> simulate(
 
     OutputInterface currentOutput;
 
-    for (const auto& in : inputs) {
-        drive_inputs(top, in);
+    size_t current_input_index = 0;
+    size_t expected_outputs_remaining = expected_output_count;
+    size_t waiting_clock_cycles_remaining = 100;
+    size_t clock_cycle = 0;
+
+    while (expected_outputs_remaining > 0 && waiting_clock_cycles_remaining > 0) {
+        // Inputs
+        if (current_input_index < inputs.size()) {
+            std::cout << "Input " << current_input_index << ":\n"
+                << "  Clock Cycle: " << clock_cycle << '\n'
+                << "  Data:        " << nf_data_to_string(inputs[current_input_index].data) << std::endl;
+
+            drive_inputs(top, inputs[current_input_index]);
+            ++current_input_index;
+        } else {
+            default_inputs(top);
+        }
+
+        // Tick
         tick(top);
+        clock_cycle++;
 
-        outputs.push_back(capture_output(top));
+        // Outputs
+        if (top->o__024valid) {
+            std::cout << "Output " << outputs.size() << ":\n"
+                << "  Clock Cycle: " << clock_cycle << '\n'
+                << "  Data:        " << nf_data_to_string(capture_output(top).data) << std::endl;
 
-        default_inputs(top);
+            outputs.push_back(capture_output(top));
+            expected_outputs_remaining--;
+        } else {
+            waiting_clock_cycles_remaining--;
+        }
     }
+
+    std::cout << "Finished simulation after " << clock_cycle << " clock cycles" << std::endl;
 
     return outputs;
 }
@@ -204,29 +235,41 @@ bool check_simulation_success(
     const std::vector<OutputInterface>& expected,
     const std::vector<OutputInterface>& outputs
 ) {
+    bool simulation_success = true;
+
     if (expected.size() != outputs.size()) {
-        std::cerr << "Test Error: expected and outputs size mismatch\n";
+        std::cerr << "Test Error: expected and outputs size mismatch\n"
+            << "  Expected: " << expected.size() << '\n'
+            << "  Actual:   " << outputs.size() << std::endl;
+
         return false;
     }
 
     for (std::size_t i = 0; i < expected.size(); ++i) {
-        const auto& exp = expected[i];
-        const auto& out = outputs[i];
+        std::cout << "Output " << i << std::endl;
+
+        const auto& exp = expected[i].data;
+        const auto& out = outputs[i].data;
 
         bool doesOutputMatchExpected = true;
 
-        for (std::size_t w = 0; i < 4; i++)
-            if (expected[w] != outputs[w]) doesOutputMatchExpected = false;
+        for (std::size_t w = 0; w < 8; w++)
+            if (exp[w] != out[w]) doesOutputMatchExpected = false;
 
-        /*
         if (!doesOutputMatchExpected) {
             std::cerr << "Test Error: At output " << i << '\n'
-                << "  Expected: " <<
+                << "  Expected: " << nf_data_to_string(exp) << '\n'
+                << "  Actual:   " << nf_data_to_string(out) << std::endl;
+
+            simulation_success = false;
+        } else {
+            std::cerr << "Test Success: At output " << i << '\n'
+                << "  Expected: " << nf_data_to_string(exp) << '\n'
+                << "  Actual:   " << nf_data_to_string(out) << std::endl;
         }
-        */
     }
 
-    return true;
+    return simulation_success;
 }
 
 int main(int argc, char** argv) {
@@ -250,7 +293,7 @@ int main(int argc, char** argv) {
     std::vector<OutputInterface> expected_outputs = make_expected_outputs(options.expected_outputs);
 
     // 3) Simulate
-    std::vector<OutputInterface> outputs = simulate(top, inputs);
+    std::vector<OutputInterface> outputs = simulate(top, inputs, expected_outputs.size());
 
     top->final();
 
