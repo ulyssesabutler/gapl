@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import java.util.Properties
 
 plugins { base }
 
@@ -89,8 +90,13 @@ fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension +
 val compilerPath = project(":compiler")
     .layout.buildDirectory.file("install/gapl/bin/gapl")
 
-val testInputs = findProperty("testInputs") as String?
-val testExpectedOutputs = findProperty("testExpectedOutputs") as String?
+val testPropsFile = gaplSrcRoot.resolve("test.properties")
+val testProps = Properties().apply {
+    testPropsFile.inputStream().use { load(it) }
+}
+
+val testInputs = testProps.getProperty("testInputs")
+val testExpectedOutputs = testProps.getProperty("testExpectedOutputs")
 
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
@@ -488,8 +494,8 @@ tasks.register<Exec>("runKernelTest") {
         if (!exe.exists()) throw GradleException("kernel-test executable not found at ${exe.absolutePath}")
 
         // Read properties at execution time (so -P... works reliably)
-        val testInputsProp = (project.findProperty("testInputs") as String?)?.trim().orEmpty()
-        val testExpectedProp = (project.findProperty("testExpectedOutputs") as String?)?.trim().orEmpty()
+        val testInputsProp = testInputs.trim()
+        val testExpectedProp = testExpectedOutputs.trim()
 
         fun splitCsv(s: String): List<String> =
             s.split(',')
