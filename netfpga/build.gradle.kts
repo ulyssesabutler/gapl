@@ -531,28 +531,24 @@ tasks.named("clean") {
     dependsOn("makeClean")
 }
 
-tasks.register("rebuildAndTest") {
+tasks.register<Exec>("rebuildAndTest") {
     group = "build"
-    description = "clean → build → test (strict order)"
+    description = "Hacky sequential: ./gradlew clean && build && :hw-test:runTest"
 
-    val clean     = tasks.named("clean")
-    val makeInit  = tasks.named("makeInit")
-    val remakeIPs = tasks.named("remakeIPs")
-    val build     = tasks.named("build")
+    workingDir = rootProject.rootDir
 
-    val verilatorTest = tasks.named("runKernelTest")
-    val vivadoTest    = tasks.named("runSimulation")
-    val hwTest        = tasks.named("hw-test:runTest")
+    // Linux/macOS
+    commandLine("bash", "-lc", """
+        set -euo pipefail
+        ./gradlew clean
+        ./gradlew :netfpga:makeInit
+        ./gradlew :netfpga:remakeIPs
+        ./gradlew :netfpga:build
+        ./gradlew :netfpga:runKernelTest
+        ./gradlew :netfpga:runSimulation
+        ./gradlew :netfpga:hw-test:runTest
+    """.trimIndent())
 
-    // include them in the graph
-    dependsOn(clean, makeInit, remakeIPs, build, verilatorTest, vivadoTest, hwTest)
-
-    // enforce order
-    verilatorTest.configure { mustRunAfter(build) }
-    vivadoTest.configure { mustRunAfter(build) }
-    hwTest.configure { mustRunAfter(build) }
-
-    build.configure { mustRunAfter(remakeIPs) }
-    remakeIPs.configure { mustRunAfter(makeInit) }
-    makeInit.configure { mustRunAfter(clean) }
+    // This kind of task is basically never up-to-date in a meaningful way:
+    outputs.upToDateWhen { false }
 }
