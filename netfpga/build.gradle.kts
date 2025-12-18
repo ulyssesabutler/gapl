@@ -531,6 +531,28 @@ tasks.named("clean") {
     dependsOn("makeClean")
 }
 
+tasks.register<Exec>("programFPGA") {
+    group = "vivado"
+    description = "Program the FPGA with the built bitstream via Vivado batch + Tcl"
+
+    // Make it depend on whatever task produces your .bit
+    dependsOn("buildBitstream")
+
+    val bitfile = layout.projectDirectory.file("packet-processor/projects/reference_switch/bitfiles/reference_switch.bit")
+
+    inputs.file(bitfile)
+
+    commandLine(
+        "bash", "-lc",
+        """
+        set -euo pipefail
+        vivado -mode batch -nojournal -nolog \
+          -source program_fpga.tcl \
+          -tclargs "${bitfile.asFile.absolutePath}"
+        """.trimIndent()
+    )
+}
+
 tasks.register<Exec>("rebuildAndTest") {
     group = "build"
     description = "Hacky sequential: ./gradlew clean && build && :hw-test:runTest"
@@ -544,6 +566,7 @@ tasks.register<Exec>("rebuildAndTest") {
         ./gradlew :netfpga:makeInit
         ./gradlew :netfpga:remakeIPs
         ./gradlew :netfpga:build
+        ./gradlew :netfpga:programFPGA
         ./gradlew :netfpga:runKernelTest
         ./gradlew :netfpga:runSimulation
         ./gradlew :netfpga:hw-test:runTest
