@@ -535,8 +535,7 @@ tasks.register<Exec>("programFPGA") {
     group = "vivado"
     description = "Program the FPGA with the built bitstream via Vivado batch + Tcl"
 
-    // Make it depend on whatever task produces your .bit
-    dependsOn("buildBitstream")
+    dependsOn("makeBuild")
 
     val bitfile = layout.projectDirectory.file("packet-processor/projects/reference_switch/bitfiles/reference_switch.bit")
 
