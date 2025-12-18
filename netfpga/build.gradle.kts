@@ -543,6 +543,10 @@ tasks.register<Exec>("programFPGA") {
         "bash", "-lc",
         """
         set -euo pipefail
+        
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+
         vivado -mode batch -nojournal -nolog \
           -source program_fpga.tcl \
           -tclargs "${bitfile.asFile.absolutePath}"
