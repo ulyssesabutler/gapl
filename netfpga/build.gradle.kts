@@ -548,7 +548,7 @@ tasks.register<Exec>("programFPGA") {
         source "$vivadoSettings"
 
         vivado -mode batch -nojournal -nolog \
-          -source program_fpga.tcl \
+          -source tcl/program.tcl \
           -tclargs "${bitfile.asFile.absolutePath}"
         """.trimIndent()
     )
