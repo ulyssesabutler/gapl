@@ -530,3 +530,29 @@ tasks.named("clean") {
     dependsOn("uninstallGaplVerilog")
     dependsOn("makeClean")
 }
+
+tasks.register("rebuildAndTest") {
+    group = "build"
+    description = "clean → build → test (strict order)"
+
+    val clean     = tasks.named("clean")
+    val makeInit  = tasks.named("makeInit")
+    val remakeIPs = tasks.named("remakeIPs")
+    val build     = tasks.named("build")
+
+    val verilatorTest = tasks.named("runKernelTest")
+    val vivadoTest    = tasks.named("runSimulation")
+    val hwTest        = tasks.named("hw-test:runTest")
+
+    // include them in the graph
+    dependsOn(clean, makeInit, remakeIPs, build, verilatorTest, vivadoTest, hwTest)
+
+    // enforce order
+    verilatorTest.configure { mustRunAfter(build) }
+    vivadoTest.configure { mustRunAfter(build) }
+    hwTest.configure { mustRunAfter(build) }
+
+    build.configure { mustRunAfter(remakeIPs) }
+    remakeIPs.configure { mustRunAfter(makeInit) }
+    makeInit.configure { mustRunAfter(clean) }
+}
