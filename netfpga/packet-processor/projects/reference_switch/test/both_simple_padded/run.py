@@ -53,10 +53,14 @@ for i in range(4):
     routerIP.append("192.168.%s.40"%i)
 
 with open("../../../../gradle.properties") as f:
-    props = javaproperties.load(f)
+    netfpgaProps = javaproperties.load(f)
 
+programName = netfpgaProps.get("programName")
 
-test_inputs = props.get("testInputs")
+with open("../../../../src/" + programName + "/test.properties") as f:
+    testProps = javaproperties.load(f)
+
+test_inputs = testProps.get("testInputs")
 print("Test Inputs: " + test_inputs)
 test_inputs_hex_strings = [part.strip() for part in test_inputs.split(",") if part.strip()]
 test_inputs_bodies = [bytes.fromhex(h) for h in test_inputs_hex_strings]
@@ -73,7 +77,7 @@ for test_case in test_inputs_bodies:
 nftest_send_phy('nf0', sent_pkts)
 
 
-test_expected_outputs = props.get("testExpectedOutputs")
+test_expected_outputs = testProps.get("testExpectedOutputs")
 print("Test Expected Outputs: " + test_expected_outputs)
 text_expected_outputs_hex_strings = [part.strip() for part in test_expected_outputs.split(",") if part.strip()]
 test_expected_outputs_bodies = [bytes.fromhex(h) for h in text_expected_outputs_hex_strings]

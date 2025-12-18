@@ -16,9 +16,20 @@ val sources = listOf(
 )
 
 val generatorBinary = layout.buildDirectory.file("bin/$executableName")
-val configFile = project.file("generator.properties")
-val testInputs = findProperty("testInputs") as String?
-val testExpectedOutputs = findProperty("testExpectedOutputs") as String?
+
+val generatorConfigFile = project.file("generator.properties")
+
+val programName = findProperty("programName")!! as String
+
+val gaplSrcRoot = layout.projectDirectory.dir("../src/$programName").asFile
+
+val testPropsFile = gaplSrcRoot.resolve("test.properties")
+val testProps = Properties().apply {
+    testPropsFile.inputStream().use { load(it) }
+}
+
+val testInputs = testProps.getProperty("testInputs")
+val testExpectedOutputs = testProps.getProperty("testExpectedOutputs")
 
 tasks.register<Exec>("buildTest") {
     group = "build"
@@ -49,20 +60,20 @@ tasks.named("build") {
 }
 
 fun loadGeneratorArgsFromConfig(): List<String> {
-    if (!configFile.exists()) {
+    if (!generatorConfigFile.exists()) {
         throw GradleException(
-            "Config file not found: ${configFile.path}. " +
+            "Config file not found: ${generatorConfigFile.path}. " +
                     "Create it with keys: txInterface, rxInterface, srcIp, dstIp, port."
         )
     }
 
     val props = Properties().apply {
-        configFile.inputStream().use { load(it) }
+        generatorConfigFile.inputStream().use { load(it) }
     }
 
     fun prop(name: String): String =
         props.getProperty(name)
-            ?: throw GradleException("Missing '$name' in ${configFile.path}")
+            ?: throw GradleException("Missing '$name' in ${generatorConfigFile.path}")
 
     val args = listOf(
         "-t", prop("transmittingInterface"),
@@ -84,7 +95,7 @@ tasks.register<Exec>("runTest") {
     dependsOn("buildTest")
 
     // Changing the config should make Gradle rerun this
-    inputs.file(configFile)
+    inputs.file(generatorConfigFile)
 
     workingDir = projectDir
 
