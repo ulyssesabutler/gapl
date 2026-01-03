@@ -56,7 +56,7 @@ fun printHelp() {
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
     println("  Logging Level")
-    println("    Usage:       -v [DEBUG|INFO|WARN|ERROR]")
+    println("    Usage:       -l [DEBUG|INFO|WARN|ERROR]")
     println("    Description: The logging level. Defaults to INFO.")
 }
 
@@ -71,8 +71,8 @@ fun printVersion() {
 fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
 
-    if (parsedArgs.containsKey("-v")) {
-        val level = parsedArgs["-v"]?.first()
+    if (parsedArgs.containsKey("-l")) {
+        val level = parsedArgs["-l"]?.first()
 
         if (level == null) {
             println("Error: Logging level not specified")

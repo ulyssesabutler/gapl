@@ -70,8 +70,7 @@ val pythonPath = listOf(
 
 val gaplSrcRoot = layout.projectDirectory.dir("src/$programName").asFile
 
-val delayModelPath = findProperty("delayModel") as String?
-val delayModelFile = delayModelPath?.let { File(gaplSrcRoot, it) }
+val delayModelFile = File(gaplSrcRoot, "delay.yaml")
 
 // Validate: under src, exists, and ends with .gapl
 fun ensureUnder(parent: File, child: File): Boolean =
@@ -165,10 +164,13 @@ tasks.register("generateGaplVerilog") {
             add("-o")
             add(verilogFile.absolutePath)
 
-            if (delayModelFile != null) {
+            if (delayModelFile.exists()) {
                 add("-retime")
                 add(delayModelFile.absolutePath)
             }
+
+            add("-l")
+            add("DEBUG")
         }
 
         val err = java.io.ByteArrayOutputStream()
