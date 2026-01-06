@@ -39,6 +39,7 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
                 else -> throw IllegalArgumentException("Invalid retime mode: $it")
             }
         },
+        targetClockPeriod = parsedArgs["-target-clock-period"]?.first()?.toIntOrNull(),
     )
 }
 
@@ -61,7 +62,10 @@ fun printHelp() {
     println("    Description: Provide a YAML file that specifies the delay model to be used.")
     println("  Retiming Mode")
     println("    Usage:       -retiming-mode [CLOCKPERIOD|AREA]")
-    println("    Description: Provide a YAML file that specifies the delay model to be used.")
+    println("    Description: Determine what the retiming algorithm should optimize for")
+    println("  Target Clock Period")
+    println("    Usage:       -target-clock-period CLOCK_PERIOD")
+    println("    Description: Specify the maximum clock period when retiming while optimizing for register count")
     println("  Standard Library")
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")

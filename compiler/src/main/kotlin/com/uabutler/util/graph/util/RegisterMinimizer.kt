@@ -4,6 +4,7 @@ import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.google.ortools.Loader
 import com.google.ortools.graph.MinCostFlow
 import com.google.ortools.graph.MinCostFlowBase
+import com.uabutler.util.Logger
 import com.uabutler.util.graph.WeightedGraph
 import kotlin.math.abs
 
@@ -54,8 +55,8 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             val incomingEdges = graph.edges.groupBy { it.sink }
             val outgoingEdges = graph.edges.groupBy { it.source }
 
-            val fanIn = graph.nodes.associateWith { incomingEdges[it]!!.size }
-            val fanOut = graph.nodes.associateWith { outgoingEdges[it]!!.size }
+            val fanIn = graph.nodes.associateWith { incomingEdges[it]?.size ?: 0 }
+            val fanOut = graph.nodes.associateWith { outgoingEdges[it]?.size ?: 0 }
 
             // Use the fan-in and fan-out to compute the number of registers that would need to be removed from the egress to the ingress when retiming this node
             return graph.nodes.associateWith { node ->
@@ -139,17 +140,15 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             graph: LeisersonCircuitGraph<G, N, E>,
             targetClockPeriod: Int,
         ): FlowNetwork<N, E> {
-            // "Infinity" capacity = Big-M. Must be >= total flow you might send.
-            val infiniteCapacity = 1_000_000L
             val minCostFlow = MinCostFlow()
 
             val circuitNodeIndices = minCostFlow.createCircuitNodesFromLeisersonCircuitGraph(graph)
             val circuitNodes = getNodeStats(graph, circuitNodeIndices)
             val superNodes = minCostFlow.createSuperNodes(circuitNodes)
 
-            val circuitEdges = minCostFlow.createCircuitEdges(graph, circuitNodes, infiniteCapacity)
+            val circuitEdges = minCostFlow.createCircuitEdges(graph, circuitNodes, superNodes.capacity)
             val capacityEdges = minCostFlow.createCapacityEdges(circuitNodes, superNodes)
-            val periodEdges = minCostFlow.createPeriodEdges(graph, circuitNodes, targetClockPeriod, infiniteCapacity)
+            val periodEdges = minCostFlow.createPeriodEdges(graph, circuitNodes, targetClockPeriod, superNodes.capacity)
 
             return FlowNetwork(
                 flowNetwork = minCostFlow,
@@ -218,10 +217,10 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             val flowNetwork = constructFlowNetworkFromCircuitGraph(graph, targetClockPeriod)
             val retiming = RegisterMinimizer(graph)
 
-            val status = flowNetwork.flowNetwork.solve()
-            if (status != MinCostFlowBase.Status.OPTIMAL) {
-                error("Min-cost flow failed. Status=$status")
-            }
+            val status = flowNetwork.flowNetwork.solveMaxFlowWithMinCost()
+            Logger.debug { "Min-cost flow status: $status" }
+            Logger.debug { "Maximum flow: ${flowNetwork.flowNetwork.maximumFlow}" }
+            Logger.debug { "Optimal cost: ${flowNetwork.flowNetwork.optimalCost}" }
 
             val retimingLabels = deriveRetimingLabelsFromMinCostFlowSolution(graph, flowNetwork)
 

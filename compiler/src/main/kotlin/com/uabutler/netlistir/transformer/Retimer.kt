@@ -12,7 +12,7 @@ enum class RetimerMode {
     CONSTRAINED_MINIMIZE_REGISTER_COUNT,
 }
 
-class Retimer(val delay: PropagationDelay, val mode: RetimerMode = RetimerMode.MINIMIZE_CLOCK_PERIOD): Transformer {
+class Retimer(val delay: PropagationDelay, val mode: RetimerMode, val targetClockPeriod: Int?): Transformer {
 
     companion object {
         fun retimeModuleFilter(module: Module): Boolean {
@@ -48,7 +48,12 @@ class Retimer(val delay: PropagationDelay, val mode: RetimerMode = RetimerMode.M
                 }
             }
             .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, true) }
-            .map { it.minimizeClockPeriod() }
+            .map {
+                when (mode) {
+                    RetimerMode.MINIMIZE_CLOCK_PERIOD -> it.minimizeClockPeriod()
+                    RetimerMode.CONSTRAINED_MINIMIZE_REGISTER_COUNT -> it.minimizeRegisterCountWithClockPeriod(targetClockPeriod!!)
+                }
+            }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
             .onEach {
                 Logger.debug {

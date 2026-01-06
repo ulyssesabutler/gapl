@@ -23,6 +23,7 @@ object Compiler {
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
         val retimingMode: RetimerMode?,
+        val targetClockPeriod: Int?,
     )
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
@@ -48,7 +49,7 @@ object Compiler {
 
                 if (options.retime != null) {
                     Logger.debug { "Retimer: ${options.retimingMode ?: "default"}" }
-                    add(Retimer(options.retime, options.retimingMode ?: RetimerMode.MINIMIZE_CLOCK_PERIOD))
+                    add(Retimer(options.retime, options.retimingMode ?: RetimerMode.MINIMIZE_CLOCK_PERIOD, options.targetClockPeriod))
                 }
 
                 Logger.debug { "Renamer" }
