@@ -31,7 +31,7 @@ class ClockPeriodMinimizationTest {
             )
         )
 
-        val retimedGraph = graph.retimed()
+        val retimedGraph = graph.minimizeClockPeriod()
 
         // We should have a register between every pair of nodes
         retimedGraph.edges.forEach { edge ->
@@ -62,7 +62,7 @@ class ClockPeriodMinimizationTest {
             edgeList = edgeList,
         )
 
-        val retimedGraphEdges = graph.retimed().edges
+        val retimedGraphEdges = graph.minimizeClockPeriod().edges
 
         val cycleWeight = cycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
 
@@ -102,7 +102,7 @@ class ClockPeriodMinimizationTest {
             edgeList = edgeList,
         )
 
-        val retimedGraphEdges = graph.retimed().edges
+        val retimedGraphEdges = graph.minimizeClockPeriod().edges
 
         val cycleWeight = cycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
         val chainWeight = chain.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
@@ -141,7 +141,7 @@ class ClockPeriodMinimizationTest {
             edgeList = edgeList,
         )
 
-        val retimedGraphEdges = graph.retimed().edges
+        val retimedGraphEdges = graph.minimizeClockPeriod().edges
 
         val firstCycleWeight = firstCycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
         val secondCycleWeight = secondCycle.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
@@ -170,7 +170,7 @@ class ClockPeriodMinimizationTest {
             edgeList = edgeList,
         )
 
-        val retimedGraphEdges = graph.retimed().edges
+        val retimedGraphEdges = graph.minimizeClockPeriod().edges
 
         val longBranchWeight = longBranchEdges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
         val shortBranchWeight = shortBranchEdges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
@@ -195,7 +195,7 @@ class ClockPeriodMinimizationTest {
         val preRetimingClockPeriod = graph.computeClockPeriod()
         assertEquals(4, preRetimingClockPeriod, "Graph should have period 4, is $preRetimingClockPeriod")
 
-        val retimedGraph = graph.retimed()
+        val retimedGraph = graph.minimizeClockPeriod()
         val retimedGraphEdges = retimedGraph.edges
 
         val cycleWeight = edgeList.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }
@@ -232,7 +232,7 @@ class ClockPeriodMinimizationTest {
         val preRetimingClockPeriod = graph.computeClockPeriod()
         assertEquals(1000, preRetimingClockPeriod, "Graph should have period 1000, is $preRetimingClockPeriod")
 
-        val retimedGraph = graph.retimed()
+        val retimedGraph = graph.minimizeClockPeriod()
         val retimedGraphEdges = retimedGraph.edges
 
         val cycleWeight = edges.map { getCorrespondingEdge(retimedGraphEdges, it) }.sumOf { it.weight }

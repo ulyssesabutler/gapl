@@ -1,14 +1,16 @@
-package com.uabutler.util.graph
+package com.uabutler.util.graph.util
 
 import com.uabutler.util.Logger
+import com.uabutler.util.graph.LeisersonCircuitGraph
+import com.uabutler.util.graph.WeightedGraph
 
-class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
+class ClockPeriodMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming<G, N, E>(graph) {
 
     companion object {
 
-        private fun <G, N, E> retimeForClockPeriod(graph: LeisersonCircuitGraph<G, N, E>, clockPeriod: Int): Retiming<G, N, E>? {
+        private fun <G, N, E> retimeForClockPeriod(graph: LeisersonCircuitGraph<G, N, E>, clockPeriod: Int): ClockPeriodMinimizer<G, N, E>? {
             Logger.start("Retiming for clock period $clockPeriod")
-            val retiming = Retiming(graph)
+            val retiming = ClockPeriodMinimizer(graph)
 
             Logger.debug { "Running ${graph.nodes.size - 1} iterations" }
             repeat(graph.nodes.size - 1) {
@@ -26,7 +28,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
             }
         }
 
-        fun <G, N, E> minimizeClockPeriod(graph: LeisersonCircuitGraph<G, N, E>): LeisersonCircuitGraph<G,N, E> {
+        fun <G, N, E> minimizeClockPeriod(graph: LeisersonCircuitGraph<G, N, E>): LeisersonCircuitGraph<G, N, E> {
             Logger.start("Retiming")
             Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
             Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
@@ -39,7 +41,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
             val possibleClockPeriods = graph.computePossibleClockPeriods()
 
-            val cache = mutableMapOf<Int, Retiming<G, N, E>?>()
+            val cache = mutableMapOf<Int, ClockPeriodMinimizer<G, N, E>?>()
             fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) { retimeForClockPeriod(graph, clockPeriod) }
 
             possibleClockPeriods.sorted().binarySearch { clockPeriod ->
@@ -64,28 +66,6 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
                 }
         }
 
-    }
-
-    private val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
-
-    fun setNodeLag(node: WeightedGraph.Node<N>, lag: Int) = nodeLag.put(node, lag)
-
-    fun getNodeLag(node: WeightedGraph.Node<N>) = nodeLag[node]!!
-
-    fun getEdgeRegisterCount(edge: WeightedGraph.Edge<N, E>): Int = edge.weight + getNodeLag(edge.sink) - getNodeLag(edge.source)
-
-    fun increaseNodeLag(node: WeightedGraph.Node<N>, increase: Int = 1) = setNodeLag(node, getNodeLag(node) + increase)
-
-    fun generateNewCircuit(): LeisersonCircuitGraph<G, N, E> {
-        return try {
-            LeisersonCircuitGraph(
-                value = graph.value,
-                nodes = graph.nodes,
-                edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
-            )
-        } catch (e: IllegalArgumentException) {
-            throw Exception("Failed to generate graph: Illegal retiming", e)
-        }
     }
 
 }

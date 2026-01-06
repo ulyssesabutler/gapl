@@ -1,10 +1,10 @@
 package com.uabutler
 
+import com.uabutler.netlistir.transformer.RetimerMode
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
 import java.io.File
-import kotlin.math.exp
 import kotlin.system.exitProcess
 
 fun parseArgs(args: Array<String>): Map<String, List<String>> {
@@ -32,6 +32,13 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
+        retimingMode = parsedArgs["-retiming-mode"]?.first()?.uppercase()?.let {
+            when (it) {
+                "CLOCKPERIOD" -> RetimerMode.MINIMIZE_CLOCK_PERIOD
+                "AREA" -> RetimerMode.CONSTRAINED_MINIMIZE_REGISTER_COUNT
+                else -> throw IllegalArgumentException("Invalid retime mode: $it")
+            }
+        },
     )
 }
 
@@ -52,11 +59,14 @@ fun printHelp() {
     println("  Retime")
     println("    Usage:       -retime DELAY_MODEL_FILENAME")
     println("    Description: Provide a YAML file that specifies the delay model to be used.")
+    println("  Retiming Mode")
+    println("    Usage:       -retiming-mode [CLOCKPERIOD|AREA]")
+    println("    Description: Provide a YAML file that specifies the delay model to be used.")
     println("  Standard Library")
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
     println("  Logging Level")
-    println("    Usage:       -l [DEBUG|INFO|WARN|ERROR]")
+    println("    Usage:       -log-level [DEBUG|INFO|WARN|ERROR]")
     println("    Description: The logging level. Defaults to INFO.")
 }
 
@@ -71,8 +81,8 @@ fun printVersion() {
 fun main(args : Array<String>) {
     val parsedArgs = parseArgs(args)
 
-    if (parsedArgs.containsKey("-l")) {
-        val level = parsedArgs["-l"]?.first()
+    if (parsedArgs.containsKey("-log-level")) {
+        val level = parsedArgs["-log-level"]?.first()
 
         if (level == null) {
             println("Error: Logging level not specified")

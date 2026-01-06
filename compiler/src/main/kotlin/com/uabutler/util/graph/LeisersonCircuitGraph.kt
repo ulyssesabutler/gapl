@@ -1,6 +1,8 @@
 package com.uabutler.util.graph
 
 import com.uabutler.util.Logger
+import com.uabutler.util.graph.util.ClockPeriodMinimizer
+import com.uabutler.util.graph.util.RegisterMinimizer
 
 open class LeisersonCircuitGraph<G, N, E>(
     val value: G,
@@ -34,23 +36,35 @@ open class LeisersonCircuitGraph<G, N, E>(
 
     fun computeClockPeriod() = computeCombinationalDelays().values.max()
 
+    data class FastestConnection<N>(
+        val source: Node<N>,
+        val sink: Node<N>,
+        val delay: Int,
+        val registerCount: Int,
+    )
+
+    fun findFastestConnectionsFromNode(sourceNode: Node<N>): List<FastestConnection<N>> {
+        return shortestPathsFromNode(
+            root = sourceNode,
+            edgeWeight = { it.weight to -it.source.weight },
+            weightComparator = compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second },
+            weightAddition = { a, b -> a.first + b.first to a.second + b.second },
+            zero = 0 to 0,
+        ).map { (sinkNode, distance) ->
+            FastestConnection(sourceNode, sinkNode, sinkNode.weight - distance.second, distance.first)
+        }
+    }
+
     fun computePossibleClockPeriods() = Logger.run("Computing possible clock periods") {
         nodes.asSequence()
-            .map { node ->
-                shortestPathsFromNode(
-                    root = node,
-                    edgeWeight = { it.weight to -it.source.weight },
-                    weightComparator = compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second },
-                    weightAddition = { a, b -> a.first + b.first to a.second + b.second },
-                    zero = 0 to 0,
-                )
-            }
+            .map { findFastestConnectionsFromNode(it) }
             .flatMap { it.asSequence() }
-            .map { (node, distance) -> node.weight - distance.second }
+            .map { it.delay }
             .toSet()
             .also { Logger.debug { "Found ${it.size} possible clock periods" } }
     }
 
-    fun retimed() = Retiming.minimizeClockPeriod(this)
+    fun minimizeClockPeriod() = ClockPeriodMinimizer.minimizeClockPeriod(this)
+    fun minimizeRegisterCountWithClockPeriod(targetClockPeriod: Int) = RegisterMinimizer.minimizeRegisters(this, targetClockPeriod)
 
 }

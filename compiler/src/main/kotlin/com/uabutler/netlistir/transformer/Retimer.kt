@@ -7,7 +7,12 @@ import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
 
-class Retimer(val delay: PropagationDelay): Transformer {
+enum class RetimerMode {
+    MINIMIZE_CLOCK_PERIOD,
+    CONSTRAINED_MINIMIZE_REGISTER_COUNT,
+}
+
+class Retimer(val delay: PropagationDelay, val mode: RetimerMode = RetimerMode.MINIMIZE_CLOCK_PERIOD): Transformer {
 
     companion object {
         fun retimeModuleFilter(module: Module): Boolean {
@@ -19,6 +24,7 @@ class Retimer(val delay: PropagationDelay): Transformer {
 
     override fun transform(original: List<Module>): List<Module> {
         Logger.start("Retimer Transformer")
+        Logger.debug { "Retimer mode: ${mode.name}" }
         val moduleRetimability = original.groupBy { retimeModuleFilter(it) }
 
         val modulesToRetime = moduleRetimability[true] ?: emptyList()
@@ -42,7 +48,7 @@ class Retimer(val delay: PropagationDelay): Transformer {
                 }
             }
             .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, true) }
-            .map { it.retimed() }
+            .map { it.minimizeClockPeriod() }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
             .onEach {
                 Logger.debug {
