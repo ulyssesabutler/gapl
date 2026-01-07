@@ -29,7 +29,7 @@ class ClockPeriodMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Reti
         }
 
         fun <G, N, E> minimizeClockPeriod(graph: LeisersonCircuitGraph<G, N, E>): LeisersonCircuitGraph<G, N, E> {
-            Logger.start("Retiming")
+            Logger.start("Retiming to minimize clock period")
             Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
             Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
 

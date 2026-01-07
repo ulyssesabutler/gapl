@@ -50,7 +50,14 @@ object Logger {
 
     fun <T> run(name: String, level: Level = Level.DEBUG, block: () -> T): T {
         start(name, level)
-        val ret = block()
+
+        val ret = try {
+            block()
+        } catch (e: Exception) {
+            finish()
+            throw e
+        }
+
         finish()
         return ret
     }

@@ -167,9 +167,15 @@ tasks.register("generateGaplVerilog") {
             if (delayModelFile.exists()) {
                 add("-retime")
                 add(delayModelFile.absolutePath)
+
+                add("-retiming-mode")
+                add("AREA")
+
+                add("-target-clock-period")
+                add("20")
             }
 
-            add("-l")
+            add("-log-level")
             add("DEBUG")
         }
 

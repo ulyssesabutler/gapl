@@ -12,7 +12,18 @@ enum class RetimerMode {
     CONSTRAINED_MINIMIZE_REGISTER_COUNT,
 }
 
-class Retimer(val delay: PropagationDelay, val mode: RetimerMode, val targetClockPeriod: Int?): Transformer {
+/* TODO: Interface
+ *   I think we want to control retiming via these command line argument
+ *      -retime-for-clock-period [MIN|int]
+ *      -retime-for-min-register-count
+ *      -retime-maintains-timing
+ */
+
+class Retimer(
+    val delay: PropagationDelay,
+    val mode: RetimerMode,
+    val targetClockPeriod: Int?
+): Transformer {
 
     companion object {
         fun retimeModuleFilter(module: Module): Boolean {
@@ -47,7 +58,7 @@ class Retimer(val delay: PropagationDelay, val mode: RetimerMode, val targetCloc
                     "Unretimed register wire count: $registerWires"
                 }
             }
-            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, true) }
+            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, false) }
             .map {
                 when (mode) {
                     RetimerMode.MINIMIZE_CLOCK_PERIOD -> it.minimizeClockPeriod()
