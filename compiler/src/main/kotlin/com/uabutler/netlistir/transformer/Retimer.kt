@@ -6,11 +6,9 @@ import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
-
-enum class RetimerMode {
-    MINIMIZE_CLOCK_PERIOD,
-    CONSTRAINED_MINIMIZE_REGISTER_COUNT,
-}
+import com.uabutler.util.graph.util.FastSolver
+import com.uabutler.util.graph.util.MinimalRegisterSolver
+import com.uabutler.util.graph.util.Retiming
 
 /* TODO: Interface
  *   I think we want to control retiming via these command line argument
@@ -21,8 +19,9 @@ enum class RetimerMode {
 
 class Retimer(
     val delay: PropagationDelay,
-    val mode: RetimerMode,
-    val targetClockPeriod: Int?
+    val targetClockPeriod: Int?,
+    val minimizeRegisterCount: Boolean,
+    val maintainTiming: Boolean,
 ): Transformer {
 
     companion object {
@@ -35,7 +34,6 @@ class Retimer(
 
     override fun transform(original: List<Module>): List<Module> {
         Logger.start("Retimer Transformer")
-        Logger.debug { "Retimer mode: ${mode.name}" }
         val moduleRetimability = original.groupBy { retimeModuleFilter(it) }
 
         val modulesToRetime = moduleRetimability[true] ?: emptyList()
@@ -58,12 +56,12 @@ class Retimer(
                     "Unretimed register wire count: $registerWires"
                 }
             }
-            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, false) }
-            .map {
-                when (mode) {
-                    RetimerMode.MINIMIZE_CLOCK_PERIOD -> it.minimizeClockPeriod()
-                    RetimerMode.CONSTRAINED_MINIMIZE_REGISTER_COUNT -> it.minimizeRegisterCountWithClockPeriod(targetClockPeriod!!)
-                }
+            .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, maintainTiming) }
+            .map { graph ->
+                val fastSolver = FastSolver(graph)
+                val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
+                val clockPeriod = targetClockPeriod ?: Retiming(graph).findMinimumClockPeriod(fastSolver)
+                finalSolver.solveOrNull(clockPeriod) ?: throw Exception("Failed to find feasible solution")
             }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
             .onEach {

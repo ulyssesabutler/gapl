@@ -1,6 +1,5 @@
 package com.uabutler
 
-import com.uabutler.netlistir.transformer.RetimerMode
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
@@ -32,14 +31,9 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
-        retimingMode = parsedArgs["-retiming-mode"]?.first()?.uppercase()?.let {
-            when (it) {
-                "CLOCKPERIOD" -> RetimerMode.MINIMIZE_CLOCK_PERIOD
-                "AREA" -> RetimerMode.CONSTRAINED_MINIMIZE_REGISTER_COUNT
-                else -> throw IllegalArgumentException("Invalid retime mode: $it")
-            }
-        },
-        targetClockPeriod = parsedArgs["-target-clock-period"]?.first()?.toIntOrNull(),
+        retimingClockPeriod = parsedArgs["-retiming-clock-period"]?.first()?.lowercase()?.let { if (it == "min") null else it.toIntOrNull() },
+        retimingMinimizeRegisterCount = parsedArgs.containsKey("-retiming-minimize-register-count"),
+        retimingMaintainTiming = parsedArgs.containsKey("-retiming-maintains-timing"),
     )
 }
 
@@ -60,17 +54,20 @@ fun printHelp() {
     println("  Retime")
     println("    Usage:       -retime DELAY_MODEL_FILENAME")
     println("    Description: Provide a YAML file that specifies the delay model to be used.")
-    println("  Retiming Mode")
-    println("    Usage:       -retiming-mode [CLOCKPERIOD|AREA]")
-    println("    Description: Determine what the retiming algorithm should optimize for")
-    println("  Target Clock Period")
-    println("    Usage:       -target-clock-period CLOCK_PERIOD")
-    println("    Description: Specify the maximum clock period when retiming while optimizing for register count")
+    println("  Retiming Clock Period")
+    println("    Usage:       [-retiming-clock-period min|CLOCK_PERIOD]")
+    println("    Description: What clock period should the retiming algorithm target? Either \"min\" or an integer. Defaults to min.")
+    println("  Retiming Minimize Register Count")
+    println("    Usage:       [-retiming-minimize-register-count]")
+    println("    Description: Produce a circuit with the smallest number of registers possible given the clock period constraint.")
+    println("  Retiming Maintains Timing")
+    println("    Usage:       [-retiming-maintains-timing]")
+    println("    Description: Should the retiming algorithm maintain the timing characteristics of the original circuit?")
     println("  Standard Library")
     println("    Usage:       [-no-std-lib]")
     println("    Description: Defaults to true. Providing this option disables inclusion of the standard library, which is prepended.")
     println("  Logging Level")
-    println("    Usage:       -log-level [DEBUG|INFO|WARN|ERROR]")
+    println("    Usage:       -log-level debug|info|warn|error")
     println("    Description: The logging level. Defaults to INFO.")
 }
 

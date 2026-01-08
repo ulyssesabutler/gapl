@@ -1,8 +1,6 @@
 package com.uabutler.util.graph
 
 import com.uabutler.util.Logger
-import com.uabutler.util.graph.util.ClockPeriodMinimizer
-import com.uabutler.util.graph.util.RegisterMinimizer
 
 open class LeisersonCircuitGraph<G, N, E>(
     val value: G,
@@ -63,8 +61,5 @@ open class LeisersonCircuitGraph<G, N, E>(
             .toSet()
             .also { Logger.debug { "Found ${it.size} possible clock periods" } }
     }
-
-    fun minimizeClockPeriod() = ClockPeriodMinimizer.minimizeClockPeriod(this)
-    fun minimizeRegisterCountWithClockPeriod(targetClockPeriod: Int) = RegisterMinimizer.minimizeRegisters(this, targetClockPeriod)
 
 }

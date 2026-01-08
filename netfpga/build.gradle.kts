@@ -168,10 +168,9 @@ tasks.register("generateGaplVerilog") {
                 add("-retime")
                 add(delayModelFile.absolutePath)
 
-                add("-retiming-mode")
-                add("AREA")
+                add("-retiming-minimize-register-count")
 
-                add("-target-clock-period")
+                add("-retiming-clock-period")
                 add("20")
             }
 

@@ -54,6 +54,7 @@ object Logger {
         val ret = try {
             block()
         } catch (e: Exception) {
+            printLog("Unhandled Exception: ${e::class.simpleName}", Level.ERROR)
             finish()
             throw e
         }

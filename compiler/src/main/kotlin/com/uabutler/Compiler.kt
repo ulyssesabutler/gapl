@@ -7,7 +7,6 @@ import com.uabutler.netlistir.transformer.LiteralSimplifier
 import com.uabutler.netlistir.transformer.PassThroughRemover
 import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
-import com.uabutler.netlistir.transformer.RetimerMode
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
 import com.uabutler.util.PropagationDelay
 import com.uabutler.resolver.Resolver
@@ -22,8 +21,9 @@ object Compiler {
         val literalSimplification: Boolean,
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
-        val retimingMode: RetimerMode?,
-        val targetClockPeriod: Int?,
+        val retimingClockPeriod: Int?,
+        val retimingMinimizeRegisterCount: Boolean,
+        val retimingMaintainTiming: Boolean,
     )
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
@@ -48,8 +48,12 @@ object Compiler {
                 add(PassThroughRemover)
 
                 if (options.retime != null) {
-                    Logger.debug { "Retimer: ${options.retimingMode ?: "default"}" }
-                    add(Retimer(options.retime, options.retimingMode ?: RetimerMode.MINIMIZE_CLOCK_PERIOD, options.targetClockPeriod))
+                    add(Retimer(
+                        delay = options.retime,
+                        targetClockPeriod = options.retimingClockPeriod,
+                        minimizeRegisterCount = options.retimingMinimizeRegisterCount,
+                        maintainTiming = options.retimingMaintainTiming,
+                    ))
                 }
 
                 Logger.debug { "Renamer" }

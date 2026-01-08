@@ -3,9 +3,15 @@ package com.uabutler.util.graph.util
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 
-open class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
+class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
     private val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
+
+    abstract class Solver<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
+        abstract fun solveOrNull(
+            targetClockPeriod: Int?,
+        ): LeisersonCircuitGraph<G, N, E>?
+    }
 
     fun setNodeLag(node: WeightedGraph.Node<N>, lag: Int) = nodeLag.put(node, lag)
 
@@ -25,6 +31,46 @@ open class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
         } catch (e: IllegalArgumentException) {
             throw Exception("Failed to generate graph: Illegal retiming", e)
         }
+    }
+
+    fun findMinimumClockPeriod(
+        solver: Solver<G, N, E>
+    ): Int {
+        /*
+        Logger.start("Retiming to minimize clock period")
+        Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
+        Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
+
+        Logger.run("Initial Edge Weights") {
+            graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                Logger.debug { "${edges.size} edges with weight $weight" }
+            }
+        }
+         */
+
+        val possibleClockPeriods = graph.computePossibleClockPeriods()
+
+        val cache = mutableMapOf<Int, Boolean>()
+        fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) { solver.solveOrNull(clockPeriod) != null }
+
+        possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) -1 else 1 }
+
+        return cache.minBy { it.key }.key
+            /*
+            .value!!.generateNewCircuit()
+            .also {
+                Logger.debug { "Final register count: ${it.edges.sumOf { it.weight }}" }
+                Logger.debug { "Final clock period: ${it.computeClockPeriod()}" }
+
+                Logger.run("Final edge weights") {
+                    it.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                        Logger.debug { "${edges.size} edges with weight $weight" }
+                    }
+                }
+
+                Logger.finish()
+            }
+             */
     }
 
 }
