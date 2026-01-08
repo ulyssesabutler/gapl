@@ -22,11 +22,25 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
 
             Logger.start("Creating LP problem")
+
+            // Precompute
+            Logger.start("Precomputing WD values")
+            var longestRegisterPath = 0
+
+            val pathsViolatingTimeConstraint = graph.nodes.asSequence()
+                .flatMap { graph.findFastestConnectionsFromNode(it) }
+                .onEach { longestRegisterPath = maxOf(longestRegisterPath, it.registerCount) }
+                .filter { it.delay > targetClockPeriod }
+                .toList()
+
+            Logger.finish()
+
             // Step 1: create the module
             val model = CpModel()
 
             // Step 2: create the variables
-            val upperBound = graph.edges.sumOf { it.weight }.toLong()
+            val upperBound = longestRegisterPath.toLong()
+            Logger.debug { "Upper bound on retiming label: $upperBound" }
             val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
                 node to model.newIntVar(-upperBound, upperBound, index.toString())
             }.toMap()
@@ -63,9 +77,7 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             Logger.debug { "Added $negativeRegisterConstraintCount negative register constrains" }
 
             // Step 5: Add constraints to enforce the clock period constraint
-            val clockPeriodConstraintCount = graph.nodes.asSequence()
-                .flatMap { graph.findFastestConnectionsFromNode(it) }
-                .filter { it.delay > targetClockPeriod }
+            val clockPeriodConstraintCount = pathsViolatingTimeConstraint
                 .onEach { connection ->
                     val sourceTerm = LinearExpr.term(retimingLabelVariables[connection.source]!!, -1L)
                     val sinkTerm = retimingLabelVariables[connection.sink]!!
@@ -92,9 +104,12 @@ class RegisterMinimizer<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retimin
             // Step 8: Use the retiming values
             val retiming = RegisterMinimizer(graph)
 
-            graph.nodes.forEach { node ->
+            graph.nodes.map { node ->
                 val retimingLabel = solver.value(retimingLabelVariables[node]!!)
                 retiming.setNodeLag(node, retimingLabel.toInt())
+                retimingLabel
+            }.groupBy { it }.mapValues { (_, value) -> value.size }.forEach {
+                Logger.debug { "${it.value} nodes with lag r(v)=${it.key}" }
             }
 
             return@run retiming.generateNewCircuit().also {
