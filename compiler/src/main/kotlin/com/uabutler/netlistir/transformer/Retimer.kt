@@ -61,6 +61,10 @@ class Retimer(
                 val fastSolver = FastSolver(graph)
                 val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
                 val clockPeriod = targetClockPeriod ?: Retiming(graph).findMinimumClockPeriod(fastSolver)
+
+                Logger.debug { "Retiming will use clock period of $clockPeriod" }
+                Logger.debug { "Retiming will use ${finalSolver::class.simpleName} solver" }
+
                 finalSolver.solveOrNull(clockPeriod) ?: throw Exception("Failed to find feasible solution")
             }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }

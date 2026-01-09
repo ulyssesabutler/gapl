@@ -1,5 +1,6 @@
 package com.uabutler.util.graph.util
 
+import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 
@@ -35,7 +36,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
     fun findMinimumClockPeriod(
         solver: Solver<G, N, E>
-    ): Int {
+    ): Int = Logger.run("Finding minimum clock period") {
         /*
         Logger.start("Retiming to minimize clock period")
         Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
@@ -48,14 +49,26 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
         }
          */
 
-        val possibleClockPeriods = graph.computePossibleClockPeriods()
+        val possibleClockPeriods = Logger.run("Finding possible clock periods") {
+            graph.computePossibleClockPeriods().also {
+                Logger.debug { "Found ${it.size} possible clock periods" }
+            }
+        }
 
         val cache = mutableMapOf<Int, Boolean>()
-        fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) { solver.solveOrNull(clockPeriod) != null }
+        fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) {
+            if (solver.solveOrNull(clockPeriod) != null) {
+                Logger.debug { "Clock period $clockPeriod is feasible" }
+                true
+            } else {
+                Logger.debug { "Clock period $clockPeriod is infeasible" }
+                false
+            }
+        }
 
         possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) -1 else 1 }
 
-        return cache.minBy { it.key }.key
+        return@run cache.filter { it.value }.minBy { it.key }.key
             /*
             .value!!.generateNewCircuit()
             .also {

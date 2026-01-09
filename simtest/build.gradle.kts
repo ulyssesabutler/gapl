@@ -74,6 +74,9 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
             add(properties.retimeDelayModel!!)
         }
 
+        add("-log-level")
+        add("DEBUG")
+
         addAll(properties.additionalCompilerFlags)
         removeAll(properties.removeCompilerFlags)
     }
