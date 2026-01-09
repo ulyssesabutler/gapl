@@ -15,6 +15,9 @@ data class TestProperties(
     var waveform: Boolean = false,
     var topModule: String? = null,
     var retimeDelayModel: String? = null,
+    var retimingClockPeriod: String? = null,
+    var retimingMinimizeRegisterCount: Boolean = false,
+    var retimingMaintainTiming: Boolean = false,
     val additionalCompilerFlags: MutableList<String> = mutableListOf(),
     val removeCompilerFlags: MutableList<String> = mutableListOf(),
     val additionalVerilatorFlags: MutableList<String> = mutableListOf(),
@@ -40,6 +43,9 @@ fun loadTestProperties(testDirectory: File): TestProperties {
             "waveform" -> testProperties.waveform = value.toString().toBoolean()
             "topModule" -> testProperties.topModule = value.toString()
             "retime" -> if (value.toString().toBoolean()) testProperties.retimeDelayModel = testDirectory.listFiles()!!.first { it.isFile && it.name == "delay.yaml" }.absolutePath
+            "retimingClockPeriod" -> testProperties.retimingClockPeriod = value.toString()
+            "retimingMinimizeRegisterCount" -> testProperties.retimingMinimizeRegisterCount = value.toString().toBoolean()
+            "retimingMaintainTiming" -> testProperties.retimingMaintainTiming = value.toString().toBoolean()
             "additionalCompilerFlags" -> testProperties.additionalCompilerFlags += value.toString().split(",")
             "additionalVerilatorFlags" -> testProperties.additionalVerilatorFlags += value.toString().split(",")
             "removeCompilerFlags" -> testProperties.removeCompilerFlags += value.toString().split(",")
@@ -74,8 +80,17 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
             add(properties.retimeDelayModel!!)
         }
 
+        if (properties.retimingClockPeriod != null) {
+            add("-retiming-clock-period")
+            add(properties.retimingClockPeriod.toString())
+        }
+
+        if (properties.retimingMinimizeRegisterCount) { add("-retiming-minimize-register-count") }
+
+        if (properties.retimingMaintainTiming) { add("-retiming-maintains-timing") }
+
         add("-log-level")
-        add("DEBUG")
+        add("WARN")
 
         addAll(properties.additionalCompilerFlags)
         removeAll(properties.removeCompilerFlags)
@@ -148,10 +163,13 @@ tasks.register("generateVerilog") {
                 val outV = File(outDir, "${gapl.nameWithoutExtension}.v")
                 println("Compiling ${testDir.name}/${gapl.name} -> ${outV.relativeTo(project.projectDir)}")
 
+                val command = createGaplCompileCommand(gapl, outV, loadTestProperties(testDir))
+                println("  Using ${command.drop(1).joinToString(" ")}")
+
                 val err = ByteArrayOutputStream()
                 val result = exec {
                     isIgnoreExitValue = true
-                    commandLine(createGaplCompileCommand(gapl, outV, loadTestProperties(testDir)))
+                    commandLine(command)
                     errorOutput = err
                     standardOutput = err
                 }
