@@ -52,6 +52,7 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
         val possibleClockPeriods = Logger.run("Finding possible clock periods") {
             graph.computePossibleClockPeriods().also {
                 Logger.debug { "Found ${it.size} possible clock periods" }
+                Logger.debug { it.joinToString() }
             }
         }
 
@@ -66,8 +67,11 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
             }
         }
 
-        possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) -1 else 1 }
+        possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) 1 else -1 }
 
+        Logger.run("Printing Cache") {
+            cache.forEach { (clockPeriod, feasible) -> Logger.debug { "$clockPeriod: $feasible" } }
+        }
         return@run cache.filter { it.value }.minBy { it.key }.key
             /*
             .value!!.generateNewCircuit()

@@ -55,7 +55,6 @@ object Logger {
             block()
         } catch (e: Exception) {
             printLog("Unhandled Exception: ${e::class.simpleName}", Level.ERROR)
-            e.printStackTrace()
             finish()
             throw e
         }
