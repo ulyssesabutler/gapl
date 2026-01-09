@@ -1,6 +1,8 @@
 package graph
 
 import com.uabutler.util.Logger
+import com.uabutler.util.graph.util.FastSolver
+import com.uabutler.util.graph.util.Retiming
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.BeforeEach
@@ -14,6 +16,12 @@ class ClockPeriodMinimizationTest {
      *   - We still need tests to ensure uneven weights are handled correctly
      *   - A test with uneven branches is probably not necessary, but wouldn't hurt
      */
+
+    fun Graph.minimizeClockPeriod(): Graph {
+        val solver = FastSolver(this)
+        val minimumClockPeriod = Retiming(this).findMinimumClockPeriod(solver)
+        return solver.solveOrNull(minimumClockPeriod)!!
+    }
 
     @BeforeEach
     fun `setup logger`() {
