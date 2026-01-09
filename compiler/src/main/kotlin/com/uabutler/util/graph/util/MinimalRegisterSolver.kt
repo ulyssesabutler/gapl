@@ -27,6 +27,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         val timingConstrainedPaths = if (targetClockPeriod != null) {
             pathSequence.filter { it.delay > targetClockPeriod }.toList()
         } else {
+            pathSequence.count() // Force an evaluation of the sequence
             emptyList()
         }
 
