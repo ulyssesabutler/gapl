@@ -42,12 +42,10 @@ class Retimer(
         val retimedModules = modulesToRetime.asSequence()
             .onEach {
                 Logger.debug {
-                    val registerWires = it.getBodyNodes()
-                        .sumOf { it.inputWires().size }
+                    val registerWires = it.getBodyNodes().sumOf { it.inputWires().size }
                     "Unretimed body wire count: $registerWires"
                 }
-            }
-            .onEach {
+
                 Logger.debug {
                     val registerWires = it.getBodyNodes()
                         .filterIsInstance<PredefinedFunctionNode>()
@@ -57,6 +55,15 @@ class Retimer(
                 }
             }
             .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, maintainTiming) }
+            .onEach { graph ->
+                Logger.debug { "Unretimed leiserson graph register count: ${graph.edges.sumOf { it.weight }}" }
+                Logger.debug { "Unretimed leiserson graph clock period: ${graph.computeClockPeriod()}" }
+                Logger.run("Unretimed leiserson graph edge weights") {
+                    graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                        Logger.debug { "${edges.size} edges with weight $weight" }
+                    }
+                }
+            }
             .map { graph ->
                 val fastSolver = FastSolver(graph)
                 val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
@@ -67,6 +74,15 @@ class Retimer(
 
                 finalSolver.solveOrNull(clockPeriod) ?: throw Exception("Failed to find feasible solution")
             }
+            .onEach { graph ->
+                Logger.debug { "Retimed leiserson graph register count: ${graph.edges.sumOf { it.weight }}" }
+                Logger.debug { "Retimed leiserson graph clock period: ${graph.computeClockPeriod()}" }
+                Logger.run("Retimed leiserson graph edge weights") {
+                    graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
+                        Logger.debug { "${edges.size} edges with weight $weight" }
+                    }
+                }
+            }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
             .onEach {
                 Logger.debug {
@@ -74,8 +90,7 @@ class Retimer(
                         .sumOf { it.inputWires().size }
                     "Retimed body wire count: $registerWires"
                 }
-            }
-            .onEach {
+
                 Logger.debug {
                     val registerWires = it.getBodyNodes()
                         .filterIsInstance<PredefinedFunctionNode>()

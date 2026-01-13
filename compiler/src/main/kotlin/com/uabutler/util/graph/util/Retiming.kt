@@ -37,18 +37,6 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
     fun findMinimumClockPeriod(
         solver: Solver<G, N, E>
     ): Int = Logger.run("Finding minimum clock period") {
-        /*
-        Logger.start("Retiming to minimize clock period")
-        Logger.debug { "Initial register count: ${graph.edges.sumOf { it.weight }}" }
-        Logger.debug { "Initial clock period: ${graph.computeClockPeriod()}" }
-
-        Logger.run("Initial Edge Weights") {
-            graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
-                Logger.debug { "${edges.size} edges with weight $weight" }
-            }
-        }
-         */
-
         val possibleClockPeriods = Logger.run("Finding possible clock periods") {
             graph.computePossibleClockPeriods().also {
                 Logger.debug { "Found ${it.size} possible clock periods" }
@@ -57,37 +45,31 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
         }
 
         val cache = mutableMapOf<Int, Boolean>()
-        fun attempt(clockPeriod: Int) = cache.getOrPut(clockPeriod) {
-            if (solver.solveOrNull(clockPeriod) != null) {
+        fun attempt(clockPeriod: Int): Boolean {
+            if (cache.containsKey(clockPeriod)) {
+                Logger.debug { "Clock period $clockPeriod was already checked" }
+                return cache[clockPeriod]!!
+            }
+
+            val solvedGraph = solver.solveOrNull(clockPeriod)
+
+            if (solvedGraph != null) {
                 Logger.debug { "Clock period $clockPeriod is feasible" }
-                true
+
+                possibleClockPeriods
+                    .filter { it >= solvedGraph.computeClockPeriod() }
+                    .forEach { cache[it] = true }
+
+                return true
             } else {
                 Logger.debug { "Clock period $clockPeriod is infeasible" }
-                false
+                return false
             }
         }
 
         possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) 1 else -1 }
 
-        Logger.run("Printing Cache") {
-            cache.forEach { (clockPeriod, feasible) -> Logger.debug { "$clockPeriod: $feasible" } }
-        }
         return@run cache.filter { it.value }.minBy { it.key }.key
-            /*
-            .value!!.generateNewCircuit()
-            .also {
-                Logger.debug { "Final register count: ${it.edges.sumOf { it.weight }}" }
-                Logger.debug { "Final clock period: ${it.computeClockPeriod()}" }
-
-                Logger.run("Final edge weights") {
-                    it.edges.groupBy { it.weight }.forEach { (weight, edges) ->
-                        Logger.debug { "${edges.size} edges with weight $weight" }
-                    }
-                }
-
-                Logger.finish()
-            }
-             */
     }
 
 }

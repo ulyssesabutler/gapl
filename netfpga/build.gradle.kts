@@ -97,6 +97,10 @@ val testProps = Properties().apply {
 val testInputs = testProps.getProperty("testInputs")
 val testExpectedOutputs = testProps.getProperty("testExpectedOutputs")
 
+val retimingClockPeriod = testProps.getProperty("retimingClockPeriod") ?: "min"
+val retimingMinimizeRegisterCount = testProps.getProperty("retimingMinimizeRegisterCount")?.toBoolean() ?: false
+val retimingMaintainsTiming = testProps.getProperty("retimingMaintainsTiming")?.toBoolean() ?: false
+
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
 
@@ -168,11 +172,13 @@ tasks.register("generateGaplVerilog") {
                 add("-retime")
                 add(delayModelFile.absolutePath)
 
-                add("-retiming-minimize-register-count")
-
                 add("-retiming-clock-period")
-                add("20")
+                add(retimingClockPeriod)
+
+                if (retimingMinimizeRegisterCount) { add("-retiming-minimize-register-count") }
+                if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
             }
+
 
             add("-log-level")
             add("DEBUG")

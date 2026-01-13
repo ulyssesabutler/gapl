@@ -13,11 +13,17 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
         val retiming = Retiming(graph)
 
         Logger.debug { "Running ${graph.nodes.size - 1} iterations" }
-        repeat(graph.nodes.size - 1) {
+        var iteration = 0
+        do {
+            var changed = false
             retiming.generateNewCircuit().computeCombinationalDelays().forEach { (node, delay) ->
-                if (delay > targetClockPeriod) retiming.increaseNodeLag(node)
+                if (delay > targetClockPeriod) {
+                    retiming.increaseNodeLag(node)
+                    changed = true
+                }
             }
-        }
+            iteration++
+        } while (changed || iteration < graph.nodes.size - 1)
 
         val clockPeriodOfRetimedGraph = retiming.generateNewCircuit().computeClockPeriod()
         Logger.debug { "Clock period of retimed graph: $clockPeriodOfRetimedGraph" }
