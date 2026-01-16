@@ -90,7 +90,7 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
         if (properties.retimingMaintainTiming) { add("-retiming-maintains-timing") }
 
         add("-log-level")
-        add("WARN")
+        add("DEBUG")
 
         addAll(properties.additionalCompilerFlags)
         removeAll(properties.removeCompilerFlags)

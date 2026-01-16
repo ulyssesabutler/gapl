@@ -15,6 +15,7 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
         Logger.debug { "Running ${graph.nodes.size - 1} iterations" }
         var iteration = 0
         do {
+            Logger.debug { "Iteration $iteration" }
             var changed = false
             retiming.generateNewCircuit().computeCombinationalDelays().forEach { (node, delay) ->
                 if (delay > targetClockPeriod) {
@@ -23,7 +24,7 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
                 }
             }
             iteration++
-        } while (changed || iteration < graph.nodes.size - 1)
+        } while (changed && iteration < graph.nodes.size - 1)
 
         val clockPeriodOfRetimedGraph = retiming.generateNewCircuit().computeClockPeriod()
         Logger.debug { "Clock period of retimed graph: $clockPeriodOfRetimedGraph" }

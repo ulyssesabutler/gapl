@@ -39,7 +39,7 @@ class Retimer(
         val modulesToRetime = moduleRetimability[true] ?: emptyList()
         val modulesToSkip = moduleRetimability[false] ?: emptyList()
 
-        val retimedModules = modulesToRetime.asSequence()
+        val retimedModules = original.asSequence()
             .onEach {
                 Logger.debug {
                     val registerWires = it.getBodyNodes().sumOf { it.inputWires().size }

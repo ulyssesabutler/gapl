@@ -14,6 +14,8 @@ enum class StandardLibraryFunctions(val identifier: String) {
     VECTOR_ZIP("vector_zip"),
     COMBINATIONAL_VECTOR_FOLD("combinational_vector_fold"),
     REPLICATED_FOLD("replicated_fold"),
+    COMBINATIONAL_VECTOR_REDUCE("combinational_vector_reduce"),
+    REPLICATED_REDUCE("replicated_reduce"),
     VECTOR_ANY("vector_any"),
     VECTOR_CHUNK("vector_chunk"),
     VECTOR_FLATTEN("vector_flatten"),
@@ -155,6 +157,39 @@ function ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(
     declare state: register(U);
     i.value, state
         => ${StandardLibraryFunctions.REPLICATED_FOLD.identifier}(T, U, replication_factor, operation)
+        => state
+        => o.value;
+
+    i.last => register(boolean) => o.valid;
+}
+
+function ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_REDUCE.identifier}(
+    T: interface,
+    size: integer,
+    operation: T, T => T,
+) i: T[size] => o: T {
+    if (size == 1) {
+        i[0] => o;
+    } else {
+        i[0:size / 2 - 1] => ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_REDUCE.identifier}(T, size / 2, operation) => declare left: T;
+        i[size / 2:size - 1] => ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_REDUCE.identifier}(T, size - size / 2, operation) => declare right: T;
+        left, right => operation => o;
+    }
+}
+
+function ${StandardLibraryFunctions.REPLICATED_REDUCE.identifier}(
+    T: interface,
+    replication_factor: integer,
+    operation: T, T => T,
+) i: last(T[replication_factor]) => o: valid(T) {
+    declare state: register(T);
+    declare input_vector: T[replication_factor + 1];
+    
+    state => input_vector[0];
+    i => input_vector[1:replication_factor];
+    
+    input_vector
+        => ${StandardLibraryFunctions.COMBINATIONAL_VECTOR_REDUCE.identifier}(T, replication_factor + 1, operation)
         => state
         => o.value;
 

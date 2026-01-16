@@ -9,7 +9,14 @@ import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 
 class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
-    companion object { init { Loader.loadNativeLibraries() }}
+    companion object {
+        init { Loader.loadNativeLibraries() }
+
+        fun computeUpperRetimingUpperBound(graph: LeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
+            if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
+            return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.sumOf { it.weight }?.toLong()
+        }
+    }
 
     override fun solveOrNull(targetClockPeriod: Int?): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count") {
         Logger.debug { "Target clock period: $targetClockPeriod" }
@@ -18,16 +25,14 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         // Precompute
         Logger.start("Precomputing WD values")
-        var longestRegisterPath = 0
 
         val pathSequence = graph.nodes.asSequence()
             .flatMap { graph.findFastestConnectionsFromNode(it) }
-            .onEach { longestRegisterPath = maxOf(longestRegisterPath, it.registerCount) }
 
         val timingConstrainedPaths = if (targetClockPeriod != null) {
             pathSequence.filter { it.delay > targetClockPeriod }.toList()
         } else {
-            pathSequence.count() // Force an evaluation of the sequence
+            pathSequence.count() // Force an evalu
             emptyList()
         }
 
@@ -37,7 +42,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         val model = CpModel()
 
         // Step 2: create the variables
-        val upperBound = longestRegisterPath.toLong()
+        val upperBound = computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null
         Logger.debug { "Upper bound on retiming label: $upperBound" }
         val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
             node to model.newIntVar(-upperBound, upperBound, index.toString())
