@@ -103,7 +103,7 @@ class Retimer(
 
         Logger.finish()
 
-        return retimedModules + modulesToSkip
+        return retimedModules
     }
 
 }
