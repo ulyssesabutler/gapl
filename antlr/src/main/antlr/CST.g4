@@ -37,6 +37,7 @@ Add: '+';
 Subtract: '-';
 Multiply: '*';
 Divide: '/';
+Remainder: '%';
 Equals: '==';
 NotEquals: '!=';
 GreaterThanEquals: '>=';
@@ -72,7 +73,7 @@ expression:
     | value=IntLiteral #literalExpression
     | expression accessor #accessorExpression
     | ParenL expression ParenR #parenExpression
-    | lhs=expression op=(Multiply|Divide) rhs=expression #multiplicaitonExpression
+    | lhs=expression op=(Multiply|Divide|Remainder) rhs=expression #multiplicaitonExpression
     | lhs=expression op=(Add|Subtract) rhs=expression #additionExpression
     | lhs=expression op=(AngleR|AngleL|GreaterThanEquals|LessThanEquals) rhs=expression #relationalExpression
     | lhs=expression op=(Equals|NotEquals) rhs=expression #equalityExpression

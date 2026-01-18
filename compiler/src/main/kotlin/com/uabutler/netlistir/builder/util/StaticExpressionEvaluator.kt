@@ -24,6 +24,7 @@ object StaticExpressionEvaluator {
             is FalseStaticExpressionNode -> 0
             is AdditionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a + b }
             is DivisionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a / b }
+            is RemainderStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a % b }
             is EqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a == b)  1 else 0 }
             is GreaterThanEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a >= b) 1 else 0 }
             is GreaterThanStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a > b) 1 else 0 }

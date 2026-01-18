@@ -13,6 +13,7 @@ import com.uabutler.ast.node.staticexpressions.LessThanEqualsStaticExpressionNod
 import com.uabutler.ast.node.staticexpressions.LessThanStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.MultiplicationStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.NotEqualsStaticExpressionNode
+import com.uabutler.ast.node.staticexpressions.RemainderStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.SubtractionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.TrueStaticExpressionNode
@@ -33,6 +34,7 @@ import com.uabutler.cst.node.expression.CSTLogicalOrExpression
 import com.uabutler.cst.node.expression.CSTMultiplicationExpression
 import com.uabutler.cst.node.expression.CSTNotEqualsExpression
 import com.uabutler.cst.node.expression.CSTParenthesizedExpression
+import com.uabutler.cst.node.expression.CSTRemainderExpression
 import com.uabutler.cst.node.expression.CSTSubtractionExpression
 import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
@@ -67,6 +69,11 @@ class StaticExpressionScope(
             )
 
             is CSTDivisionExpression -> DivisionStaticExpressionNode(
+                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
+                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
+            )
+
+            is CSTRemainderExpression -> RemainderStaticExpressionNode(
                 lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
                 rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
             )

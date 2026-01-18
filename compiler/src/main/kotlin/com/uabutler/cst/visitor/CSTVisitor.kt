@@ -12,7 +12,7 @@ abstract class CSTVisitor: CSTBaseVisitor<CST>() {
     companion object {
         enum class Keyword { INTERFACE, WIRE, FUNCTION, DECLARE, IF, ELSE, NULL, TRUE, FALSE, IN, OUT, INOUT }
 
-        enum class Operator { ADD, SUBTRACT, MULTIPLY, DIVIDE, EQUALS, NOT_EQUALS, GREATER_THAN, LESS_THAN, GREATER_THAN_EQUALS, LESS_THAN_EQUALS, CONNECTOR, COMMA, DOT, LOGICAL_AND, LOGICAL_OR }
+        enum class Operator { ADD, SUBTRACT, MULTIPLY, DIVIDE, REMAINDER, EQUALS, NOT_EQUALS, GREATER_THAN, LESS_THAN, GREATER_THAN_EQUALS, LESS_THAN_EQUALS, CONNECTOR, COMMA, DOT, LOGICAL_AND, LOGICAL_OR }
 
         fun visitId(token: Token?): String {
             return token!!.text!!
@@ -46,6 +46,7 @@ abstract class CSTVisitor: CSTBaseVisitor<CST>() {
                 CSTLexer.Tokens.Subtract -> Operator.SUBTRACT
                 CSTLexer.Tokens.Multiply -> Operator.MULTIPLY
                 CSTLexer.Tokens.Divide -> Operator.DIVIDE
+                CSTLexer.Tokens.Remainder -> Operator.REMAINDER
                 CSTLexer.Tokens.Equals -> Operator.EQUALS
                 CSTLexer.Tokens.NotEquals -> Operator.NOT_EQUALS
                 CSTLexer.Tokens.AngleL -> Operator.LESS_THAN

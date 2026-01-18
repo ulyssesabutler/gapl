@@ -46,6 +46,11 @@ data class DivisionStaticExpressionNode(
     val rhs: StaticExpressionNode,
 ): StaticExpressionNode
 
+data class RemainderStaticExpressionNode(
+    val lhs: StaticExpressionNode,
+    val rhs: StaticExpressionNode,
+): StaticExpressionNode
+
 data class EqualsStaticExpressionNode(
     val lhs: StaticExpressionNode,
     val rhs: StaticExpressionNode,

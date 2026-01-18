@@ -24,6 +24,7 @@ import com.uabutler.cst.node.expression.CSTLogicalOrExpression
 import com.uabutler.cst.node.expression.CSTMultiplicationExpression
 import com.uabutler.cst.node.expression.CSTNotEqualsExpression
 import com.uabutler.cst.node.expression.CSTParenthesizedExpression
+import com.uabutler.cst.node.expression.CSTRemainderExpression
 import com.uabutler.cst.node.expression.CSTSubtractionExpression
 import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
@@ -79,7 +80,7 @@ class GenericParameterValueScope(
             is CSTTrueExpression, is CSTFalseExpression,
             is CSTIntLiteralExpression,
             is CSTParenthesizedExpression,
-            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTAdditionExpression, is CSTSubtractionExpression,
+            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTRemainderExpression, is CSTAdditionExpression, is CSTSubtractionExpression,
             is CSTLessThanExpression, is CSTGreaterThanExpression, is CSTLessThanOrEqualsExpression, is CSTGreaterThanOrEqualsExpression,
             is CSTEqualsExpression, is CSTNotEqualsExpression,
             is CSTLogicalAndExpression, is CSTLogicalOrExpression -> {

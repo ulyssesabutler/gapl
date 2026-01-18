@@ -36,6 +36,7 @@ Add: '+';
 Subtract: '-';
 Multiply: '*';
 Divide: '/';
+Remainder: '%';
 Equals: '==';
 NotEquals: '!=';
 GreaterThanEquals: '>=';
@@ -69,6 +70,7 @@ staticExpression: // TODO: This gramar currently ignores precendece
     | lhs=staticExpression Subtract rhs=staticExpression #subtractStaticExpression
     | lhs=staticExpression Multiply rhs=staticExpression #multiplyStaticExpression
     | lhs=staticExpression Divide rhs=staticExpression #divideStaticExpression
+    | lhs=staticExpression Remainder rhs=staticExpression #remainderStaticExpression
     | lhs=staticExpression Equals rhs=staticExpression #equalsStaticExpression
     | lhs=staticExpression NotEquals rhs=staticExpression #notEqualsStaticExpression
     | lhs=staticExpression AngleL rhs=staticExpression #lessThanStaticExpression

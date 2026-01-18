@@ -15,6 +15,7 @@ object StaticExpressionVisitor: GAPLVisitor() {
             is GAPLParser.AddStaticExpressionContext -> AdditionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
             is GAPLParser.SubtractStaticExpressionContext -> SubtractionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
             is GAPLParser.MultiplyStaticExpressionContext -> MultiplicationStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
+            is GAPLParser.RemainderStaticExpressionContext -> RemainderStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
             is GAPLParser.DivideStaticExpressionContext -> DivisionStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
             is GAPLParser.EqualsStaticExpressionContext -> EqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))
             is GAPLParser.NotEqualsStaticExpressionContext -> NotEqualsStaticExpressionNode(visitStaticExpression(ctx.lhs!!), visitStaticExpression(ctx.rhs!!))

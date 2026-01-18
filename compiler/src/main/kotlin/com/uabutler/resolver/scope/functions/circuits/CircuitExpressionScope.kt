@@ -45,6 +45,7 @@ import com.uabutler.cst.node.expression.CSTMultiplicationExpression
 import com.uabutler.cst.node.expression.CSTNotEqualsExpression
 import com.uabutler.cst.node.expression.CSTParenthesesCircuitNodeExpression
 import com.uabutler.cst.node.expression.CSTParenthesizedExpression
+import com.uabutler.cst.node.expression.CSTRemainderExpression
 import com.uabutler.cst.node.expression.CSTSubtractionExpression
 import com.uabutler.cst.node.expression.CSTTrueExpression
 import com.uabutler.cst.node.expression.CSTWireExpression
@@ -144,7 +145,7 @@ class LoneCircuitExpressionScope(
     fun ast(): CircuitNodeExpressionNode {
         return when (body) {
             is CSTTrueExpression, is CSTFalseExpression, is CSTIntLiteralExpression,
-            is CSTMultiplicationExpression, is CSTDivisionExpression,
+            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTRemainderExpression,
             is CSTAdditionExpression, is CSTSubtractionExpression,
             is CSTLessThanExpression, is CSTGreaterThanExpression,
             is CSTLessThanOrEqualsExpression, is CSTGreaterThanOrEqualsExpression,

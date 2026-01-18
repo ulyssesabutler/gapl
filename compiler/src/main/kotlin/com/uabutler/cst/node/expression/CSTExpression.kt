@@ -27,6 +27,8 @@ data class CSTMultiplicationExpression(val lhs: CSTExpression, val rhs: CSTExpre
 
 data class CSTDivisionExpression(val lhs: CSTExpression, val rhs: CSTExpression): CSTExpression
 
+data class CSTRemainderExpression(val lhs: CSTExpression, val rhs: CSTExpression): CSTExpression
+
 data class CSTAdditionExpression(val lhs: CSTExpression, val rhs: CSTExpression): CSTExpression
 
 data class CSTSubtractionExpression(val lhs: CSTExpression, val rhs: CSTExpression): CSTExpression
