@@ -1,0 +1,193 @@
+interface word wire[32]
+interface md5_input_block word[16]
+
+interface md5_state {
+    a: word;
+    b: word;
+    c: word;
+    d: word;
+}
+
+function left_rotate() i: word => o: word
+{
+    i[1..31] => o[0..30];
+    i[0] => o[31];
+}
+
+function left_rotate_by(count: integer) i: word => o: word
+{
+    i => repeat(count, left_rotate) => o;
+}
+
+function initial_md5_state() null => o: md5_state
+{
+    literal(32, 1732584193) => o.a;
+    literal(32, 4023233417) => o.b;
+    literal(32, 2562383102) => o.c;
+    literal(32, 271733878)  => o.d;
+}
+
+function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    declare initial_local_state: md5_state;
+
+    literal(32, 0) => initial_local_state.a;
+    literal(32, 0) => initial_local_state.b;
+    literal(32, 0) => initial_local_state.c;
+    literal(32, 0) => initial_local_state.d;
+
+    i, initial_local_state => md5_hash_block_from_iteration(0) => declare final_local_state: md5_state;
+
+    input_state.a, final_local_state.a => output_state.a;
+    input_state.b, final_local_state.b => output_state.b;
+    input_state.c, final_local_state.c => output_state.c;
+    input_state.d, final_local_state.d => output_state.d;
+}
+
+function md5_hash_block_from_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    if (iteration < 63) {
+        m, input_state => md5_iteration(iteration) => declare output_state_from_iteration: md5_state;
+        m, output_state_from_iteration => md5_hash_block_from_iteration(iteration + 1) => output_state;
+    } else {
+        m, input_state => md5_iteration(iteration) => output_state;
+    }
+}
+
+function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    declare f: word;
+    declare k_i: word;
+    declare m_g: word;
+
+    k_table(iteration) => k_i;
+
+    if (iteration <= 15) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.b, input_state.c => bitwise_and(32) => or1;
+
+        input_state.b => bitwise_not(32) => or21;
+        or21, input_state.d => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[iteration] => m_g;
+    } else if (iteration <= 31) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.d, input_state.b => bitwise_and(32) => or1;
+
+        input_state.d => bitwise_not(32) => or21;
+        or21, input_state.c => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[(5 * iteration + 1) % 16] => m_g;
+    } else if (iteration <= 47) {
+        declare xor1: word;
+
+        input_state.b, input_state.c => bitwise_xor(32) => xor1;
+
+        xor1, input_state.d => bitwise_xor(32) => f;
+
+        m[(3 * iteration + 5) % 16] => m_g;
+    } else if (iteration <= 63) {
+        declare xor2;
+        declare xor22;
+
+        input_state.d => bitwise_not(32) => xor22;
+        input_state.b, xor22 => bitwise_or(32) => xor2;
+
+        input_state.c, xor2 => bitwise_xor(32) => f;
+
+        m[(7 * iteration) % 16] => m_g;
+    }
+
+    declare f2: word;
+    declare f21: word;
+    declare f22: word;
+
+    f, input_state.a => add(32) => f21;
+    k_i, m_g => add(32) => f22;
+
+    f21, f22 => bitwise_add(32) => f2;
+
+    input_state.d => output_state.a;
+    input_state.c => output_state.d;
+    input_state.b => output_state.c;
+
+    input_state.b => left_rotate_for_iteration(iteration) => output_state.b;
+}
+
+function left_rotate_for_iteration(iteration: integer) i: md5_state => o: md5_state
+{
+    if (iteration == 0) i => left_rotate_by(7) => o;
+    if (iteration == 1) i => left_rotate_by(12) => o;
+    if (iteration == 2) i => left_rotate_by(17) => o;
+    if (iteration == 3) i => left_rotate_by(22) => o;
+    if (iteration == 4) i => left_rotate_by(7) => o;
+    if (iteration == 5) i => left_rotate_by(12) => o;
+    if (iteration == 6) i => left_rotate_by(17) => o;
+    if (iteration == 7) i => left_rotate_by(22) => o;
+    if (iteration == 8) i => left_rotate_by(7) => o;
+    if (iteration == 9) i => left_rotate_by(12) => o;
+    if (iteration == 10) i => left_rotate_by(17) => o;
+    if (iteration == 11) i => left_rotate_by(22) => o;
+    if (iteration == 12) i => left_rotate_by(7) => o;
+    if (iteration == 13) i => left_rotate_by(12) => o;
+    if (iteration == 14) i => left_rotate_by(17) => o;
+    if (iteration == 15) i => left_rotate_by(22) => o;
+    if (iteration == 16) i => left_rotate_by(5) => o;
+    if (iteration == 17) i => left_rotate_by(9) => o;
+    if (iteration == 18) i => left_rotate_by(14) => o;
+    if (iteration == 19) i => left_rotate_by(20) => o;
+    if (iteration == 20) i => left_rotate_by(5) => o;
+    if (iteration == 21) i => left_rotate_by(9) => o;
+    if (iteration == 22) i => left_rotate_by(14) => o;
+    if (iteration == 23) i => left_rotate_by(20) => o;
+    if (iteration == 24) i => left_rotate_by(5) => o;
+    if (iteration == 25) i => left_rotate_by(9) => o;
+    if (iteration == 26) i => left_rotate_by(14) => o;
+    if (iteration == 27) i => left_rotate_by(20) => o;
+    if (iteration == 28) i => left_rotate_by(5) => o;
+    if (iteration == 29) i => left_rotate_by(9) => o;
+    if (iteration == 30) i => left_rotate_by(14) => o;
+    if (iteration == 31) i => left_rotate_by(20) => o;
+    if (iteration == 32) i => left_rotate_by(4) => o;
+    if (iteration == 33) i => left_rotate_by(11) => o;
+    if (iteration == 34) i => left_rotate_by(16) => o;
+    if (iteration == 35) i => left_rotate_by(23) => o;
+    if (iteration == 36) i => left_rotate_by(4) => o;
+    if (iteration == 37) i => left_rotate_by(11) => o;
+    if (iteration == 38) i => left_rotate_by(16) => o;
+    if (iteration == 39) i => left_rotate_by(23) => o;
+    if (iteration == 40) i => left_rotate_by(4) => o;
+    if (iteration == 41) i => left_rotate_by(11) => o;
+    if (iteration == 42) i => left_rotate_by(16) => o;
+    if (iteration == 43) i => left_rotate_by(23) => o;
+    if (iteration == 44) i => left_rotate_by(4) => o;
+    if (iteration == 45) i => left_rotate_by(11) => o;
+    if (iteration == 46) i => left_rotate_by(16) => o;
+    if (iteration == 47) i => left_rotate_by(23) => o;
+    if (iteration == 48) i => left_rotate_by(6) => o;
+    if (iteration == 49) i => left_rotate_by(10) => o;
+    if (iteration == 50) i => left_rotate_by(15) => o;
+    if (iteration == 51) i => left_rotate_by(21) => o;
+    if (iteration == 52) i => left_rotate_by(6) => o;
+    if (iteration == 53) i => left_rotate_by(10) => o;
+    if (iteration == 54) i => left_rotate_by(15) => o;
+    if (iteration == 55) i => left_rotate_by(21) => o;
+    if (iteration == 56) i => left_rotate_by(6) => o;
+    if (iteration == 57) i => left_rotate_by(10) => o;
+    if (iteration == 58) i => left_rotate_by(15) => o;
+    if (iteration == 59) i => left_rotate_by(21) => o;
+    if (iteration == 60) i => left_rotate_by(6) => o;
+    if (iteration == 61) i => left_rotate_by(10) => o;
+    if (iteration == 62) i => left_rotate_by(15) => o;
+    if (iteration == 63) i => left_rotate_by(21) => o;
+}
