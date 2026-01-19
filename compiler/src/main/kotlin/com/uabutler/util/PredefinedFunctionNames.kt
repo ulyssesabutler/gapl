@@ -20,6 +20,7 @@ enum class PredefinedFunctionNames(val gaplName: String) {
     LEFT_SHIFT("left_shift"),
     RIGHT_SHIFT("right_shift"),
     REGISTER("register"),
+    INTEGER_REGISTER("integer_register"),
     LITERAL("literal"),
     MUX("mux"),
     DEMUX("demux"),

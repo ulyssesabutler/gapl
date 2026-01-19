@@ -280,7 +280,8 @@ funciton multiply   (size: integer) lhs: wire[size], rhs: wire[size] => result: 
 funciton left_shift (size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
 funciton right_shift(size: integer) lhs: wire[size], rhs: wire[size] => result: wire[size]
 
-funciton register(T: interface)  next: T => current: T
+funciton register(T: interface)                            next: T => current: T
+funciton integer_register(size: integer, default: integer) next: wire[size] => current: wire[size]
 
 funciton literal(size: integer, value: integer) => result: wire[size]
 

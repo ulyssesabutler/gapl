@@ -73,6 +73,12 @@ sealed class PredefinedFunction(
                 PredefinedFunctionNames.LEFT_SHIFT -> LeftShiftFunction(size!!)
                 PredefinedFunctionNames.RIGHT_SHIFT -> RightShiftFunction(size!!)
                 PredefinedFunctionNames.REGISTER -> RegisterFunction(interfaceStructure!!)
+                PredefinedFunctionNames.INTEGER_REGISTER -> {
+                    val size = (invocation.parameters[0] as IntegerParameterValue).value
+                    val default = (invocation.parameters[1] as IntegerParameterValue).value
+
+                    IntegerRegisterFunction(size, default)
+                }
                 PredefinedFunctionNames.LITERAL -> LiteralFunction(size!!, value!!)
                 PredefinedFunctionNames.MUX -> {
                     val outputStructure = invocation.interfaces[0]
@@ -223,6 +229,14 @@ data class RegisterFunction(
 ): PredefinedFunction(
     inputs = listOf(IO("next", storageStructure)),
     outputs = listOf(IO("current", storageStructure)),
+)
+
+data class IntegerRegisterFunction(
+    val size: Int,
+    val default: Int,
+): PredefinedFunction(
+    inputs = listOf(IO("next", wireVector(size))),
+    outputs = listOf(IO("current", wireVector(size))),
 )
 
 data class MuxFunction(

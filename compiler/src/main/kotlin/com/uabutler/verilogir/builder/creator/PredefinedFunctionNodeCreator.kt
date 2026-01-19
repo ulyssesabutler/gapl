@@ -11,6 +11,7 @@ import com.uabutler.netlistir.util.DemuxFunction
 import com.uabutler.netlistir.util.EqualsFunction
 import com.uabutler.netlistir.util.GreaterThanEqualsFunction
 import com.uabutler.netlistir.util.GreaterThanFunction
+import com.uabutler.netlistir.util.IntegerRegisterFunction
 import com.uabutler.netlistir.util.LeftShiftFunction
 import com.uabutler.netlistir.util.LessThanEqualsFunction
 import com.uabutler.netlistir.util.LessThanFunction
@@ -196,6 +197,68 @@ object PredefinedFunctionNodeCreator {
                 )
             )
         }
+    }
+
+    private fun integerRegisterFunction(node: PredefinedFunctionNode): List<Statement> = buildList {
+        val current = node.inputWireVectors()[0]
+        val next = node.outputWireVectors()[0]
+        val default = (node.predefinedFunction as IntegerRegisterFunction).default
+
+        val registerName = "${Identifier.wire(current)}_register"
+        val inputName = Identifier.wire(current)
+        val outputName = Identifier.wire(next)
+
+        add(
+            Declaration(
+                name = registerName,
+                type = DataType.REG,
+                startIndex = current.wires.size - 1,
+                endIndex = 0,
+            )
+        )
+
+        add(
+            Assignment(
+                destReference = Reference(outputName),
+                expression = Reference(registerName)
+            )
+        )
+
+        add(
+            Always(
+                sensitivity = Clocked("clock"),
+                statements = listOf(
+                    IfStatement(
+                        ifBranch = IfBranch(
+                            condition = Reference("reset"),
+                            then = listOf(
+                                NonBlockingAssignment(
+                                    variableName = Reference(registerName),
+                                    expression = IntLiteral(default),
+                                )
+                            ),
+                        ),
+                        elseIfBranches = listOf(
+                            IfBranch(
+                                condition = Reference("enable"),
+                                then = listOf(
+                                    NonBlockingAssignment(
+                                        variableName = Reference(registerName),
+                                        expression = Reference(inputName),
+                                    )
+                                ),
+                            )
+                        ),
+                        elseStatements = listOf(
+                            NonBlockingAssignment(
+                                variableName = Reference(registerName),
+                                expression = Reference(registerName),
+                            )
+                        ),
+                    )
+                )
+            )
+        )
     }
 
     fun muxFunction(node: PredefinedFunctionNode): List<Statement> {
@@ -469,6 +532,7 @@ object PredefinedFunctionNodeCreator {
             is BinaryFunction -> add(binaryFunction(node))
             is LiteralFunction -> add(literalFunction(node))
             is RegisterFunction -> addAll(registerFunction(node))
+            is IntegerRegisterFunction -> addAll(integerRegisterFunction(node))
             is MuxFunction -> addAll(muxFunction(node))
             is DemuxFunction -> addAll(demuxFunction(node))
             is PriorityFunction -> addAll(priorityFunction(node))
