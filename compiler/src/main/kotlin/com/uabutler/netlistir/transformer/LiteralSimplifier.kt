@@ -3,12 +3,13 @@ package com.uabutler.netlistir.transformer
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.LiteralFunction
+import java.math.BigInteger
 
 object LiteralSimplifier: Transformer {
     class ModuleSimplifier(val module: Module) {
         data class LiteralFunctionSignature(
             val size: Int,
-            val value: Int,
+            val value: BigInteger,
         )
 
         val literalNodes = mutableMapOf<LiteralFunctionSignature, PredefinedFunctionNode>()

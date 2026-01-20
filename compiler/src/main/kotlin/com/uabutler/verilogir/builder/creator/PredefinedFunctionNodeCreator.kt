@@ -48,6 +48,7 @@ import com.uabutler.verilogir.module.statement.expression.UnaryOperation
 import com.uabutler.verilogir.module.statement.util.BinaryOperator
 import com.uabutler.verilogir.module.statement.util.UnaryOperator
 import com.uabutler.verilogir.util.DataType
+import java.math.BigInteger
 
 object PredefinedFunctionNodeCreator {
     private fun binaryFunction(node: PredefinedFunctionNode): Statement {
@@ -171,7 +172,7 @@ object PredefinedFunctionNodeCreator {
                                 then = listOf(
                                     NonBlockingAssignment(
                                         variableName = Reference(it.register),
-                                        expression = IntLiteral(0),
+                                        expression = IntLiteral(BigInteger.ZERO),
                                     )
                                 ),
                             ),
@@ -324,7 +325,7 @@ object PredefinedFunctionNodeCreator {
             }
 
             CaseEntry(
-                condition = IntLiteral(index),
+                condition = IntLiteral(index.toBigInteger()),
                 statements = assignments,
             )
         }
@@ -380,7 +381,7 @@ object PredefinedFunctionNodeCreator {
         val outputReset = registers.map {
             BlockingAssignment(
                 variableName = Reference(it.register),
-                expression = IntLiteral(0)
+                expression = IntLiteral(BigInteger.ZERO)
             )
         }
 
@@ -412,7 +413,7 @@ object PredefinedFunctionNodeCreator {
             }
 
             CaseEntry(
-                condition = IntLiteral(index),
+                condition = IntLiteral(index.toBigInteger()),
                 statements = assignments,
             )
         }

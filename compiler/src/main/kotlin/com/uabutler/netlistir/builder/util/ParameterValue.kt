@@ -5,6 +5,7 @@ import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
 import com.uabutler.netlistir.netlist.Module
+import java.math.BigInteger
 
 
 sealed interface ParameterValue<T> {
@@ -48,8 +49,8 @@ sealed interface ParameterValue<T> {
 }
 
 data class IntegerParameterValue(
-    override val value: Int
-): ParameterValue<Int>
+    override val value: BigInteger
+): ParameterValue<BigInteger>
 
 data class FunctionInstantiationParameterValue(
     override val value: Module.Invocation

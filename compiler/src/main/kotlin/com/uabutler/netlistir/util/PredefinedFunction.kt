@@ -7,6 +7,7 @@ import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.util.PredefinedFunctionNames
+import java.math.BigInteger
 
 sealed class PredefinedFunction(
     val inputs: List<IO>,
@@ -44,7 +45,7 @@ sealed class PredefinedFunction(
 
         fun search(invocation: Module.Invocation): PredefinedFunction? {
             val size = invocation.parameters.firstOrNull()?.let {
-                if (it is IntegerParameterValue) it.value else null
+                if (it is IntegerParameterValue) it.value.intValueExact() else null
             }
 
             val value = invocation.parameters.getOrNull(1)?.let {
@@ -74,7 +75,7 @@ sealed class PredefinedFunction(
                 PredefinedFunctionNames.RIGHT_SHIFT -> RightShiftFunction(size!!)
                 PredefinedFunctionNames.REGISTER -> RegisterFunction(interfaceStructure!!)
                 PredefinedFunctionNames.INTEGER_REGISTER -> {
-                    val size = (invocation.parameters[0] as IntegerParameterValue).value
+                    val size = (invocation.parameters[0] as IntegerParameterValue).value.intValueExact()
                     val default = (invocation.parameters[1] as IntegerParameterValue).value
 
                     IntegerRegisterFunction(size, default)
@@ -82,20 +83,20 @@ sealed class PredefinedFunction(
                 PredefinedFunctionNames.LITERAL -> LiteralFunction(size!!, value!!)
                 PredefinedFunctionNames.MUX -> {
                     val outputStructure = invocation.interfaces[0]
-                    val inputCount = (invocation.parameters[0] as IntegerParameterValue).value
-                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value
+                    val inputCount = (invocation.parameters[0] as IntegerParameterValue).value.intValueExact()
+                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value.intValueExact()
 
                     MuxFunction(outputStructure, inputCount, selectorSize)
                 }
                 PredefinedFunctionNames.DEMUX -> {
                     val inputStructure = invocation.interfaces[0]
-                    val outputCount = (invocation.parameters[0] as IntegerParameterValue).value
-                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value
+                    val outputCount = (invocation.parameters[0] as IntegerParameterValue).value.intValueExact()
+                    val selectorSize = (invocation.parameters[1] as IntegerParameterValue).value.intValueExact()
 
                     DemuxFunction(inputStructure, outputCount, selectorSize)
                 }
                 PredefinedFunctionNames.PRIORITY -> {
-                    val conditionalCount = (invocation.parameters[0] as IntegerParameterValue).value
+                    val conditionalCount = (invocation.parameters[0] as IntegerParameterValue).value.intValueExact()
                     val inputStructure = invocation.interfaces[0]
 
                     PriorityFunction(conditionalCount, inputStructure)
@@ -233,7 +234,7 @@ data class RegisterFunction(
 
 data class IntegerRegisterFunction(
     val size: Int,
-    val default: Int,
+    val default: BigInteger,
 ): PredefinedFunction(
     inputs = listOf(IO("next", wireVector(size))),
     outputs = listOf(IO("current", wireVector(size))),
@@ -267,7 +268,7 @@ data class PriorityFunction(
 
 data class LiteralFunction(
     val size: Int,
-    val value: Int,
+    val value: BigInteger,
 ): PredefinedFunction(
     inputs = listOf(),
     outputs = listOf(IO("value", wireVector(size))),

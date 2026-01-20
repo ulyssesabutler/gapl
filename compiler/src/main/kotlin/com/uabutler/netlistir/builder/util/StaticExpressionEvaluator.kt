@@ -1,38 +1,43 @@
 package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.staticexpressions.*
+import java.math.BigInteger
 
 object StaticExpressionEvaluator {
     private fun op(
         lhs: StaticExpressionNode,
         rhs: StaticExpressionNode,
         context: Map<String, ParameterValue<*>>, // TODO: This could be any value
-        op: (Int, Int) -> Int
-    ): Int  {
+        op: (BigInteger, BigInteger) -> BigInteger
+    ): BigInteger  {
         val lhs = evaluateStaticExpressionWithContext(lhs, context)
         val rhs = evaluateStaticExpressionWithContext(rhs, context)
 
         return op(lhs, rhs)
     }
 
+    private fun conditional(boolean: Boolean): BigInteger {
+        return if (boolean) BigInteger.ONE else BigInteger.ZERO
+    }
+
     fun evaluateStaticExpressionWithContext(
         staticExpression: StaticExpressionNode,
         context: Map<String, ParameterValue<*>>, // TODO: This could be any value
-    ): Int {
+    ): BigInteger {
         return when (val e = staticExpression) {
-            is TrueStaticExpressionNode -> 1
-            is FalseStaticExpressionNode -> 0
+            is TrueStaticExpressionNode -> BigInteger.ONE
+            is FalseStaticExpressionNode -> BigInteger.ZERO
             is AdditionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a + b }
             is DivisionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a / b }
             is RemainderStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a % b }
-            is EqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a == b)  1 else 0 }
-            is GreaterThanEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a >= b) 1 else 0 }
-            is GreaterThanStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a > b) 1 else 0 }
+            is EqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a == b) }
+            is GreaterThanEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a >= b) }
+            is GreaterThanStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a > b) }
             is IntegerLiteralStaticExpressionNode -> e.integer.value
-            is LessThanEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a <= b) 1 else 0 }
-            is LessThanStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a < b) 1 else 0 }
+            is LessThanEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a <= b) }
+            is LessThanStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a < b) }
             is MultiplicationStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a * b }
-            is NotEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> if (a != b) 1 else 0 }
+            is NotEqualsStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> conditional(a != b) }
             is SubtractionStaticExpressionNode -> op(e.lhs, e.rhs, context) { a, b -> a - b }
             is IdentifierStaticExpressionNode -> {
                 val identifiedValue = try {

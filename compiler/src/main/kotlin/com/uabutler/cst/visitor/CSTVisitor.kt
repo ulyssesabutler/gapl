@@ -5,6 +5,7 @@ import com.uabutler.cst.node.CSTEmpty
 import com.uabutler.parsers.generated.CSTBaseVisitor
 import com.uabutler.parsers.generated.CSTLexer
 import org.antlr.v4.kotlinruntime.Token
+import java.math.BigInteger
 
 abstract class CSTVisitor: CSTBaseVisitor<CST>() {
     override fun defaultResult() = CSTEmpty
@@ -18,8 +19,8 @@ abstract class CSTVisitor: CSTBaseVisitor<CST>() {
             return token!!.text!!
         }
 
-        fun visitIntLiteral(token: Token?): Int {
-            return token!!.text!!.toInt()
+        fun visitIntLiteral(token: Token?): BigInteger {
+            return token!!.text!!.toBigInteger()
         }
 
         fun keywordFrom(token: Token?): Keyword {

@@ -6,6 +6,7 @@ import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.netlistir.util.PredefinedFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
+import java.math.BigInteger
 
 class NodeBuilder(
     val programContext: ProgramContext,
@@ -167,7 +168,7 @@ class NodeBuilder(
                     context = parameterValuesContext,
                 )
 
-                if (predicateValue != 0) {
+                if (predicateValue != BigInteger.ZERO) {
                     circuitStatementNode.ifBody.flatMap { getCircuitExpressionsFromCircuitStatement(it) }
                 } else {
                     circuitStatementNode.elseBody.flatMap { getCircuitExpressionsFromCircuitStatement(it) }
@@ -433,11 +434,11 @@ class NodeBuilder(
             val start = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
                 staticExpression = multipleAccessNode.startIndex,
                 context = parameterValuesContext,
-            )
+            ).intValueExact()
             val end = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
                 staticExpression = multipleAccessNode.endIndex,
                 context = parameterValuesContext,
-            )
+            ).intValueExact()
 
             CurrentProjection(range = start..end)
         } else {
@@ -457,7 +458,7 @@ class NodeBuilder(
                     val index = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
                         staticExpression = accessNode.index,
                         context = parameterValuesContext,
-                    )
+                    ).intValueExact()
 
                     CurrentProjection(
                         identifier = current.identifier,

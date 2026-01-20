@@ -3,6 +3,7 @@ package com.uabutler.cst.node.expression
 import com.uabutler.cst.node.CSTPersistent
 import com.uabutler.cst.node.expression.util.CSTAccessor
 import com.uabutler.cst.node.util.CSTAtom
+import java.math.BigInteger
 
 sealed interface CSTExpression: CSTPersistent
 
@@ -14,7 +15,7 @@ data object CSTTrueExpression: CSTExpression
 
 data object CSTFalseExpression: CSTExpression
 
-data class CSTIntLiteralExpression(val value: Int): CSTExpression
+data class CSTIntLiteralExpression(val value: BigInteger): CSTExpression
 
 data class CSTAccessorExpression(
     val accessed: CSTExpression,

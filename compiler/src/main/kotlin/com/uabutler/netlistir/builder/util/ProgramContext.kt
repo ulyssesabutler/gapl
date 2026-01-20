@@ -81,7 +81,7 @@ class ProgramContext(program: ProgramNode) {
                 size = StaticExpressionEvaluator.evaluateStaticExpressionWithContext(
                     staticExpression = node.boundsSpecifier.boundSpecifier,
                     context = parameterValuesContext,
-                ),
+                ).intValueExact(),
             )
             is IdentifierInterfaceExpressionNode -> {
                 try {

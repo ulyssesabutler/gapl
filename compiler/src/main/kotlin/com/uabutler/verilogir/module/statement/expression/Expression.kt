@@ -3,6 +3,7 @@ package com.uabutler.verilogir.module.statement.expression
 import com.uabutler.verilogir.VerilogSerialize
 import com.uabutler.verilogir.module.statement.util.BinaryOperator
 import com.uabutler.verilogir.module.statement.util.UnaryOperator
+import java.math.BigInteger
 
 
 sealed class Expression: VerilogSerialize
@@ -26,7 +27,7 @@ data class Reference(
 }
 
 data class IntLiteral(
-    val value: Int,
+    val value: BigInteger,
 ): Expression() {
     override fun verilogSerialize() = value.toString()
 }

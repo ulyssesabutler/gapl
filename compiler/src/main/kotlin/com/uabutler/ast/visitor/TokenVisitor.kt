@@ -15,6 +15,6 @@ object TokenVisitor {
     }
 
     fun visitIntegerLiteral(token: TerminalNode): IntegerLiteralNode {
-        return IntegerLiteralNode(token.text.toInt())
+        return IntegerLiteralNode(token.text.toBigInteger())
     }
 }
