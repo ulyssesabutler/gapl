@@ -15,6 +15,7 @@
 #include <vector>
 
 using Wide128 = std::array<uint32_t, 4>;
+using Wide512 = std::array<uint32_t, 16>;
 
 static VerilatedVcdC* waveform = nullptr;
 
@@ -33,6 +34,83 @@ static void tick(Vtest* top) {
     top->eval();
     if (waveform) waveform->dump(sim_time);
     ++sim_time;
+}
+
+static std::string sanitizeHex(std::string hex) {
+    if (hex.size() >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) {
+        hex = hex.substr(2);
+    }
+    hex.erase(std::remove_if(hex.begin(), hex.end(),
+                             [](unsigned char c){ return std::isspace(c); }),
+              hex.end());
+    return hex;
+}
+
+static uint8_t hexNibble(char c) {
+    if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
+    if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return static_cast<uint8_t>(c - 'A' + 10);
+    throw std::runtime_error("Invalid hex digit");
+}
+
+static std::vector<uint8_t> hexToBytes(std::string hex) {
+    hex = sanitizeHex(std::move(hex));
+    if (hex.size() % 2 != 0) {
+        throw std::runtime_error("hexToBytes: odd number of hex digits");
+    }
+
+    std::vector<uint8_t> bytes;
+    bytes.reserve(hex.size() / 2);
+
+    for (std::size_t i = 0; i < hex.size(); i += 2) {
+        uint8_t hi = hexNibble(hex[i]);
+        uint8_t lo = hexNibble(hex[i + 1]);
+        bytes.push_back(static_cast<uint8_t>((hi << 4) | lo));
+    }
+    return bytes;
+}
+
+static std::string bytesToHex(const std::vector<uint8_t>& bytes) {
+    static const char* kHex = "0123456789abcdef";
+    std::string out;
+    out.reserve(bytes.size() * 2);
+    for (uint8_t b : bytes) {
+        out.push_back(kHex[(b >> 4) & 0xF]);
+        out.push_back(kHex[b & 0xF]);
+    }
+    return out;
+}
+
+// MD5 padding for *single-block* messages (i.e., resulting padded message is exactly 64 bytes).
+static std::string md5PadToSingleBlockHex(const std::string& message_hex) {
+    std::vector<uint8_t> msg = hexToBytes(message_hex);
+
+    const std::uint64_t original_len_bytes = static_cast<std::uint64_t>(msg.size());
+    const std::uint64_t original_len_bits  = original_len_bytes * 8ULL;
+
+    // Append 0x80
+    msg.push_back(0x80);
+
+    // Pad with 0x00 until length is 56 mod 64
+    while ((msg.size() % 64) != 56) {
+        msg.push_back(0x00);
+        // If we exceed one block before adding length, this is a multi-block padded message.
+        if (msg.size() > 64) {
+            throw std::runtime_error("md5PadToSingleBlockHex: message requires multiple 512-bit blocks after padding");
+        }
+    }
+
+    // Append original length in bits as 64-bit little-endian
+    for (int i = 0; i < 8; ++i) {
+        msg.push_back(static_cast<uint8_t>((original_len_bits >> (8 * i)) & 0xFF));
+    }
+
+    if (msg.size() != 64) {
+        throw std::runtime_error("md5PadToSingleBlockHex: internal error, padded block is not 64 bytes");
+    }
+
+    // Return 128 hex chars (512 bits)
+    return bytesToHex(msg);
 }
 
 Wide128 hexToWide128(std::string hex) {
@@ -58,6 +136,29 @@ Wide128 hexToWide128(std::string hex) {
     return result;
 }
 
+Wide512 hexToWide512(std::string hex) {
+    // Brought to you by the bot
+    if (hex.size() >= 2 && hex[0] == '0' &&
+        (hex[1] == 'x' || hex[1] == 'X')) {
+        hex = hex.substr(2);
+    }
+
+    hex.erase(std::remove_if(hex.begin(), hex.end(), ::isspace), hex.end());
+
+    if (hex.size() > 128) throw std::runtime_error("hexToWide512: hex string longer than 512 bits");
+    if (hex.size() < 128) hex = std::string(128 - hex.size(), '0') + hex;
+
+    Wide512 result{};
+
+    for (int w = 0; w < 16; ++w) {
+        const std::size_t start = 128 - (w + 1) * 8;
+        const std::string chunk = hex.substr(start, 8);
+        result[w] = static_cast<uint32_t>(std::stoul(chunk, nullptr, 16));
+    }
+
+    return result;
+}
+
 std::string wide128ToHex(const Wide128& value) {
     // Brought to you by the bot
     std::ostringstream oss;
@@ -66,16 +167,22 @@ std::string wide128ToHex(const Wide128& value) {
     return oss.str();
 }
 
+std::string wide512ToHex(const Wide512& value) {
+    // Brought to you by the bot
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (int w = 15; w >= 0; --w) oss << std::setw(8) << value[w];
+    return oss.str();
+}
+
 struct TestVector {
     std::string i_hex;
-    std::string key_hex;
     std::string expected_o_hex;
 };
 
 // Input interface struct
 struct InputInterface {
-    Wide128 i;
-    Wide128 key;
+    Wide512 i;
 };
 
 // Output interface struct
@@ -88,9 +195,10 @@ std::vector<InputInterface> makeInputs(const std::vector<TestVector>& tvs) {
     inputs.reserve(tvs.size());
 
     for (const auto& tv : tvs) {
+        const std::string padded_block_hex = md5PadToSingleBlockHex(tv.i_hex);
+
         inputs.push_back(InputInterface{
-            .i   = hexToWide128(tv.i_hex),
-            .key = hexToWide128(tv.key_hex)
+            .i = hexToWide512(padded_block_hex),
         });
     }
 
@@ -109,9 +217,8 @@ std::vector<Wide128> makeExpectedOutputs(const std::vector<TestVector>& tvs) {
 }
 
 static void drive_inputs(Vtest* top, const InputInterface& in) {
-    for (int w = 0; w < 4; ++w) {
+    for (int w = 0; w < 16; ++w) {
         top->i[w]   = in.i[w];
-        top->key[w] = in.key[w];
     }
 }
 
@@ -196,28 +303,15 @@ int main(int argc, char** argv) {
     std::vector<TestVector> testVectors = {
         {
             "000102030405060708090a0b0c0d0e0f",
-            "000102030405060708090a0b0c0d0e0f",
-            "0a940bb5416ef045f1c39458c653ea5a"
+            "1ac1ef01e96caf1be0d329331a4fc2a8"
         },
         {
             "00112233445566778899aabbccddeeff",
-            "00112233445566778899aabbccddeeff",
-            "62f679be2bf0d931641e039ca3401bb2"
-        },
-        {
-            "00112233445566778899aabbccddeeff",
-            "000102030405060708090a0b0c0d0e0f",
-            "69c4e0d86a7b0430d8cdb78070b4c55a"
-        },
-        {
-            "000102030405060708090a0b0c0d0e0f",
-            "00112233445566778899aabbccddeeff",
-            "279fb74a7572135e8f9b8ef6d1eee003"
+            "6e8311168ee16d6aa1aa48c64145003c"
         },
         {
             "00000000000000000000000000000000",
-            "00000000000000000000000000000000",
-            "66e94bd4ef8a2c3b884cfa59ca342b2e"
+            "4ae71336e44bf9bf79d2752e234818a5"
         }
     };
 
