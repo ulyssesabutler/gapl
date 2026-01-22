@@ -16,6 +16,11 @@ function test() i: wire[512] => o: wire[128]
       => o;
 }
 
+function add_words() lhs: word, rhs: word => result: word
+{
+    lhs, rhs => add(32) => result;
+}
+
 function md5_hash_stream() i: last(wire[512]) => o: valid(wire[128])
 {
     declare md5_input: last(md5_input_block);
@@ -60,36 +65,44 @@ function md5_single_round_hash() i: md5_input_block => o: md5_state
 
 function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
 {
-    i[0:31]    => o[0];
-    i[32:63]   => o[1];
-    i[64:95]   => o[2];
-    i[96:127]  => o[3];
-    i[128:159] => o[4];
-    i[160:191] => o[5];
-    i[192:223] => o[6];
-    i[224:255] => o[7];
-    i[256:287] => o[8];
-    i[288:319] => o[9];
-    i[320:351] => o[10];
-    i[352:383] => o[11];
-    i[384:415] => o[12];
-    i[416:447] => o[13];
-    i[448:479] => o[14];
-    i[480:511] => o[15];
+    i[0:31]    => reverse_endianess() => o[15];
+    i[32:63]   => reverse_endianess() => o[14];
+    i[64:95]   => reverse_endianess() => o[13];
+    i[96:127]  => reverse_endianess() => o[12];
+    i[128:159] => reverse_endianess() => o[11];
+    i[160:191] => reverse_endianess() => o[10];
+    i[192:223] => reverse_endianess() => o[9];
+    i[224:255] => reverse_endianess() => o[8];
+    i[256:287] => reverse_endianess() => o[7];
+    i[288:319] => reverse_endianess() => o[6];
+    i[320:351] => reverse_endianess() => o[5];
+    i[352:383] => reverse_endianess() => o[4];
+    i[384:415] => reverse_endianess() => o[3];
+    i[416:447] => reverse_endianess() => o[2];
+    i[448:479] => reverse_endianess() => o[1];
+    i[480:511] => reverse_endianess() => o[0];
 }
 
 function md5_hash_output_from_state() i: md5_state => o: wire[128]
 {
-    i.a => o[0:31];
-    i.b => o[32:63];
-    i.c => o[64:95];
-    i.d => o[96:127];
+    i.a => reverse_endianess() => o[96:127];
+    i.b => reverse_endianess() => o[64:95];
+    i.c => reverse_endianess() => o[32:63];
+    i.d => reverse_endianess() => o[0:31];
 }
 
 function left_rotate() i: word => o: word
 {
-    i[1:31] => o[0:30];
-    i[0] => o[31];
+    i[0:30] => o[1:31];
+    i[31] => o[0];
+}
+
+function reverse_endianess() i: word => o: word
+{
+    i[0:7]  => o[24:31];
+    i[8:15] => o[16:23];
+    i[16:23] => o[8:15];
+    i[24:31] => o[0:7];
 }
 
 function left_rotate_by(count: integer) i: word => o: word
@@ -99,13 +112,12 @@ function left_rotate_by(count: integer) i: word => o: word
 
 function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
 {
-
     i, input_state => md5_hash_block_from_iteration(0) => declare final_local_state: md5_state;
 
-    input_state.a, final_local_state.a => add(32) => output_state.a;
-    input_state.b, final_local_state.b => add(32) => output_state.b;
-    input_state.c, final_local_state.c => add(32) => output_state.c;
-    input_state.d, final_local_state.d => add(32) => output_state.d;
+    input_state.a, final_local_state.a => add_words() => output_state.a;
+    input_state.b, final_local_state.b => add_words() => output_state.b;
+    input_state.c, final_local_state.c => add_words() => output_state.c;
+    input_state.d, final_local_state.d => add_words() => output_state.d;
 }
 
 function md5_hash_block_from_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
@@ -176,16 +188,18 @@ function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_
     declare f21: word;
     declare f22: word;
 
-    f, input_state.a => add(32) => f21;
-    k_i, m_g => add(32) => f22;
+    f, input_state.a => add_words() => f21;
+    k_i, m_g => add_words() => f22;
 
-    f21, f22 => add(32) => f2;
+    f21, f22
+        => add_words()
+        => left_rotate_for_iteration(iteration)
+        => f2;
 
     input_state.d => output_state.a;
     input_state.c => output_state.d;
     input_state.b => output_state.c;
-
-    input_state.b => declare n5: left_rotate_for_iteration(iteration) => output_state.b;
+    input_state.b, f2 => add_words() => output_state.b;
 }
 
 function left_rotate_for_iteration(iteration: integer) i: word => o: word

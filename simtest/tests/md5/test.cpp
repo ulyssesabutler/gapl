@@ -83,10 +83,13 @@ static std::string bytesToHex(const std::vector<uint8_t>& bytes) {
 
 // MD5 padding for *single-block* messages (i.e., resulting padded message is exactly 64 bytes).
 static std::string md5PadToSingleBlockHex(const std::string& message_hex) {
+    std::cerr << "Padding message: " << message_hex << std::endl;
+
     std::vector<uint8_t> msg = hexToBytes(message_hex);
 
     const std::uint64_t original_len_bytes = static_cast<std::uint64_t>(msg.size());
     const std::uint64_t original_len_bits  = original_len_bytes * 8ULL;
+    std::cerr << "  Message length: " << original_len_bits << std::endl;
 
     // Append 0x80
     msg.push_back(0x80);
@@ -110,6 +113,7 @@ static std::string md5PadToSingleBlockHex(const std::string& message_hex) {
     }
 
     // Return 128 hex chars (512 bits)
+    std::cerr << "  Padded message: " << bytesToHex(msg) << std::endl;
     return bytesToHex(msg);
 }
 
@@ -196,6 +200,7 @@ std::vector<InputInterface> makeInputs(const std::vector<TestVector>& tvs) {
 
     for (const auto& tv : tvs) {
         const std::string padded_block_hex = md5PadToSingleBlockHex(tv.i_hex);
+        std::cerr << "INPUTTING: " << wide512ToHex(hexToWide512(padded_block_hex)) << std::endl;
 
         inputs.push_back(InputInterface{
             .i = hexToWide512(padded_block_hex),
@@ -312,6 +317,10 @@ int main(int argc, char** argv) {
         {
             "00000000000000000000000000000000",
             "4ae71336e44bf9bf79d2752e234818a5"
+        },
+        {
+            "30313233343536373839616263646566",
+            "4032af8d61035123906e58e067140cc5"
         }
     };
 
