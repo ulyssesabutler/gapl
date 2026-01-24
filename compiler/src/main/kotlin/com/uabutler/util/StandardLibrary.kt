@@ -71,7 +71,7 @@ function ${StandardLibraryFunctions.INDEX_LIST.identifier}(list_size: integer, i
     literal(index_size, list_size - 1) => o[list_size - 1];
 
     if (list_size > 1) {
-        declare recursivefun: ${StandardLibraryFunctions.INDEX_LIST.identifier}(index_size, list_size - 1) => o[0:list_size - 2];
+        declare recursivefun: ${StandardLibraryFunctions.INDEX_LIST.identifier}(list_size - 1, index_size) => o[0:list_size - 2];
     }
 }
 
