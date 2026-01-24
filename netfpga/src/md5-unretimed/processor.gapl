@@ -8,12 +8,46 @@ interface md5_state {
     d: word;
 }
 
-function test() i: wire[512] => o: wire[128]
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
 {
-    i => md5_hash_block_from_input()
-      => md5_single_round_hash()
-      => md5_hash_output_from_state()
-      => o;
+    i.data => declare data_padder: pad_nf_data()
+           => md5_hash_block_from_input()
+           => md5_single_round_hash()
+           => md5_hash_output_from_state()
+           => o.data[128:255];
+
+    literal(128, 0) => o.data[0:127];
+
+    i.keep => o.keep;
+    i.valid => o.valid;
+    i.last => o.last;
+}
+
+function generate_256bit_padding() null => o: wire[256]
+{
+    literal(1, 1) => declare true_vector: wire[1];
+    true_vector[0] => declare true_value: wire;
+
+    true_value => o[255];
+    true_value => o[48];
+
+    literal(48, 0)  => o[0:47];
+    literal(206, 0) => o[49:254];
+}
+
+function pad_nf_data() i: wire[256] => o: wire[512]
+{
+    generate_256bit_padding() => o[0:255];
+    i                         => o[256:511];
 }
 
 function add_words() lhs: word, rhs: word => result: word
@@ -240,70 +274,70 @@ function left_rotate_for_iteration(iteration: integer) i: word => o: word
     if (iteration == 63) i => left_rotate_by(21) => o;
 }
 
-function k_table(iteration: integer) null => output: word
+function k_table(iteration: integer) null => o: word
 {
-    if (iteration == 0)  literal(32, 3614090360) => output;
-    if (iteration == 1)  literal(32, 3905402710) => output;
-    if (iteration == 2)  literal(32, 606105819)  => output;
-    if (iteration == 3)  literal(32, 3250441966) => output;
-    if (iteration == 4)  literal(32, 4118548399) => output;
-    if (iteration == 5)  literal(32, 1200080426) => output;
-    if (iteration == 6)  literal(32, 2821735955) => output;
-    if (iteration == 7)  literal(32, 4249261313) => output;
-    if (iteration == 8)  literal(32, 1770035416) => output;
-    if (iteration == 9)  literal(32, 2336552879) => output;
-    if (iteration == 10) literal(32, 4294925233) => output;
-    if (iteration == 11) literal(32, 2304563134) => output;
-    if (iteration == 12) literal(32, 1804603682) => output;
-    if (iteration == 13) literal(32, 4254626195) => output;
-    if (iteration == 14) literal(32, 2792965006) => output;
-    if (iteration == 15) literal(32, 1236535329) => output;
-    if (iteration == 16) literal(32, 4129170786) => output;
-    if (iteration == 17) literal(32, 3225465664) => output;
-    if (iteration == 18) literal(32, 643717713)  => output;
-    if (iteration == 19) literal(32, 3921069994) => output;
-    if (iteration == 20) literal(32, 3593408605) => output;
-    if (iteration == 21) literal(32, 38016083)   => output;
-    if (iteration == 22) literal(32, 3634488961) => output;
-    if (iteration == 23) literal(32, 3889429448) => output;
-    if (iteration == 24) literal(32, 568446438)  => output;
-    if (iteration == 25) literal(32, 3275163606) => output;
-    if (iteration == 26) literal(32, 4107603335) => output;
-    if (iteration == 27) literal(32, 1163531501) => output;
-    if (iteration == 28) literal(32, 2850285829) => output;
-    if (iteration == 29) literal(32, 4243563512) => output;
-    if (iteration == 30) literal(32, 1735328473) => output;
-    if (iteration == 31) literal(32, 2368359562) => output;
-    if (iteration == 32) literal(32, 4294588738) => output;
-    if (iteration == 33) literal(32, 2272392833) => output;
-    if (iteration == 34) literal(32, 1839030562) => output;
-    if (iteration == 35) literal(32, 4259657740) => output;
-    if (iteration == 36) literal(32, 2763975236) => output;
-    if (iteration == 37) literal(32, 1272893353) => output;
-    if (iteration == 38) literal(32, 4139469664) => output;
-    if (iteration == 39) literal(32, 3200236656) => output;
-    if (iteration == 40) literal(32, 681279174)  => output;
-    if (iteration == 41) literal(32, 3936430074) => output;
-    if (iteration == 42) literal(32, 3572445317) => output;
-    if (iteration == 43) literal(32, 76029189)   => output;
-    if (iteration == 44) literal(32, 3654602809) => output;
-    if (iteration == 45) literal(32, 3873151461) => output;
-    if (iteration == 46) literal(32, 530742520)  => output;
-    if (iteration == 47) literal(32, 3299628645) => output;
-    if (iteration == 48) literal(32, 4096336452) => output;
-    if (iteration == 49) literal(32, 1126891415) => output;
-    if (iteration == 50) literal(32, 2878612391) => output;
-    if (iteration == 51) literal(32, 4237533241) => output;
-    if (iteration == 52) literal(32, 1700485571) => output;
-    if (iteration == 53) literal(32, 2399980690) => output;
-    if (iteration == 54) literal(32, 4293915773) => output;
-    if (iteration == 55) literal(32, 2240044497) => output;
-    if (iteration == 56) literal(32, 1873313359) => output;
-    if (iteration == 57) literal(32, 4264355552) => output;
-    if (iteration == 58) literal(32, 2734768916) => output;
-    if (iteration == 59) literal(32, 1309151649) => output;
-    if (iteration == 60) literal(32, 4149444226) => output;
-    if (iteration == 61) literal(32, 3174756917) => output;
-    if (iteration == 62) literal(32, 718787259)  => output;
-    if (iteration == 63) literal(32, 3951481745) => output;
+    if (iteration == 0)  literal(32, 3614090360) => o;
+    if (iteration == 1)  literal(32, 3905402710) => o;
+    if (iteration == 2)  literal(32, 606105819)  => o;
+    if (iteration == 3)  literal(32, 3250441966) => o;
+    if (iteration == 4)  literal(32, 4118548399) => o;
+    if (iteration == 5)  literal(32, 1200080426) => o;
+    if (iteration == 6)  literal(32, 2821735955) => o;
+    if (iteration == 7)  literal(32, 4249261313) => o;
+    if (iteration == 8)  literal(32, 1770035416) => o;
+    if (iteration == 9)  literal(32, 2336552879) => o;
+    if (iteration == 10) literal(32, 4294925233) => o;
+    if (iteration == 11) literal(32, 2304563134) => o;
+    if (iteration == 12) literal(32, 1804603682) => o;
+    if (iteration == 13) literal(32, 4254626195) => o;
+    if (iteration == 14) literal(32, 2792965006) => o;
+    if (iteration == 15) literal(32, 1236535329) => o;
+    if (iteration == 16) literal(32, 4129170786) => o;
+    if (iteration == 17) literal(32, 3225465664) => o;
+    if (iteration == 18) literal(32, 643717713)  => o;
+    if (iteration == 19) literal(32, 3921069994) => o;
+    if (iteration == 20) literal(32, 3593408605) => o;
+    if (iteration == 21) literal(32, 38016083)   => o;
+    if (iteration == 22) literal(32, 3634488961) => o;
+    if (iteration == 23) literal(32, 3889429448) => o;
+    if (iteration == 24) literal(32, 568446438)  => o;
+    if (iteration == 25) literal(32, 3275163606) => o;
+    if (iteration == 26) literal(32, 4107603335) => o;
+    if (iteration == 27) literal(32, 1163531501) => o;
+    if (iteration == 28) literal(32, 2850285829) => o;
+    if (iteration == 29) literal(32, 4243563512) => o;
+    if (iteration == 30) literal(32, 1735328473) => o;
+    if (iteration == 31) literal(32, 2368359562) => o;
+    if (iteration == 32) literal(32, 4294588738) => o;
+    if (iteration == 33) literal(32, 2272392833) => o;
+    if (iteration == 34) literal(32, 1839030562) => o;
+    if (iteration == 35) literal(32, 4259657740) => o;
+    if (iteration == 36) literal(32, 2763975236) => o;
+    if (iteration == 37) literal(32, 1272893353) => o;
+    if (iteration == 38) literal(32, 4139469664) => o;
+    if (iteration == 39) literal(32, 3200236656) => o;
+    if (iteration == 40) literal(32, 681279174)  => o;
+    if (iteration == 41) literal(32, 3936430074) => o;
+    if (iteration == 42) literal(32, 3572445317) => o;
+    if (iteration == 43) literal(32, 76029189)   => o;
+    if (iteration == 44) literal(32, 3654602809) => o;
+    if (iteration == 45) literal(32, 3873151461) => o;
+    if (iteration == 46) literal(32, 530742520)  => o;
+    if (iteration == 47) literal(32, 3299628645) => o;
+    if (iteration == 48) literal(32, 4096336452) => o;
+    if (iteration == 49) literal(32, 1126891415) => o;
+    if (iteration == 50) literal(32, 2878612391) => o;
+    if (iteration == 51) literal(32, 4237533241) => o;
+    if (iteration == 52) literal(32, 1700485571) => o;
+    if (iteration == 53) literal(32, 2399980690) => o;
+    if (iteration == 54) literal(32, 4293915773) => o;
+    if (iteration == 55) literal(32, 2240044497) => o;
+    if (iteration == 56) literal(32, 1873313359) => o;
+    if (iteration == 57) literal(32, 4264355552) => o;
+    if (iteration == 58) literal(32, 2734768916) => o;
+    if (iteration == 59) literal(32, 1309151649) => o;
+    if (iteration == 60) literal(32, 4149444226) => o;
+    if (iteration == 61) literal(32, 3174756917) => o;
+    if (iteration == 62) literal(32, 718787259)  => o;
+    if (iteration == 63) literal(32, 3951481745) => o;
 }
