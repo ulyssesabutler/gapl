@@ -34,7 +34,7 @@ object Compiler {
                     add(Flattener)
                 }
 
-                if (options.includeStdLib) {
+                if (options.includeStdLib && options.flatten) {
                     Logger.debug { "Standard Library Filter" }
                     add(StandardLibraryFilter)
                 }

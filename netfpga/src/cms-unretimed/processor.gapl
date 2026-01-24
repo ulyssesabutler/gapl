@@ -19,10 +19,20 @@ interface netfpga_packet_body {
 
 function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
 {
+    /*
+    literal(4, 0)
+        => replicate(wire[4], 16)
+        => replicate(wire[4][16], 4)
+        => declare initial_sketch: sketch4(16);
+    */
 
-    declare updated_sketch: sketch4(16) => declare sketch_register: register(sketch4(16));
+    declare counter: register(wire[8]);
 
-    i.data, sketch_register
+    counter, literal(8, 1) => add(8) => counter;
+
+    declare current_sketch: register(sketch4(16));
+
+    i.data, current_sketch
         => declare updater: count_min_update_sketch4(
             wire[256],
             16,
@@ -31,16 +41,22 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
             count_min_int_hash2,
             count_min_int_hash3,
         )
-        => updated_sketch;
+        => declare new_sketch: sketch4(16);
 
-    updated_sketch
+    i.valid, new_sketch, current_sketch
+        => if_else(sketch4(16))
+        => declare updated_sketch: sketch4(16);
+
+    updated_sketch => current_sketch;
+
+    current_sketch
         => declare flatten1: vector_flatten(count, 4, 16)
         => declare flatten2: vector_flatten(wire, 4, 64)
         => o.data;
 
-    i.valid => o.valid;
-    i.keep  => o.keep;
-    i.last  => o.last;
+    i.valid => register(boolean)     => o.valid;
+    i.keep  => register(boolean[32]) => o.keep;
+    i.last  => register(boolean)     => o.last;
 }
 
 /* COUNT MIN SKETCH BODY */

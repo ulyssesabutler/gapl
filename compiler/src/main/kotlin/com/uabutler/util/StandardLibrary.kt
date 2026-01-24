@@ -20,6 +20,7 @@ enum class StandardLibraryFunctions(val identifier: String) {
     VECTOR_CHUNK("vector_chunk"),
     VECTOR_FLATTEN("vector_flatten"),
     STREAM_ANY("stream_any"),
+    IF_ELSE("if_else"),
     ;
 }
 
@@ -221,6 +222,18 @@ function ${StandardLibraryFunctions.STREAM_ANY.identifier}() i: boolean() => o: 
     declare current: register(boolean);
 
     i, current => or() => current => o;
+}
+
+function ${StandardLibraryFunctions.IF_ELSE.identifier}(T: interface) condition: boolean, if_branch: T, else_branch: T => o: T {
+    declare selector: wire[1];
+    condition => selector[0];
+    
+    declare options: T[2];
+    
+    if_branch => options[1];
+    else_branch => options[0];
+    
+    selector, options => mux(T, 2, 1) => o;
 }
 
 """
