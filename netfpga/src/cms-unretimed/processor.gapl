@@ -26,10 +26,6 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
         => declare initial_sketch: sketch4(16);
     */
 
-    declare counter: register(wire[8]);
-
-    counter, literal(8, 1) => add(8) => counter;
-
     declare current_sketch: register(sketch4(16));
 
     i.data, current_sketch
