@@ -80,3 +80,5 @@ xsim.dir
 vivado*.str
 vivado*.debug
 vivado*.zip
+
+latency-finder-logs
