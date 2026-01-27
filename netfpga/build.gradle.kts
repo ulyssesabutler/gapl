@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import org.apache.tools.ant.filters.ReplaceTokens
 import java.util.Properties
 
 plugins { base }
@@ -39,6 +40,9 @@ val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_swi
 
 // Program Name
 val programName = propOrEnv("programName", "PROGRAM_NAME", "regex")
+
+// Program Name
+val clockPeriodNs = propOrEnv("clockPeriodNs", "CLOCK_PERIOD_NS", "10.000")
 
 // Derived paths
 val projects         = "$sumeFolder/projects"
@@ -223,6 +227,46 @@ tasks.register<Copy>("installGaplVerilog") {
     )
 }
 
+tasks.register<Copy>("generateConstraints") {
+    group = "vivado"
+    description = "Generate XDC from template using gradle.properties"
+
+    val outputDir = layout.buildDirectory.dir("constraints").get().asFile
+    outputDir.mkdirs()
+
+    from(layout.projectDirectory.file("constraints/nf_sume_general.xdc.template"))
+    into(outputDir)
+    rename { "nf_sume_general.xdc" }
+
+    // Gradle's ReplaceTokens uses @TOKEN@ style by default
+    filter<ReplaceTokens>(
+        "tokens" to mapOf(
+            "CLOCK_PERIOD_NS" to clockPeriodNs,
+        )
+    )
+}
+
+tasks.register<Copy>("installConstraints") {
+    group = "netfpga"
+    description = "Install generate XDC from template using gradle.properties"
+    dependsOn("generateConstraints")
+
+    val outDirProvider = layout.buildDirectory.dir("constraints")
+
+    from(provider {
+        outDirProvider.get().asFile.resolve("nf_sume_general.xdc")
+    })
+    into(provider { file("$nfDesignDir/hw/constraints") })
+
+    // Incremental wiring
+    inputs.files(
+        outDirProvider.map { it.asFile.resolve("nf_sume_general.xdc") },
+    )
+    outputs.files(
+        file("$nfDesignDir/hw/constraints/nf_sume_general.xdc"),
+    )
+}
+
 // :netfpga:makeInit ---
 // Runs `make` in $SUME_FOLDER (one-time; guarded by a stamp file)
 tasks.register<Exec>("makeInit") {
@@ -231,6 +275,7 @@ tasks.register<Exec>("makeInit") {
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
     dependsOn("installGaplVerilog")
+    dependsOn("installConstraints")
 
     commandLine(bash("""
         set -euo pipefail
@@ -406,6 +451,28 @@ tasks.register<Delete>("uninstallGaplVerilog") {
     }
 }
 
+tasks.register<Delete>("uninstallConstraints") {
+    group = "netfpga"
+    description = "Remove constraints installed"
+
+    doFirst {
+        val constraintsDir = file("$nfDesignDir/hw/constraints")
+        if (!constraintsDir.exists()) {
+            println("[uninstallGaplVerilog] Skipping: $constraintsDir does not exist")
+            return@doFirst
+        }
+
+        val processorInstalled = constraintsDir.resolve("nf_sume_general.xdc")
+
+        listOf(processorInstalled).forEach { f ->
+            if (f.exists()) {
+                println("[uninstallGaplVerilog] Deleting ${f.relativeToOrSelf(constraintsDir)}")
+                delete(f)
+            }
+        }
+    }
+}
+
 // :netfpga:clean -> make clean in $NF_DESIGN_DIR
 tasks.register<Exec>("makeClean") {
     group = "netfpga"
@@ -542,6 +609,7 @@ tasks.named("build") {
 }
 tasks.named("clean") {
     dependsOn("uninstallGaplVerilog")
+    dependsOn("uninstallConstraints")
     dependsOn("makeClean")
 }
 
