@@ -1,3 +1,6 @@
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
@@ -8,13 +11,39 @@ class ClockPeriodFinder(
     val minClockPeriod: Int = 10,
 ) {
 
+    val json = Json { prettyPrint = true }
+
+    @Serializable
     private data class ClockPeriodResult(
         val clockPeriod: Int,
-        val feasible: Boolean,
-        val slack: Double,
+        var buildComplete: Boolean,
+        var feasible: Boolean?,
+        var slack: Double?,
+    )
+
+    private data class CompletedClockPeriodResult(
+        val clockPeriod: Int,
+        var feasible: Boolean,
+        var slack: Double,
     )
 
     private val clockPeriodResults = mutableListOf<ClockPeriodResult>()
+    private fun completedClockPeriodResult() = clockPeriodResults.filter { it.buildComplete }.map { CompletedClockPeriodResult(it.clockPeriod, it.feasible!!, it.slack!!) }
+    val clockPeriodsFileName = "clock-periods.json"
+
+    fun serialize() {
+        logHandler.writeStringToFile(clockPeriodsFileName, json.encodeToString(clockPeriodResults))
+    }
+
+    fun attemptDeserialize() {
+        try {
+            val clockPeriods = json.decodeFromString<List<ClockPeriodResult>>(logHandler.readStringFromFile(clockPeriodsFileName))
+            clockPeriodResults.addAll(clockPeriods)
+            logHandler.log("Deserialized existing run")
+        } catch (e: Exception) {
+            logHandler.log("Failed to deserialize clock periods: ${e.message}")
+        }
+    }
 
     private fun attemptClockPeriod(clockPeriod: Int): ClockPeriodResult {
         if (clockPeriodResults.any { it.clockPeriod == clockPeriod }) return clockPeriodResults.first { it.clockPeriod == clockPeriod }
@@ -24,6 +53,10 @@ class ClockPeriodFinder(
             logHandler = logHandler,
             clockPeriod = clockPeriod,
         )
+
+        val clockPeriodResult = ClockPeriodResult(clockPeriod, false, null, null)
+        clockPeriodResults.add(clockPeriodResult)
+        serialize()
 
         builder.run()
 
@@ -45,13 +78,19 @@ class ClockPeriodFinder(
             clockPeriodLog.log("  ${slack.line}")
         }
 
-        return ClockPeriodResult(clockPeriod, criticalSlack.met, criticalSlack.slack.absoluteValue)
+        clockPeriodResult.feasible = criticalSlack.met
+        clockPeriodResult.slack = criticalSlack.slack.absoluteValue
+        clockPeriodResult.buildComplete = true
+
+        serialize()
+
+        return clockPeriodResult
     }
 
     private fun optimalClockPeriod(): Int? {
-        if (clockPeriodResults.firstOrNull { it.clockPeriod == minClockPeriod }?.feasible ?: false) return minClockPeriod
+        if (completedClockPeriodResult().firstOrNull { it.clockPeriod == minClockPeriod }?.feasible ?: false) return minClockPeriod
 
-        val sorted = clockPeriodResults.sortedBy { it.clockPeriod }
+        val sorted = completedClockPeriodResult().sortedBy { it.clockPeriod }
 
         if (sorted.size < 2) return null
 
@@ -67,11 +106,11 @@ class ClockPeriodFinder(
     }
 
     private fun nextClockPeriod(): Int {
-        val smallestFeasible = clockPeriodResults
+        val smallestFeasible = completedClockPeriodResult()
             .filter { it.feasible }
             .minByOrNull { it.clockPeriod }
 
-        val largestInfeasible = clockPeriodResults
+        val largestInfeasible = completedClockPeriodResult()
             .filter { !it.feasible }
             .maxByOrNull { it.clockPeriod }
 
@@ -101,6 +140,8 @@ class ClockPeriodFinder(
     fun findClockPeriod(): Int {
         var optimalClockPeriod: Int? = optimalClockPeriod()
 
+        attemptDeserialize()
+
         while (true) {
             if (optimalClockPeriod != null) break
 
@@ -110,7 +151,7 @@ class ClockPeriodFinder(
 
         logHandler.log("Optimal clock period: $optimalClockPeriod")
 
-        clockPeriodResults
+        completedClockPeriodResult()
             .sortedBy { it.clockPeriod }
             .forEach {
                 logHandler.log("Clock period ${it.clockPeriod}: feasible: ${it.feasible}, slack: ${it.slack}")

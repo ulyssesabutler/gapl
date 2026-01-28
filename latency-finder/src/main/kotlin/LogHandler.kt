@@ -46,4 +46,15 @@ class LogHandler(
         abridgedLogFile.appendText("$message\n")
     }
 
+    fun writeStringToFile(fileName: String, content: String) {
+        val file = File(logDirectory, fileName)
+        file.createNewFile()
+
+        file.writeText(content)
+    }
+
+    fun readStringFromFile(fileName: String): String {
+        return File(logDirectory, fileName).readText()
+    }
+
 }

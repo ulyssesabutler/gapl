@@ -1,3 +1,4 @@
+import java.io.BufferedOutputStream
 import java.io.File
 
 class NetFPGABuilder(
@@ -9,7 +10,7 @@ class NetFPGABuilder(
     private fun runCommandInDirectoryAndTeeToLog(
         command: List<String>,
         runDirectory: File,
-        logFile: File,
+        logStream: BufferedOutputStream,
     ): Int {
         val processBuilder = ProcessBuilder(command)
             .directory(runDirectory)
@@ -18,7 +19,7 @@ class NetFPGABuilder(
         val process = processBuilder.start()
 
         // Stream process output to both console and file, live.
-        logFile.outputStream().buffered().use { logOut ->
+        logStream.use { logOut ->
             process.inputStream.bufferedReader().useLines { lines ->
                 lines.forEach { line ->
                     println(line)
@@ -51,7 +52,7 @@ class NetFPGABuilder(
     private fun runCommand(clockPeriodLog: LogHandler.ClockPeriodLog, command: List<String>): Int {
         clockPeriodLog.log("Running command: ${command.joinToString(" ")}")
 
-        return runCommandInDirectoryAndTeeToLog(command, runDirectory, clockPeriodLog.fullLogFile).also { exitCode ->
+        return runCommandInDirectoryAndTeeToLog(command, runDirectory, clockPeriodLog.commandOutStream()).also { exitCode ->
             clockPeriodLog.log("Command exited with code $exitCode")
         }
     }
