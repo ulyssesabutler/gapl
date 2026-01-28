@@ -46,7 +46,7 @@ class ClockPeriodFinder(
     }
 
     private fun attemptClockPeriod(clockPeriod: Int): ClockPeriodResult {
-        if (clockPeriodResults.any { it.clockPeriod == clockPeriod }) return clockPeriodResults.first { it.clockPeriod == clockPeriod }
+        if (completedClockPeriodResult().any { it.clockPeriod == clockPeriod }) return clockPeriodResults.first { it.clockPeriod == clockPeriod }
 
         val builder = NetFPGABuilder(
             runDirectory = projectRoot,
