@@ -47,7 +47,7 @@ object SlackFinder {
         return if (failingSlack.isNotEmpty()) {
             failingSlack.maxBy { it.slack.absoluteValue }
         } else {
-            allSlack.maxBy { it.slack.absoluteValue }
+            allSlack.minBy { it.slack.absoluteValue }
         }
     }
 

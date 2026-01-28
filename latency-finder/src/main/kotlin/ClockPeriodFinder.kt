@@ -3,6 +3,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.math.absoluteValue
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 class ClockPeriodFinder(
@@ -126,15 +127,15 @@ class ClockPeriodFinder(
 
             val clockPeriodRange = smallestFeasible.clockPeriod - largestInfeasible.clockPeriod
             if (clockPeriodRange > 3 && smallestFeasible.slack.roundToInt() < clockPeriodRange)
-                return smallestFeasible.clockPeriod - smallestFeasible.slack.roundToInt()
+                return smallestFeasible.clockPeriod - max(1, smallestFeasible.slack.roundToInt())
 
             return smallestFeasible.clockPeriod - 1
         }
 
         if (smallestFeasible != null)
-            return smallestFeasible.clockPeriod - smallestFeasible.slack.roundToInt()
+            return smallestFeasible.clockPeriod - max(1, smallestFeasible.slack.roundToInt())
 
-        return largestInfeasible!!.clockPeriod + largestInfeasible.slack.roundToInt()
+        return largestInfeasible!!.clockPeriod + max(1, largestInfeasible.slack.roundToInt())
     }
 
     fun findClockPeriod(): Int {
