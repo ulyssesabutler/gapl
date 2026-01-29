@@ -12,8 +12,16 @@ fun parseArgs(args: Array<String>): Map<String, List<String>> {
 fun main(args: Array<String>) {
     val projectRoot = File(".").canonicalFile.parentFile
 
-    val logHandler = LogHandler(projectRoot.resolve("latency-finder-logs"))
+    val programs = listOf(
+        "cms-unretimed",
+        "md5-unretimed",
+        "combinational-aes",
+        "regex"
+    )
 
-    ClockPeriodFinder(projectRoot, logHandler).findClockPeriod()
+    programs.forEach { programName ->
+        ClockPeriodFinder(projectRoot, programName).findClockPeriod()
+    }
+
 }
 

@@ -3,6 +3,7 @@ import java.io.File
 
 class NetFPGABuilder(
     val runDirectory: File,
+    val netFPGAProgramName: String?,
     val logHandler: LogHandler,
     val clockPeriod: Int,
 ) {
@@ -34,20 +35,21 @@ class NetFPGABuilder(
         return exitCode
     }
 
-    private fun getArgsForClockPeriod(clockPeriod: Int) = buildList {
+    private fun getArgsForClockPeriod(clockPeriod: Int, programName: String?) = buildList {
         add("-PclockPeriodNs=$clockPeriod")
+        if (programName != null) add("-PprogramName=${programName}")
     }
 
-    private fun getGradleCommandForClockPeriod(clockPeriod: Int, command: String) = buildList {
+    private fun getGradleCommandForClockPeriod(clockPeriod: Int, programName: String?, command: String) = buildList {
         add("./gradlew")
-        addAll(getArgsForClockPeriod(clockPeriod))
+        addAll(getArgsForClockPeriod(clockPeriod, programName))
         add(command)
     }
 
     private fun gradleCleanCommand() = listOf("./gradlew", ":netfpga:clean")
-    private fun gradleMakeInitCommand(clockPeriod: Int) = getGradleCommandForClockPeriod(clockPeriod, ":netfpga:makeInit")
-    private fun gradleRemakeIPsCommand(clockPeriod: Int) = getGradleCommandForClockPeriod(clockPeriod, ":netfpga:remakeIPs")
-    private fun gradleBuildCommand(clockPeriod: Int) = getGradleCommandForClockPeriod(clockPeriod, ":netfpga:build")
+    private fun gradleMakeInitCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:makeInit")
+    private fun gradleRemakeIPsCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:remakeIPs")
+    private fun gradleBuildCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:build")
 
     private fun runCommand(clockPeriodLog: LogHandler.ClockPeriodLog, command: List<String>): Int {
         clockPeriodLog.log("Running command: ${command.joinToString(" ")}")
@@ -84,9 +86,9 @@ class NetFPGABuilder(
 
         val commands = listOf(
             gradleCleanCommand(),
-            gradleMakeInitCommand(clockPeriod),
-            gradleRemakeIPsCommand(clockPeriod),
-            gradleBuildCommand(clockPeriod),
+            gradleMakeInitCommand(clockPeriod, netFPGAProgramName),
+            gradleRemakeIPsCommand(clockPeriod, netFPGAProgramName),
+            gradleBuildCommand(clockPeriod, netFPGAProgramName),
         )
 
         var failed = false
