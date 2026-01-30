@@ -159,9 +159,11 @@ std::vector<std::vector<InterfaceT>> make_messages(const std::vector<std::string
             msg.push_back(InterfaceT{
                 .data = beats[i].data,
                 .keep = beats[i].keep,
-                .last = (i + 1 == beats.size())
+                .last = (i == 0)
             });
         }
+
+        std::reverse(msg.begin(), msg.end());
 
         messages.push_back(std::move(msg));
     }
