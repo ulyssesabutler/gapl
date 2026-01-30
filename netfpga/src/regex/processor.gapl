@@ -148,30 +148,6 @@ function email_regex_update_nfa() new_character: character, current_state: state
     n5_output, current_state.result => or() => update.result;
 }
 
-function email_regex_fold(
-    T: interface,
-    U: interface,
-    replication_factor: integer,
-    operation: T, U => U,
-) i: last(T[replication_factor]) => o: valid(U) {
-    declare state_reg: register(U);
-    i.value, state_reg
-        => combinational_vector_fold(T, U, replication_factor, operation)
-        => state_reg
-        => o.value;
-
-    i.last
-        => register(boolean)
-        => o.valid;
-}
-
-function email_regex() i: last(character[32]) => o: valid(boolean) {
-    i => email_regex_fold(character, state, 32, email_regex_update_nfa()) => declare updated_state: valid(state);
-
-    updated_state.value.result => o.value;
-    updated_state.valid        => o.valid;
-}
-
 /* NETFPGA PACKET BODY PROCESSOR */
 
 interface netfpga_packet_body {
@@ -182,14 +158,19 @@ interface netfpga_packet_body {
 }
 
 function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
-    declare email_input: last(character[32])
-        => email_regex()
-        => declare email_output: valid(boolean);
+    declare input_characters: character[32];
+    declare input_state: state;
+    declare output_state: state;
 
-    i.data => email_input.value;
-    i.last => email_input.last;
+    input_characters, input_state
+        => combinational_vector_fold(character, state, 32, email_regex_update_nfa)
+        => output_state;
 
-    email_output.value                      => o.data[31][0];
+    output_state => declare state_register: register(state) => input_state;
+
+    i.data => input_characters;
+
+    output_state.result                     => o.data[31][0];
     literal(7, 0)                           => o.data[31][1:7];
     literal(8, 0) => replicate(wire[8], 31) => o.data[0:30];
 
@@ -198,7 +179,6 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
         => replicate(wire, 32)
         => o.keep;
 
-    literal(1, 1) => vector_to_wire()       => o.last;
-
-    email_output.valid                      => o.valid;
+    i.last => o.valid;
+    i.last => o.last;
 }

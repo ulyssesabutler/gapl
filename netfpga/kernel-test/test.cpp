@@ -294,6 +294,14 @@ std::vector<std::vector<OutputInterface>> simulate(
         }
 
         output_packets.push_back(std::move(packet_outputs));
+
+        default_inputs(top);
+        top->reset  = 1;
+        top->enable = 1;
+        tick(top);
+
+        top->reset = 0;
+        tick(top);
     }
 
     std::cout << "Finished simulation after " << clock_cycle << " clock cycles" << std::endl;
