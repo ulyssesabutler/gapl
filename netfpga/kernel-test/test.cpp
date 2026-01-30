@@ -39,35 +39,57 @@ static void tick(Vpacket_body_processor* top)
     ++sim_time;
 }
 
-Wire256 string_to_nf_data(const std::string& hex_string)
+struct Transmission {
+    Wire256 data{}; // 256-bit word as 8x32-bit
+    Wire32  keep{}; // 32 lanes of 1 byte each
+};
+
+std::vector<Transmission> string_to_nf_stream(const std::string& hex_string)
 {
     std::vector<uint8_t> bytes = string_to_hex(hex_string);
 
-    constexpr size_t kExpectedBytes = 32; // 256 bits
-    if (bytes.size() != kExpectedBytes)
-    {
-        std::cerr << "string_to_nf_data: expected " << kExpectedBytes
-                  << " bytes (256 bits), got " << bytes.size()
-                  << " bytes from hex string of length " << hex_string.size()
-                  << "\n";
-        std::exit(EXIT_FAILURE);
-    }
+    // If you want empty input to mean "no beats", this is the cleanest outcome.
+    if (bytes.empty()) return {};
 
-    // Reverse byte order (MSB<->LSB)
+    // Preserve original behavior: reverse byte order (MSB<->LSB)
     std::reverse(bytes.begin(), bytes.end());
 
-    // Pack into 8x 32-bit words.
-    // word[0] is the least-significant 32 bits after the byte-reversal.
-    Wire256 out{};
-    for (size_t i = 0; i < out.size(); ++i)
+    constexpr size_t kBytesPerBeat = 32; // 256 bits
+
+    std::vector<Transmission> out;
+    out.reserve((bytes.size() + kBytesPerBeat - 1) / kBytesPerBeat);
+
+    for (size_t offset = 0; offset < bytes.size(); offset += kBytesPerBeat)
     {
-        const size_t base = i * 4;
-        uint32_t w = 0;
-        w |= static_cast<uint32_t>(bytes[base + 0]) << 0;
-        w |= static_cast<uint32_t>(bytes[base + 1]) << 8;
-        w |= static_cast<uint32_t>(bytes[base + 2]) << 16;
-        w |= static_cast<uint32_t>(bytes[base + 3]) << 24;
-        out[i] = w;
+        const size_t chunk_bytes = std::min(kBytesPerBeat, bytes.size() - offset);
+
+        Transmission transmission{};
+        transmission.data.fill(0);
+
+        // keep: low chunk_bytes bits set
+        if (chunk_bytes == 32) {
+            transmission.keep = 0xFFFFFFFFu;
+        } else {
+            // chunk_bytes is 1..31 here, so shift is safe.
+            transmission.keep = (1u << static_cast<uint32_t>(chunk_bytes)) - 1u;
+        }
+
+        // Pack bytes into 8x 32-bit words, little-endian within each word.
+        // Missing bytes in the final beat remain zero due to beat.data.fill(0).
+        for (size_t i = 0; i < 8; ++i)
+        {
+            const size_t base = offset + i * 4;
+
+            uint32_t w = 0;
+            if (base + 0 < offset + chunk_bytes) w |= static_cast<uint32_t>(bytes[base + 0]) << 0;
+            if (base + 1 < offset + chunk_bytes) w |= static_cast<uint32_t>(bytes[base + 1]) << 8;
+            if (base + 2 < offset + chunk_bytes) w |= static_cast<uint32_t>(bytes[base + 2]) << 16;
+            if (base + 3 < offset + chunk_bytes) w |= static_cast<uint32_t>(bytes[base + 3]) << 24;
+
+            transmission.data[i] = w;
+        }
+
+        out.push_back(transmission);
     }
 
     return out;
@@ -117,34 +139,44 @@ struct OutputInterface {
     bool    last;
 };
 
-std::vector<InputInterface> make_inputs(const std::vector<std::string>& inputs_strings) {
-    std::vector<InputInterface> inputs;
-    inputs.reserve(inputs_strings.size());
+// Generic packer: turns a list of hex strings into a vector-of-messages,
+// where each message is a vector of beats with correct .last flags.
+template <typename InterfaceT>
+std::vector<std::vector<InterfaceT>> make_messages(const std::vector<std::string>& hex_strings)
+{
+    std::vector<std::vector<InterfaceT>> messages;
+    messages.reserve(hex_strings.size());
 
-    for (const auto& input_string : inputs_strings) {
-        inputs.push_back(InputInterface{
-            .data = string_to_nf_data(input_string),
-            .keep = 0xFFFFFFFFu,
-            .last = true
-        });
+    for (const auto& hex_string : hex_strings)
+    {
+        const std::vector<Transmission> beats = string_to_nf_stream(hex_string);
+
+        std::vector<InterfaceT> msg;
+        msg.reserve(beats.size());
+
+        for (size_t i = 0; i < beats.size(); ++i)
+        {
+            msg.push_back(InterfaceT{
+                .data = beats[i].data,
+                .keep = beats[i].keep,
+                .last = (i + 1 == beats.size())
+            });
+        }
+
+        messages.push_back(std::move(msg));
     }
 
-    return inputs;
+    return messages;
 }
 
-std::vector<OutputInterface> make_expected_outputs(const std::vector<std::string>& expected_outputs_strings) {
-    std::vector<OutputInterface> expected_outputs;
-    expected_outputs.reserve(expected_outputs_strings.size());
+std::vector<std::vector<InputInterface>> make_inputs(const std::vector<std::string>& inputs_strings)
+{
+    return make_messages<InputInterface>(inputs_strings);
+}
 
-    for (const auto& expected_output_string : expected_outputs_strings) {
-        expected_outputs.push_back(OutputInterface{
-            .data = string_to_nf_data(expected_output_string),
-            .keep = 0xFFFFFFFFu,
-            .last = true
-        });
-    }
-
-    return expected_outputs;
+std::vector<std::vector<OutputInterface>> make_expected_outputs(const std::vector<std::string>& expected_outputs_strings)
+{
+    return make_messages<OutputInterface>(expected_outputs_strings);
 }
 
 static void default_inputs(Vpacket_body_processor* top) {
@@ -171,101 +203,162 @@ static OutputInterface capture_output(Vpacket_body_processor* top) {
     return out;
 }
 
-// Simulation function
-std::vector<OutputInterface> simulate(
+std::vector<std::vector<OutputInterface>> simulate(
     Vpacket_body_processor* top,
-    const std::vector<InputInterface>& inputs,
-    size_t expected_output_count
+    const std::vector<std::vector<InputInterface>>& input_packets,
+    size_t max_idle_cycles_per_packet = 1000
 ) {
-    std::vector<OutputInterface> outputs;
-    
+    std::vector<std::vector<OutputInterface>> output_packets;
+    output_packets.reserve(input_packets.size());
+
     // Initialize signals
-    top->reset = 1;   // assert reset initially
-    top->enable = 1;  // keep enabled
+    top->reset  = 1;
+    top->enable = 1;
     tick(top);
 
     // Finish reset
     top->reset = 0;
     tick(top);
 
-    OutputInterface currentOutput;
-
-    size_t current_input_index = 0;
-    size_t expected_outputs_remaining = expected_output_count;
-    size_t waiting_clock_cycles_remaining = 100;
     size_t clock_cycle = 0;
 
-    while (expected_outputs_remaining > 0 && waiting_clock_cycles_remaining > 0) {
-        // Inputs
-        if (current_input_index < inputs.size()) {
-            std::cout << "Input " << current_input_index << ":\n"
-                << "  Clock Cycle: " << clock_cycle << '\n'
-                << "  Data:        " << nf_data_to_string(inputs[current_input_index].data) << std::endl;
+    for (size_t packet_index = 0; packet_index < input_packets.size(); ++packet_index)
+    {
+        const auto& packet_inputs = input_packets[packet_index];
 
-            drive_inputs(top, inputs[current_input_index]);
-            ++current_input_index;
-        } else {
-            default_inputs(top);
+        std::vector<OutputInterface> packet_outputs;
+        packet_outputs.reserve(packet_inputs.size()); // heuristic
+
+        size_t input_beat_index = 0;
+        bool   saw_last_output  = false;
+        size_t idle_cycles_left = max_idle_cycles_per_packet;
+
+        while (!saw_last_output && idle_cycles_left > 0)
+        {
+            // Drive one input beat per cycle until packet is fully sent
+            if (input_beat_index < packet_inputs.size()) {
+                const auto& in = packet_inputs[input_beat_index];
+
+                std::cout << "Packet " << packet_index
+                          << " Input beat " << input_beat_index << ":\n"
+                          << "  Clock Cycle: " << clock_cycle << '\n'
+                          << "  Data:        " << nf_data_to_string(in.data) << '\n'
+                          << "  Keep:        " << std::hex << in.keep << std::dec << '\n'
+                          << "  Last:        " << (in.last ? "true" : "false") << std::endl;
+
+                drive_inputs(top, in);
+                ++input_beat_index;
+            } else {
+                // Packet fully injected: go idle until outputs are drained
+                default_inputs(top);
+            }
+
+            // Tick
+            tick(top);
+            ++clock_cycle;
+
+            // Capture outputs (can happen while still injecting inputs)
+            if (top->o__024valid) {
+                OutputInterface out = capture_output(top);
+
+                std::cout << "Packet " << packet_index
+                          << " Output beat " << packet_outputs.size() << ":\n"
+                          << "  Clock Cycle: " << clock_cycle << '\n'
+                          << "  Data:        " << nf_data_to_string(out.data) << '\n'
+                          << "  Keep:        " << std::hex << out.keep << std::dec << '\n'
+                          << "  Last:        " << (out.last ? "true" : "false") << std::endl;
+
+                packet_outputs.push_back(out);
+
+                if (out.last) {
+                    saw_last_output = true;
+                }
+
+                // Reset idle timeout whenever we make progress on outputs
+                idle_cycles_left = max_idle_cycles_per_packet;
+            } else {
+                // Only count down idle cycles after we've finished injecting the packet.
+                // (Before that, "no output yet" is normal pipeline latency.)
+                if (input_beat_index >= packet_inputs.size()) {
+                    --idle_cycles_left;
+                }
+            }
         }
 
-        // Tick
-        tick(top);
-        clock_cycle++;
-
-        // Outputs
-        if (top->o__024valid) {
-            std::cout << "Output " << outputs.size() << ":\n"
-                << "  Clock Cycle: " << clock_cycle << '\n'
-                << "  Data:        " << nf_data_to_string(capture_output(top).data) << std::endl;
-
-            outputs.push_back(capture_output(top));
-            expected_outputs_remaining--;
-        } else {
-            waiting_clock_cycles_remaining--;
+        if (!saw_last_output) {
+            std::cerr << "simulate: timeout waiting for last output of packet "
+                      << packet_index << " after "
+                      << max_idle_cycles_per_packet << " idle cycles (clock_cycle="
+                      << clock_cycle << ")\n";
+            std::exit(EXIT_FAILURE);
         }
+
+        output_packets.push_back(std::move(packet_outputs));
     }
 
     std::cout << "Finished simulation after " << clock_cycle << " clock cycles" << std::endl;
-
-    return outputs;
+    return output_packets;
 }
 
-// Check if simulation was successful
 bool check_simulation_success(
-    const std::vector<OutputInterface>& expected,
-    const std::vector<OutputInterface>& outputs
+    const std::vector<std::vector<OutputInterface>>& expected_packets,
+    const std::vector<std::vector<OutputInterface>>& output_packets
 ) {
     bool simulation_success = true;
 
-    if (expected.size() != outputs.size()) {
-        std::cerr << "Test Error: expected and outputs size mismatch\n"
-            << "  Expected: " << expected.size() << '\n'
-            << "  Actual:   " << outputs.size() << std::endl;
-
+    if (expected_packets.size() != output_packets.size()) {
+        std::cerr << "Test Error: expected and outputs packet-count mismatch\n"
+                  << "  Expected packets: " << expected_packets.size() << '\n'
+                  << "  Actual packets:   " << output_packets.size() << std::endl;
         return false;
     }
 
-    for (std::size_t i = 0; i < expected.size(); ++i) {
-        std::cout << "Output " << i << std::endl;
+    for (size_t p = 0; p < expected_packets.size(); ++p) {
+        const auto& expected = expected_packets[p];
+        const auto& outputs  = output_packets[p];
 
-        const auto& exp = expected[i].data;
-        const auto& out = outputs[i].data;
-
-        bool doesOutputMatchExpected = true;
-
-        for (std::size_t w = 0; w < 8; w++)
-            if (exp[w] != out[w]) doesOutputMatchExpected = false;
-
-        if (!doesOutputMatchExpected) {
-            std::cerr << "Test Error: At output " << i << '\n'
-                << "  Expected: " << nf_data_to_string(exp) << '\n'
-                << "  Actual:   " << nf_data_to_string(out) << std::endl;
-
+        if (expected.size() != outputs.size()) {
+            std::cerr << "Test Error: packet " << p << " beat-count mismatch\n"
+                      << "  Expected beats: " << expected.size() << '\n'
+                      << "  Actual beats:   " << outputs.size() << std::endl;
             simulation_success = false;
-        } else {
-            std::cerr << "Test Success: At output " << i << '\n'
-                << "  Expected: " << nf_data_to_string(exp) << '\n'
-                << "  Actual:   " << nf_data_to_string(out) << std::endl;
+            continue; // still check other packets
+        }
+
+        for (size_t i = 0; i < expected.size(); ++i) {
+            const auto& exp = expected[i];
+            const auto& out = outputs[i];
+
+            bool data_matches = true;
+            for (size_t w = 0; w < 8; ++w) {
+                if (exp.data[w] != out.data[w]) {
+                    data_matches = false;
+                    break;
+                }
+            }
+
+            const bool keep_matches = (exp.keep == out.keep);
+            const bool last_matches = (exp.last == out.last);
+
+            const bool matches = data_matches && keep_matches && last_matches;
+
+            std::cout << "Packet " << p << " Output " << i << std::endl;
+
+            if (!matches) {
+                std::cerr << "Test Error: mismatch at packet " << p << ", output " << i << '\n'
+                          << "  Expected data: " << nf_data_to_string(exp.data) << '\n'
+                          << "  Actual data:   " << nf_data_to_string(out.data) << '\n'
+                          << "  Expected keep: " << std::hex << exp.keep << std::dec << '\n'
+                          << "  Actual keep:   " << std::hex << out.keep << std::dec << '\n'
+                          << "  Expected last: " << (exp.last ? "true" : "false") << '\n'
+                          << "  Actual last:   " << (out.last ? "true" : "false") << std::endl;
+                simulation_success = false;
+            } else {
+                std::cerr << "Test Success: match at packet " << p << ", output " << i << '\n'
+                          << "  Data: " << nf_data_to_string(out.data) << '\n'
+                          << "  Keep: " << std::hex << out.keep << std::dec << '\n'
+                          << "  Last: " << (out.last ? "true" : "false") << std::endl;
+            }
         }
     }
 
@@ -284,16 +377,20 @@ int main(int argc, char** argv) {
     if (!options.waveform_path.empty()) {
         Verilated::traceEverOn(true);
         waveform = new VerilatedVcdC;
-        top->trace(waveform, 99);      // trace depth
+        top->trace(waveform, 99);
         waveform->open(options.waveform_path.c_str());
     }
 
-    // 2) Convert to internal representation
-    std::vector<InputInterface> inputs = make_inputs(options.inputs);
-    std::vector<OutputInterface> expected_outputs = make_expected_outputs(options.expected_outputs);
+    // Convert to internal packetized representation
+    std::vector<std::vector<InputInterface>> inputs =
+        make_inputs(options.inputs);
 
-    // 3) Simulate
-    std::vector<OutputInterface> outputs = simulate(top, inputs, expected_outputs.size());
+    std::vector<std::vector<OutputInterface>> expected_outputs =
+        make_expected_outputs(options.expected_outputs);
+
+    // Simulate packet-by-packet (drain until last for each packet)
+    std::vector<std::vector<OutputInterface>> outputs =
+        simulate(top, inputs);
 
     top->final();
 
@@ -305,11 +402,6 @@ int main(int argc, char** argv) {
 
     delete top;
 
-    bool test_pass = check_simulation_success(expected_outputs, outputs);
-
-    if (test_pass) {
-        return 0;
-    } else {
-        return 1;
-    }
+    const bool test_pass = check_simulation_success(expected_outputs, outputs);
+    return test_pass ? 0 : 1;
 }
