@@ -14,7 +14,8 @@ class LogHandler(
         val clockPeriod: Int,
         val directory: File,
         val abridgedLogFile: File = directory.resolve("log.txt"),
-        val fullLogFile: File = directory.resolve("commandout.txt"),
+        val buildLogFile: File = directory.resolve("build.txt"),
+        val testLogFile: File = directory.resolve("test.txt"),
         val reportsDirectory: File = directory.resolve("reports"),
         val bitstreamDirectory: File = directory.resolve("bitstream"),
     ) {
@@ -24,7 +25,8 @@ class LogHandler(
             bitstreamDirectory.mkdirs()
 
             abridgedLogFile.createNewFile()
-            fullLogFile.createNewFile()
+            buildLogFile.createNewFile()
+            testLogFile.createNewFile()
         }
 
         fun log(message: String) {
@@ -35,7 +37,8 @@ class LogHandler(
 
         fun saveReports(reportDirectory: File) = reportDirectory.copyRecursively(reportsDirectory, overwrite = true)
 
-        fun commandOutStream() = fullLogFile.outputStream().buffered()
+        fun buildLogStream() = buildLogFile.outputStream().buffered()
+        fun testLogStream() = testLogFile.outputStream().buffered()
     }
 
     private val logs = mutableMapOf<Int, ClockPeriodLog>()

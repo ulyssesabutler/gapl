@@ -37,6 +37,7 @@ class NetFPGABuilder(
 
     private fun getArgsForClockPeriod(clockPeriod: Int, programName: String?) = buildList {
         add("-PclockPeriodNs=$clockPeriod")
+        add("-PnetfpgaSimTestGui=false")
         if (programName != null) add("-PprogramName=${programName}")
     }
 
@@ -50,11 +51,12 @@ class NetFPGABuilder(
     private fun gradleMakeInitCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:makeInit")
     private fun gradleRemakeIPsCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:remakeIPs")
     private fun gradleBuildCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:build")
+    private fun gradleTestCommand(clockPeriod: Int, programName: String?) = getGradleCommandForClockPeriod(clockPeriod, programName, ":netfpga:runSimulation")
 
-    private fun runCommand(clockPeriodLog: LogHandler.ClockPeriodLog, command: List<String>): Int {
+    private fun runCommand(clockPeriodLog: LogHandler.ClockPeriodLog, command: List<String>, logStream: BufferedOutputStream): Int {
         clockPeriodLog.log("Running command: ${command.joinToString(" ")}")
 
-        return runCommandInDirectoryAndTeeToLog(command, runDirectory, clockPeriodLog.commandOutStream()).also { exitCode ->
+        return runCommandInDirectoryAndTeeToLog(command, runDirectory, logStream).also { exitCode ->
             clockPeriodLog.log("Command exited with code $exitCode")
         }
     }
@@ -94,8 +96,13 @@ class NetFPGABuilder(
         var failed = false
 
         for (command in commands) {
-            failed = runCommand(clockPeriodLogHandler, command) != 0
+            failed = runCommand(clockPeriodLogHandler, command, clockPeriodLogHandler.buildLogStream()) != 0
             if (failed) break
+        }
+
+        if (!failed) {
+            val testCommand = gradleTestCommand(clockPeriod, netFPGAProgramName)
+            failed = runCommand(clockPeriodLogHandler, testCommand, clockPeriodLogHandler.testLogStream()) != 0
         }
 
         logHandler.log("Build for clock period $clockPeriod ${if (failed) "failed" else "succeeded"}")
