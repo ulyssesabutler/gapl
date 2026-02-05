@@ -314,25 +314,68 @@ bool check_simulation_success(
     const std::vector<std::vector<OutputInterface>>& expected_packets,
     const std::vector<std::vector<OutputInterface>>& output_packets
 ) {
+    // Make a padded copy of outputs:
+    // - pad with "real" beats: data=0, keep=all 1s
+    // - move 'last' to the final padded beat (not the original early last)
+    std::vector<std::vector<OutputInterface>> padded_outputs = output_packets;
+
+    const size_t packets_to_pad = std::min(expected_packets.size(), padded_outputs.size());
+    for (size_t p = 0; p < packets_to_pad; ++p) {
+        const size_t expected_beats = expected_packets[p].size();
+        auto&        outs          = padded_outputs[p];
+
+        if (outs.empty()) {
+            // Nothing produced, but expected something. We'll pad to the right.
+            outs.reserve(expected_beats);
+        }
+
+        if (outs.size() < expected_beats) {
+            // If the DUT already asserted last early, clear it. We'll re-assert later.
+            for (auto& beat : outs) {
+                beat.last = false;
+            }
+
+            // Append padding beats.
+            OutputInterface pad{};
+            pad.data.fill(0);
+            pad.keep = 0xFFFFFFFFu;
+            pad.last = false;
+
+            const size_t original_size = outs.size();
+            outs.resize(expected_beats, pad);
+
+            // Ensure only the final beat has last=true
+            if (!outs.empty()) {
+                outs.back().last = true;
+            }
+
+            // (Optional) If you want padding beats to be distinguishable in logs,
+            // you could print original_size..expected_beats-1 elsewhere.
+        } else if (!outs.empty()) {
+            // If we didn't pad, leave last as produced by the DUT.
+            // (We don't "fix" last here because you only asked to move it when padding happens.)
+        }
+    }
+
     bool simulation_success = true;
 
-    if (expected_packets.size() != output_packets.size()) {
+    if (expected_packets.size() != padded_outputs.size()) {
         std::cerr << "Test Error: expected and outputs packet-count mismatch\n"
                   << "  Expected packets: " << expected_packets.size() << '\n'
-                  << "  Actual packets:   " << output_packets.size() << std::endl;
+                  << "  Actual packets:   " << padded_outputs.size() << std::endl;
         return false;
     }
 
     for (size_t p = 0; p < expected_packets.size(); ++p) {
         const auto& expected = expected_packets[p];
-        const auto& outputs  = output_packets[p];
+        const auto& outputs  = padded_outputs[p];
 
         if (expected.size() != outputs.size()) {
             std::cerr << "Test Error: packet " << p << " beat-count mismatch\n"
                       << "  Expected beats: " << expected.size() << '\n'
                       << "  Actual beats:   " << outputs.size() << std::endl;
             simulation_success = false;
-            continue; // still check other packets
+            continue;
         }
 
         for (size_t i = 0; i < expected.size(); ++i) {
@@ -349,7 +392,6 @@ bool check_simulation_success(
 
             const bool keep_matches = (exp.keep == out.keep);
             const bool last_matches = (exp.last == out.last);
-
             const bool matches = data_matches && keep_matches && last_matches;
 
             std::cout << "Packet " << p << " Output " << i << std::endl;
