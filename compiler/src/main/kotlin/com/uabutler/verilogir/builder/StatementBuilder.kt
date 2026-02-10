@@ -10,6 +10,7 @@ import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWireVector
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.netlist.VirtualNode
 import com.uabutler.netlistir.netlist.WireVector
 import com.uabutler.verilogir.builder.creator.ModuleInvocationNodeCreator
 import com.uabutler.verilogir.builder.creator.PassThroughNodeCreator
@@ -35,6 +36,7 @@ object StatementBuilder {
             is ModuleInvocationNode -> ModuleInvocationNodeCreator.create(node)
             is PassThroughNode -> PassThroughNodeCreator.create(node)
             is PredefinedFunctionNode -> PredefinedFunctionNodeCreator.create(node)
+            is VirtualNode -> throw IllegalStateException("Virtual nodes should not exist in module")
         }
     }
 

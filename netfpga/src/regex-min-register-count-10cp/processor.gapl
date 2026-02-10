@@ -1,0 +1,188 @@
+/* EMAIL REGEX */
+
+interface nfa {
+    n1: boolean;
+    n2: boolean;
+    n3: boolean;
+    n4: boolean;
+    n5: boolean;
+}
+
+interface state {
+    nodes: nfa;
+    result: boolean;
+}
+
+function email_regex_is_character_in_range()
+    candidate: character,
+    range: pair(character, character)
+        => result: boolean
+{
+    candidate, range.first  => declare lower: greater_than_equals(8);
+    candidate, range.second => declare upper: less_than_equals(8);
+
+    lower, upper => and() => result;
+}
+
+function email_regex_is_character_in_set(set_size: integer)
+    candidate: character,
+    set: pair(character, character)[set_size]
+        => result: boolean
+{
+    candidate => declare candidate_vector: replicate(character, set_size);
+
+    candidate_vector, set
+        => vector_zip(character, pair(character, character), set_size)
+        => vector_map(pair(character, pair(character, character)), boolean, set_size, unpair(character, pair(character, character), boolean, email_regex_is_character_in_range))
+        => vector_any(set_size)
+        => result;
+}
+
+function email_regex_is_local() i: character => o: boolean
+{
+    declare set: pair(character, character)[5];
+
+    // A - Z
+    literal(8, 65) => set[0].first;
+    literal(8, 90) => set[0].second;
+
+    // 0 - 9
+    literal(8, 48) => set[1].first;
+    literal(8, 57) => set[1].second;
+
+    // .
+    literal(8, 46) => set[2].first;
+    literal(8, 46) => set[2].second;
+
+    // _
+    literal(8, 95) => set[3].first;
+    literal(8, 95) => set[3].second;
+
+    // -
+    literal(8, 45) => set[4].first;
+    literal(8, 45) => set[4].second;
+
+    i, set => email_regex_is_character_in_set(5) => o;
+}
+
+function email_regex_is_url() i: character => o: boolean
+{
+    declare set: pair(character, character)[3];
+
+    // A - Z
+    literal(8, 65) => set[0].first;
+    literal(8, 90) => set[0].second;
+
+    // 0 - 9
+    literal(8, 48) => set[1].first;
+    literal(8, 57) => set[1].second;
+
+    // -
+    literal(8, 45) => set[2].first;
+    literal(8, 45) => set[2].second;
+
+    i, set => email_regex_is_character_in_set(3) => o;
+}
+
+function email_regex_is_url_separator() i: character => o: boolean
+{
+    declare set: pair(character, character)[1];
+
+    // .
+    literal(8, 46) => set[0].first;
+    literal(8, 46) => set[0].second;
+
+    i, set => email_regex_is_character_in_set(1) => o;
+}
+
+function email_regex_is_email_separator() i: character() => o: boolean()
+{
+    declare set: pair(character, character)[1];
+
+    // @
+    literal(8, 64) => set[0].first;
+    literal(8, 64) => set[0].second;
+
+    i, set => email_regex_is_character_in_set(1) => o;
+}
+
+function email_regex_nfa_node(input_size: integer) i: boolean[input_size] => o: boolean {
+    i => vector_any(input_size) => o;
+}
+
+function email_regex_nfa_edge(condition: character => boolean)
+    source_node: boolean,
+    candidate: character
+        => destination_node: boolean
+{
+    candidate => declare valid_character: condition;
+    source_node, valid_character => and() => destination_node;
+}
+
+function email_regex_update_nfa() new_character: character, current_state: state => update: state
+{
+    declare true_v: literal(1, 1);
+
+    declare n1_inputs: wire[2] => email_regex_nfa_node(2) => update.nodes.n1;
+    declare n2_inputs: wire[3] => email_regex_nfa_node(3) => update.nodes.n2;
+    declare n3_inputs: wire[1] => email_regex_nfa_node(1) => update.nodes.n3;
+    declare n4_inputs: wire[1] => email_regex_nfa_node(1) => update.nodes.n4;
+    declare n5_inputs: wire[2] => email_regex_nfa_node(2) => declare n5_output: boolean;
+
+    n5_output => update.nodes.n5;
+
+    true_v[0],              new_character => declare start_to_n1: email_regex_nfa_edge(email_regex_is_local())           => n1_inputs[0];
+    current_state.nodes.n1, new_character => declare n1_to_n1:    email_regex_nfa_edge(email_regex_is_local())           => n1_inputs[1];
+
+    current_state.nodes.n1, new_character => declare n1_to_n2:    email_regex_nfa_edge(email_regex_is_email_separator()) => n2_inputs[0];
+    current_state.nodes.n2, new_character => declare n2_to_n2:    email_regex_nfa_edge(email_regex_is_url())             => n2_inputs[1];
+    current_state.nodes.n3, new_character => declare n3_to_n2:    email_regex_nfa_edge(email_regex_is_url())             => n2_inputs[2];
+
+    current_state.nodes.n2, new_character => declare n2_to_n3:    email_regex_nfa_edge(email_regex_is_url_separator())   => n3_inputs[0];
+
+    current_state.nodes.n3, new_character => declare n3_to_n4:    email_regex_nfa_edge(email_regex_is_url())             => n4_inputs[0];
+
+    current_state.nodes.n4, new_character => declare n4_to_n5:    email_regex_nfa_edge(email_regex_is_url())             => n5_inputs[0];
+    current_state.nodes.n5, new_character => declare n5_to_n5:    email_regex_nfa_edge(email_regex_is_url())             => n5_inputs[1];
+
+    n5_output, current_state.result => or() => update.result;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: byte[32];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
+    declare input_characters: character[32];
+    declare input_state: state;
+    declare output_state: state;
+
+    input_characters, input_state
+        => combinational_vector_fold(character, state, 32, email_regex_update_nfa)
+        => output_state;
+
+    output_state => declare state_register: register(state) => input_state;
+
+    i.data
+        => reverse(character, 32)
+        => input_characters;
+
+    declare o_register: register(netfpga_packet_body) => o;
+
+    output_state.result                     => o_register.data[31][0];
+    literal(7, 0)                           => o_register.data[31][1:7];
+    literal(8, 0) => replicate(wire[8], 31) => o_register.data[0:30];
+
+    literal(1, 1)
+        => vector_to_wire()
+        => replicate(wire, 32)
+        => o_register.keep;
+
+    i.last => o_register.valid;
+    i.last => o_register.last;
+}

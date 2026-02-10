@@ -36,6 +36,11 @@ sealed class Node(
     }
 }
 
+class VirtualNode(
+    identifier: String,
+    parentModule: Module,
+) : Node(identifier, parentModule, { emptyList() }, { emptyList() })
+
 sealed class IONode(
     identifier: String,
     parentModule: Module,

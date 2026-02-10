@@ -89,6 +89,7 @@ class Module(
             is InputNode -> inputNodes.remove(node.name())
             is OutputNode -> outputNodes.remove(node.name())
             is BodyNode -> bodyNodes.remove(node.name())
+            is VirtualNode -> throw IllegalStateException("Virtual node should not be in module")
         }
     }
 

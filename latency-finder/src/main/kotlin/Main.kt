@@ -9,19 +9,47 @@ fun parseArgs(args: Array<String>): Map<String, List<String>> {
     }.first
 }
 
-fun main(args: Array<String>) {
-    val projectRoot = File(".").canonicalFile.parentFile
-
-    val programs = listOf(
-        "cms-unretimed",
-        "md5-unretimed",
-        "combinational-aes",
-        "regex"
-    )
-
+fun minimizeClockPeriods(projectRoot: File, programs: List<String>) {
     programs.forEach { programName ->
         ClockPeriodFinder(projectRoot, programName).findClockPeriod()
     }
+}
 
+fun retime(projectRoot: File, delayModel: File, retimingClockPeriod: Int, programs: List<String>) {
+    programs.forEach { programName ->
+        NetFPGABuilder(
+            runDirectory = projectRoot,
+            netFPGAProgramName = programName,
+            logHandler = LogHandler(projectRoot.resolve("latency-finder-logs").resolve(programName)),
+            clockPeriod = retimingClockPeriod,
+            retime = delayModel,
+            retimingClockPeriod = retimingClockPeriod,
+            retimingMinimizeRegisterCount = true,
+        ).run()
+    }
+}
+
+fun main(args: Array<String>) {
+    val projectRoot = File(".").canonicalFile.parentFile
+    val subprojectRoot = File(".").canonicalFile
+
+    val programs = listOf(
+        // "cms-unretimed",
+        // "md5-unretimed",
+        "combinational-aes",
+        "regex",
+    )
+
+    val delayModel = subprojectRoot.resolve("delay.yaml")
+
+    println("Minimizing clock periods...")
+    println("Using delay model: ${delayModel.absolutePath}")
+
+    retime(
+        projectRoot = projectRoot,
+        delayModel = delayModel,
+        retimingClockPeriod = 10,
+        programs = programs
+    )
 }
 

@@ -9,6 +9,7 @@ import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.netlist.VirtualNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
@@ -109,6 +110,28 @@ object NetlistLeisersonCircuitConverter {
                 )
             }
 
+        val superInputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperInputNode", module))
+        val superInputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getInputNodes()
+            .map { inputNode ->
+                WeightedGraph.Edge(
+                    source = superInputNode,
+                    sink = nodes[inputNode]!!,
+                    weight = 0,
+                    value = emptyList(),
+                )
+            }
+
+        val superOutputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperOutputNode", module))
+        val superOutputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getOutputNodes()
+            .map { outputNode ->
+                WeightedGraph.Edge(
+                    source = nodes[outputNode]!!,
+                    sink = superOutputNode,
+                    weight = 0,
+                    value = emptyList(),
+                )
+            }
+
         val edges = getNonRegisterConnections(module)
             .map { (source, sink, weight) ->
                 WeightedNonRegisterConnectionGroup(
@@ -128,32 +151,27 @@ object NetlistLeisersonCircuitConverter {
                 )
             }
 
-        val loopEdges = if (maintainTiming) {
-            val inputNodes = nodes.values.filter { it.value is InputNode }
-            val outputNodes = nodes.values.filter { it.value is OutputNode }
-
-            val cartesianProduct = inputNodes.associateWith { outputNodes }.flatMap { (inputNode, outputNodes) -> outputNodes.map { outputNode -> inputNode to outputNode } }
-
-            cartesianProduct.map {
-                WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>(
-                    source = it.second,
-                    sink = it.first,
-                    weight = 0,
-                    value = emptyList(),
-                )
-            }
+        val loopEdge: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>? = if (maintainTiming) {
+            WeightedGraph.Edge(
+                source = superOutputNode,
+                sink = superInputNode,
+                weight = 0,
+                value = emptyList(),
+            )
         } else {
-            emptyList()
+            null
         }
 
-        Logger.debug { "Node Count: ${nodes.size}" }
-        Logger.debug { "Edge Count: ${edges.size}" }
-        Logger.debug { "Loop Edge Count: ${loopEdges.size}" }
+        Logger.debug { "Node Count:              ${nodes.size}" }
+        Logger.debug { "Edge Count:              ${edges.size}" }
+        Logger.debug { "Super Input Edge Count:  ${superInputEdges.size}" }
+        Logger.debug { "Super Output Edge Count: ${superInputEdges.size}" }
+        Logger.debug { "Loop Edge Count:         ${loopEdge?.let { 1 } ?: 0}" }
 
         return LeisersonCircuitGraph(
             value = module,
-            nodes = nodes.values,
-            edges = edges + loopEdges,
+            nodes = nodes.values + listOf(superInputNode, superOutputNode),
+            edges = edges + superInputEdges + superOutputEdges + listOfNotNull(loopEdge),
         ).also { Logger.finish() }
     }
 
@@ -232,35 +250,39 @@ object NetlistLeisersonCircuitConverter {
             addNodeToMaps(oldNode, copiedNode)
         }
 
-        val oldNetlistNodeToNewGraphNode = graph.nodes.associateWith {
-            WeightedGraph.Node(
-                weight = it.weight,
-                value = nodeMap[it.value]!!,
-            )
-        }.mapKeys { it.key.value }
+        val oldNetlistNodeToNewGraphNode = graph.nodes
+            .filter { it.value !is VirtualNode }
+            .associateWith {
+                WeightedGraph.Node(
+                    weight = it.weight,
+                    value = nodeMap[it.value]!!,
+                )
+            }.mapKeys { it.key.value }
 
-        val newGraphEdges = graph.edges.map { edge ->
-            WeightedNonRegisterConnectionGroup(
-                sourceNode = edge.source.value,
-                sinkNode = edge.sink.value,
-                connections = edge.value,
-                weight = edge.weight,
-            )
-        }.let {
-            condenseWeightedNonRegisterConnectionGroups(it)
-        }.map { group ->
-            WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>(
-                source = oldNetlistNodeToNewGraphNode[group.sourceNode]!!,
-                sink = oldNetlistNodeToNewGraphNode[group.sinkNode]!!,
-                weight = group.weight,
-                value = group.connections.map {
-                    NonRegisterConnection(
-                        source = outputWireMap[it.source]!!,
-                        sink = inputWireMap[it.sink]!!,
-                    )
-                },
-            )
-        }
+        val newGraphEdges = graph.edges
+            .filter { it.source.value !is VirtualNode && it.sink.value !is VirtualNode }
+            .map { edge ->
+                WeightedNonRegisterConnectionGroup(
+                    sourceNode = edge.source.value,
+                    sinkNode = edge.sink.value,
+                    connections = edge.value,
+                    weight = edge.weight,
+                )
+            }.let {
+                condenseWeightedNonRegisterConnectionGroups(it)
+            }.map { group ->
+                WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>(
+                    source = oldNetlistNodeToNewGraphNode[group.sourceNode]!!,
+                    sink = oldNetlistNodeToNewGraphNode[group.sinkNode]!!,
+                    weight = group.weight,
+                    value = group.connections.map {
+                        NonRegisterConnection(
+                            source = outputWireMap[it.source]!!,
+                            sink = inputWireMap[it.sink]!!,
+                        )
+                    },
+                )
+            }
 
         val newGraphNodes = oldNetlistNodeToNewGraphNode.values
 

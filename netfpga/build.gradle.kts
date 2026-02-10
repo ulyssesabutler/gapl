@@ -74,7 +74,13 @@ val pythonPath = listOf(
 
 val gaplSrcRoot = layout.projectDirectory.dir("src/$programName").asFile
 
-val delayModelFile = File(gaplSrcRoot, "delay.yaml")
+val delayModelPath = propOrEnv("delayModelPath", "DELAY_MODEL_PATH", "delay.yaml")
+
+val delayModelFile = File(delayModelPath)
+    .let { candidate ->
+        if (candidate.isAbsolute) candidate
+        else File(gaplSrcRoot, candidate.path)   // resolve relative to gaplSrcRoot
+    }
 
 // Validate: under src, exists, and ends with .gapl
 fun ensureUnder(parent: File, child: File): Boolean =
@@ -98,12 +104,25 @@ val testProps = Properties().apply {
     testPropsFile.inputStream().use { load(it) }
 }
 
-val testInputs = testProps.getProperty("testInputs")
-val testExpectedOutputs = testProps.getProperty("testExpectedOutputs")
+fun propString(name: String, default: String? = null): String? =
+    providers.gradleProperty(name).orNull
+        ?: testProps.getProperty(name)
+        ?: default
 
-val retimingClockPeriod = testProps.getProperty("retimingClockPeriod") ?: "min"
-val retimingMinimizeRegisterCount = testProps.getProperty("retimingMinimizeRegisterCount")?.toBoolean() ?: false
-val retimingMaintainsTiming = testProps.getProperty("retimingMaintainsTiming")?.toBoolean() ?: false
+fun propBool(name: String, default: Boolean = false): Boolean =
+    (providers.gradleProperty(name).orNull ?: testProps.getProperty(name))
+        ?.trim()
+        ?.toBooleanStrictOrNull()
+        ?: default
+
+val testInputs = propString("testInputs")!!
+val testExpectedOutputs = propString("testExpectedOutputs")!!
+
+val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
+// If you want it nullable, drop the "!!" and handle null.
+
+val retimingMinimizeRegisterCount = propBool("retimingMinimizeRegisterCount", false)
+val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
@@ -183,7 +202,7 @@ tasks.register("generateGaplVerilog") {
                 if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
             }
 
-            add("-ono-flatten")
+            // add("-ono-flatten")
 
             add("-log-level")
             add("DEBUG")
