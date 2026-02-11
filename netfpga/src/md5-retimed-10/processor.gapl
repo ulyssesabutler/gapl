@@ -27,9 +27,9 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
 
     literal(128, 0) => o.data[0:127];
 
-    i.keep  => register(boolean[32]) => o.keep;
-    i.valid => register(boolean)     => o.valid;
-    i.last  => register(boolean)     => o.last;
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
 }
 
 function generate_256bit_padding() null => o: wire[256]

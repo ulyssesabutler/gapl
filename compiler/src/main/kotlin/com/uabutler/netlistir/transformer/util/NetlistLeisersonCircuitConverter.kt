@@ -2,11 +2,9 @@ package com.uabutler.netlistir.transformer.util
 
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
-import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.Node
-import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.VirtualNode
@@ -221,6 +219,17 @@ object NetlistLeisersonCircuitConverter {
 
     fun toModule(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>): Module {
         val oldModule = graph.value
+
+        // Validation
+        val edgesAttachedToNode = graph.edges.groupBy { it.source } + graph.edges.groupBy { it.sink }
+
+        graph.nodes.forEach { node ->
+            if (node.value is VirtualNode) {
+                edgesAttachedToNode[node]?.forEach { edge ->
+                    if (edge.weight != 0) throw Exception("Virtual node cannot have non-zero weight")
+                }
+            }
+        }
 
         // First, create the new module
         val newModule = Module(oldModule.invocation)
