@@ -1,24 +1,26 @@
 package com.uabutler.util.graph
 
 open class WeightedGraph<N, E>(
-    val nodes: Collection<Node<N>>,
-    val edges: Collection<Edge<N, E>>,
-) {
-
-    private val adjacencyList: Map<Node<N>, Collection<Edge<N, E>>> = edges.groupBy { it.source }
-
+    nodes: Collection<Node<N>>,
+    edges: Collection<Edge<N, E>>,
+) : Graph<N, E, WeightedGraph.Node<N>, WeightedGraph.Edge<N, E>, WeightedGraph<N, E>>(nodes, edges) {
 
     data class Node<N>(
         val weight: Int,
-        val value: N,
-    )
+        override val value: N,
+    ) : GraphNode<N>
 
     data class Edge<N, E>(
         val weight: Int,
-        val source: Node<N>,
-        val sink: Node<N>,
-        val value: E,
-    )
+        override val source: Node<N>,
+        override val sink: Node<N>,
+        override val value: E,
+    ) : GraphEdge<N, E, Node<N>>
+
+    override fun newGraph(
+        nodes: Collection<Node<N>>,
+        edges: Collection<Edge<N, E>>,
+    ): WeightedGraph<N, E> = WeightedGraph(nodes, edges)
 
     fun <T> shortestPathsFromNode(
         root: Node<N>,
@@ -51,43 +53,6 @@ open class WeightedGraph<N, E>(
         }
 
         return distanceFromRoot
-    }
-
-    fun topologicalSort(): List<Node<N>> {
-        // Kahn's algorithm
-        val inDegree = nodes
-            .associateWith { 0 }
-            .toMutableMap()
-            .apply {
-                edges.groupBy { it.sink }.forEach { (sink, edges) -> this[sink] = edges.size }
-            }
-
-        val currentStartNodes = inDegree.filterValues { it == 0 }.keys.toMutableList()
-
-        return buildList {
-            while (currentStartNodes.isNotEmpty()) {
-                val currentNode = currentStartNodes.removeLast()
-
-                add(currentNode)
-
-                adjacencyList[currentNode]?.forEach { edge ->
-                    inDegree[edge.sink] = (inDegree[edge.sink] ?: 0) - 1
-                    if (inDegree[edge.sink] == 0) currentStartNodes.add(edge.sink)
-                }
-            }
-        }.also {
-            if (it.size != nodes.size) throw IllegalArgumentException("Graph contains cycles")
-        }
-    }
-
-    fun subgraph(
-        nodeFilter: (Node<N>) -> Boolean = { true },
-        edgeFilter: (Edge<N, E>) -> Boolean = { true },
-    ): WeightedGraph<N, E> {
-        return WeightedGraph(
-            nodes = nodes.filter { nodeFilter(it) },
-            edges = edges.filter { edgeFilter(it) }.filter { nodeFilter(it.source) && nodeFilter(it.sink) },
-        )
     }
 
 }

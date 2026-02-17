@@ -35,10 +35,16 @@ object Logger {
         }
     }
 
-    private fun runLogger(message: () -> String, level: Level) {
-        if (level.number >= this.level.number) {
-            printLog(message(), level)
+    private fun <T> runIf(function: () -> T, level: Level): T? {
+        return if (level.number >= this.level.number) {
+            function()
+        } else {
+            null
         }
+    }
+
+    private fun runLogger(message: () -> String, level: Level) {
+        runIf({ writeLog(message(), level) }, level)
     }
 
     fun setLevel(level: Level) { this.level = level }
@@ -47,6 +53,11 @@ object Logger {
     fun info(message: () -> String) = runLogger(message, Level.INFO)
     fun warn(message: () -> String) = runLogger(message, Level.WARN)
     fun error(message: () -> String) = runLogger(message, Level.ERROR)
+
+    fun <T> ifDebug(function: () -> T) = runIf(function, Level.DEBUG)
+    fun <T> ifInfo(function: () -> T) = runIf(function, Level.INFO)
+    fun <T> ifWarn(function: () -> T) = runIf(function, Level.WARN)
+    fun <T> ifError(function: () -> T) = runIf(function, Level.ERROR)
 
     fun <T> run(name: String, level: Level = Level.DEBUG, block: () -> T): T {
         start(name, level)
