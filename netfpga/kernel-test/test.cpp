@@ -28,12 +28,12 @@ double sc_time_stamp() { return sim_time; }
 // One clock tick: 0 -> 1 -> 0 with evals
 static void tick(Vpacket_body_processor* top)
 {
-    top->clock = 0;
+    top->clock = 1;
     top->eval();
     if (waveform) waveform->dump(sim_time);
     ++sim_time;
 
-    top->clock = 1;
+    top->clock = 0;
     top->eval();
     if (waveform) waveform->dump(sim_time);
     ++sim_time;
