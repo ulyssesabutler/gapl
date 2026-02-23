@@ -123,13 +123,7 @@ function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_
     declare f: word;
     declare m_g: word;
 
-    declare xor2: word;
-    declare xor22: word;
-
-    input_state.d => xor22;
-    input_state.b, xor22 => bitwise_or(32) => xor2;
-
-    input_state.c, xor2 => bitwise_xor(32) => f;
+    input_state.c => f;
 
     m[(7 * iteration) % 16] => m_g;
 
