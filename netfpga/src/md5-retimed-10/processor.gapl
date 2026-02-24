@@ -69,43 +69,35 @@ function md5_single_round_hash() i: md5_input_block => o: md5_state
 
 function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
 {
-    i[0:31]    => reverse_endianess() => o[15];
-    i[32:63]   => reverse_endianess() => o[14];
-    i[64:95]   => reverse_endianess() => o[13];
-    i[96:127]  => reverse_endianess() => o[12];
-    i[128:159] => reverse_endianess() => o[11];
-    i[160:191] => reverse_endianess() => o[10];
-    i[192:223] => reverse_endianess() => o[9];
-    i[224:255] => reverse_endianess() => o[8];
-    i[256:287] => reverse_endianess() => o[7];
-    i[288:319] => reverse_endianess() => o[6];
-    i[320:351] => reverse_endianess() => o[5];
-    i[352:383] => reverse_endianess() => o[4];
-    i[384:415] => reverse_endianess() => o[3];
-    i[416:447] => reverse_endianess() => o[2];
-    i[448:479] => reverse_endianess() => o[1];
-    i[480:511] => reverse_endianess() => o[0];
+    i[0:31]    => o[0];
+    i[32:63]   => o[1];
+    i[64:95]   => o[2];
+    i[96:127]  => o[3];
+    i[128:159] => o[4];
+    i[160:191] => o[5];
+    i[192:223] => o[6];
+    i[224:255] => o[7];
+    i[256:287] => o[8];
+    i[288:319] => o[9];
+    i[320:351] => o[10];
+    i[352:383] => o[11];
+    i[384:415] => o[12];
+    i[416:447] => o[13];
+    i[448:479] => o[14];
+    i[480:511] => o[15];
 }
 
 function md5_hash_output_from_state() i: md5_state => o: wire[128]
 {
-    i.a => reverse_endianess() => o[96:127];
-    i.b => reverse_endianess() => o[64:95];
-    i.c => reverse_endianess() => o[32:63];
-    i.d => reverse_endianess() => o[0:31];
-}
-
-function reverse_endianess() i: word => o: word
-{
-    i[0:7]  => o[24:31];
-    i[8:15] => o[16:23];
-    i[16:23] => o[8:15];
-    i[24:31] => o[0:7];
+    i.a => o[0:31];
+    i.b => o[32:63];
+    i.c => o[64:95];
+    i.d => o[96:127];
 }
 
 function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
 {
-    i, input_state => md5_hash_block_from_iteration(0) => declare final_local_state: md5_state;
+    i, input_state => md5_hash_block_from_iteration() => declare final_local_state: md5_state;
 
     input_state.a, final_local_state.a => add_words() => output_state.a;
     input_state.b, final_local_state.b => add_words() => output_state.b;
@@ -113,33 +105,19 @@ function md5_hash_block() i: md5_input_block, input_state: md5_state => output_s
     input_state.d, final_local_state.d => add_words() => output_state.d;
 }
 
-function md5_hash_block_from_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+function md5_hash_block_from_iteration() m: md5_input_block, input_state: md5_state => output_state: md5_state
 {
-    m, input_state => md5_iteration(iteration) => output_state;
-}
+    m[15] => declare m_g: word;
 
-function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
-{
-    declare f: word;
-    declare m_g: word;
+    input_state.c, input_state.a => declare add1: add_words()
 
-    input_state.c => f;
+    add1, m_g => declare add2: add_words()
 
-    m[(7 * iteration) % 16] => m_g;
+    add2, input_state.b => declare add3: add_words()
 
-    declare f2: word;
-    declare f21: word;
-    declare f22: word;
-
-    f, input_state.a => add_words() => f21;
-    m_g => f22;
-
-    f21, f22
-        => add_words()
-        => f2;
 
     input_state.d => output_state.a;
     input_state.c => output_state.d;
     input_state.b => output_state.c;
-    input_state.b, f2 => add_words() => output_state.b;
+    add3 => output_state.b;
 }
