@@ -1,12 +1,4 @@
 interface word wire[32]
-interface md5_input_block word[16]
-
-interface md5_state {
-    a: word;
-    b: word;
-    c: word;
-    d: word;
-}
 
 /* NETFPGA PACKET BODY PROCESSOR */
 
@@ -19,93 +11,20 @@ interface netfpga_packet_body {
 
 function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
 {
-    i.data => declare data_padder: pad_nf_data()
-           => md5_hash_block_from_input()
-           => md5_single_round_hash()
-           => md5_hash_output_from_state()
-           => o.data[128:255];
+    i.data[0:31] => declare m_g: word;
 
-    literal(128, 0) => o.data[0:127];
+    literal(32, 1732584193) => declare a: word;
+    literal(32, 4023233417) => declare b: word;
+    literal(32, 2562383102) => declare c: word;
+
+    c, a => declare add1: add(32);
+
+    add1, m_g => declare add2: add(32);
+
+    add2 => o.data[0:31];
+    literal(224,0) => o.data[32:255];
 
     i.keep  => o.keep;
     i.valid => o.valid;
     i.last  => o.last;
-}
-
-function pad_nf_data() i: wire[256] => o: wire[512]
-{
-    literal(256, 0) => o[0:255];
-    i               => o[256:511];
-}
-
-function add_words() lhs: word, rhs: word => result: word
-{
-    lhs, rhs => add(32) => result;
-}
-
-function md5_single_round_hash() i: md5_input_block => o: md5_state
-{
-    declare initial_state: md5_state;
-
-    literal(32, 1732584193) => initial_state.a;
-    literal(32, 4023233417) => initial_state.b;
-    literal(32, 2562383102) => initial_state.c;
-    literal(32, 271733878)  => initial_state.d;
-
-    i, initial_state => md5_hash_block() => o;
-}
-
-function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
-{
-    i[0:31]    => o[0];
-    i[32:63]   => o[1];
-    i[64:95]   => o[2];
-    i[96:127]  => o[3];
-    i[128:159] => o[4];
-    i[160:191] => o[5];
-    i[192:223] => o[6];
-    i[224:255] => o[7];
-    i[256:287] => o[8];
-    i[288:319] => o[9];
-    i[320:351] => o[10];
-    i[352:383] => o[11];
-    i[384:415] => o[12];
-    i[416:447] => o[13];
-    i[448:479] => o[14];
-    i[480:511] => o[15];
-}
-
-function md5_hash_output_from_state() i: md5_state => o: wire[128]
-{
-    i.a => o[0:31];
-    i.b => o[32:63];
-    i.c => o[64:95];
-    i.d => o[96:127];
-}
-
-function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
-{
-    i, input_state => md5_hash_block_from_iteration() => declare final_local_state: md5_state;
-
-    input_state.a, final_local_state.a => add_words() => output_state.a;
-    input_state.b, final_local_state.b => add_words() => output_state.b;
-    input_state.c, final_local_state.c => add_words() => output_state.c;
-    input_state.d, final_local_state.d => add_words() => output_state.d;
-}
-
-function md5_hash_block_from_iteration() m: md5_input_block, input_state: md5_state => output_state: md5_state
-{
-    m[15] => declare m_g: word;
-
-    input_state.c, input_state.a => declare add1: add_words()
-
-    add1, m_g => declare add2: add_words()
-
-    add2, input_state.b => declare add3: add_words()
-
-
-    input_state.d => output_state.a;
-    input_state.c => output_state.d;
-    input_state.b => output_state.c;
-    add3 => output_state.b;
 }
