@@ -57,7 +57,7 @@ object Compiler {
                 }
 
                 Logger.debug { "Renamer" }
-                // add(Renamer)
+                add(Renamer)
             }
         }
 

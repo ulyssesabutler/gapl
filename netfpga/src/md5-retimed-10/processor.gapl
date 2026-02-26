@@ -32,22 +32,10 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
     i.last  => o.last;
 }
 
-function generate_256bit_padding() null => o: wire[256]
-{
-    literal(1, 1) => declare true_vector: wire[1];
-    true_vector[0] => declare true_value: wire;
-
-    true_value => o[255];
-    true_value => o[48];
-
-    literal(48, 0)  => o[0:47];
-    literal(206, 0) => o[49:254];
-}
-
 function pad_nf_data() i: wire[256] => o: wire[512]
 {
-    generate_256bit_padding() => o[0:255];
-    i                         => o[256:511];
+    literal(256, 0) => o[0:255];
+    i               => o[256:511];
 }
 
 function add_words() lhs: word, rhs: word => result: word

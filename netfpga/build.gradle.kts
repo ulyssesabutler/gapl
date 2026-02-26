@@ -202,8 +202,7 @@ tasks.register("generateGaplVerilog") {
                 if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
             }
 
-            add("-ono-flatten")
-            add("-ono-rename")
+            // add("-ono-flatten")
 
             add("-log-level")
             add("DEBUG")
