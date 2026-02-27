@@ -12,6 +12,7 @@ import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
+import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.Logger
@@ -109,7 +110,8 @@ object NetlistLeisersonCircuitConverter {
             }
 
         val superInputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperInputNode", module))
-        val superInputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getInputNodes()
+        /*
+        val superInputIOEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getInputNodes()
             .map { inputNode ->
                 WeightedGraph.Edge(
                     source = superInputNode,
@@ -118,6 +120,30 @@ object NetlistLeisersonCircuitConverter {
                     value = emptyList(),
                 )
             }
+        val superInputConstantEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getBodyNodes()
+            .filterIsInstance<PredefinedFunctionNode>()
+            .filter { it.predefinedFunction is LiteralFunction }
+            .map { constantNode ->
+                WeightedGraph.Edge(
+                    source = superInputNode,
+                    sink = nodes[constantNode]!!,
+                    weight = 0,
+                    value = emptyList(),
+                )
+            }
+        val superInputEdges = superInputIOEdges + superInputConstantEdges
+         */
+        val superInputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getNodes()
+            .filter { it.inputWires().isEmpty() }
+            .map { sourceNode ->
+                WeightedGraph.Edge(
+                    source = superInputNode,
+                    sink = nodes[sourceNode]!!,
+                    weight = 0,
+                    value = emptyList(),
+                )
+            }
+
 
         val superOutputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperOutputNode", module))
         val superOutputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getOutputNodes()

@@ -7,6 +7,7 @@ import com.google.ortools.sat.CpModel
 import com.google.ortools.sat.CpSolver
 import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
+import com.uabutler.netlistir.netlist.VirtualNode
 
 class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
     companion object {
@@ -93,10 +94,26 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         Logger.debug { "Added $clockPeriodConstraintCount clock period constraints" }
 
-        // Step 6: Add an anchor constraint
+        // Step 6: Add constraints to prevent registers to virtual nodes
+        val zeroVirtualNodeRegisterConstraintCount = graph.edges
+            .filter { it.source.value is VirtualNode || it.sink.value is VirtualNode }
+            .onEach { edge ->
+                val sourceTerm = LinearExpr.term(retimingLabelVariables[edge.source]!!, -1L)
+                val sinkTerm = retimingLabelVariables[edge.sink]!!
+                val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
+
+                val bound = 0L
+
+                model.addEquality(linearExpression, bound)
+            }.count()
+
+        Logger.debug { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
+
+        // Step 7: Add an anchor constraint
         val anchorNode = graph.nodes.first()
         val anchorTerm = retimingLabelVariables[anchorNode]!!
         model.addEquality(anchorTerm, 0L)
+
 
         Logger.finish() // Creating LP problem
 
