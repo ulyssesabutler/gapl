@@ -2,6 +2,7 @@ package com.uabutler
 
 import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.transformer.ConstantSimplifier
 import com.uabutler.netlistir.transformer.Flattener
 import com.uabutler.netlistir.transformer.LiteralSimplifier
 import com.uabutler.netlistir.transformer.PassThroughRemover
@@ -19,6 +20,7 @@ object Compiler {
     data class Options(
         val flatten: Boolean,
         val literalSimplification: Boolean,
+        val constantSimplification: Boolean,
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
         val retimingClockPeriod: Int?,
@@ -38,6 +40,13 @@ object Compiler {
                     Logger.debug { "Standard Library Filter" }
                     add(StandardLibraryFilter)
                 }
+
+                /*
+                if (options.constantSimplification) {
+                    Logger.debug { "Constant Simplifier" }
+                    add(ConstantSimplifier)
+                }
+                 */
 
                 if (options.literalSimplification) {
                     Logger.debug { "Literal Simplifier" }

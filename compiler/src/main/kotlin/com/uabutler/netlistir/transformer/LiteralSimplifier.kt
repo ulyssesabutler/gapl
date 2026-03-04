@@ -17,7 +17,7 @@ object LiteralSimplifier: Transformer {
         fun getLiteralNode(signature: LiteralFunctionSignature) = literalNodes.getOrPut(signature) {
             val predefinedFunction = LiteralFunction(signature.size, signature.value)
             PredefinedFunctionNode(
-                identifier = "\$SIMPLIFIED$${signature.size}$${signature.value}",
+                identifier = "SIMPLIFIED$${signature.size}$${signature.value}",
                 parentModule = module,
                 inputWireVectorGroupsBuilder = { node ->
                     predefinedFunction.inputs.map { it.toInputWireVectorGroup(node) }

@@ -29,6 +29,7 @@ fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
     return Compiler.Options(
         flatten = !parsedArgs.containsKey("-ono-flatten"),
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
+        constantSimplification = !parsedArgs.containsKey("-ono-constant-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
         retimingClockPeriod = parsedArgs["-retiming-clock-period"]?.first()?.lowercase()?.let { if (it == "min") null else it.toIntOrNull() },

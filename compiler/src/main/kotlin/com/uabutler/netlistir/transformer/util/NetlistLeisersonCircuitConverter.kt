@@ -110,29 +110,6 @@ object NetlistLeisersonCircuitConverter {
             }
 
         val superInputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperInputNode", module))
-        /*
-        val superInputIOEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getInputNodes()
-            .map { inputNode ->
-                WeightedGraph.Edge(
-                    source = superInputNode,
-                    sink = nodes[inputNode]!!,
-                    weight = 0,
-                    value = emptyList(),
-                )
-            }
-        val superInputConstantEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getBodyNodes()
-            .filterIsInstance<PredefinedFunctionNode>()
-            .filter { it.predefinedFunction is LiteralFunction }
-            .map { constantNode ->
-                WeightedGraph.Edge(
-                    source = superInputNode,
-                    sink = nodes[constantNode]!!,
-                    weight = 0,
-                    value = emptyList(),
-                )
-            }
-        val superInputEdges = superInputIOEdges + superInputConstantEdges
-         */
         val superInputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getNodes()
             .filter { it.inputWires().isEmpty() }
             .map { sourceNode ->
