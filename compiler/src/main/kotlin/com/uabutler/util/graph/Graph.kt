@@ -1,5 +1,7 @@
 package com.uabutler.util.graph
 
+import com.uabutler.util.Logger
+
 interface GraphNode<N> {
     val value: N
 }
@@ -26,14 +28,10 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
 
     fun topologicalSort(): List<NodeT> {
         // Kahn's algorithm
-        val inDegree = nodes
-            .associateWith { 0 }
-            .toMutableMap()
-            .apply {
-                edges.groupBy { it.sink }.forEach { (sink, edges) -> this[sink] = edges.size }
-            }
+        val nodesWithIncoming = edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.map { it.source }.toMutableList() }
+        val inNodes = nodes.associateWith { nodesWithIncoming[it] ?: mutableListOf() }
 
-        val currentStartNodes = inDegree.filterValues { it == 0 }.keys.toMutableList()
+        val currentStartNodes = inNodes.filterValues { it.isEmpty() }.keys.toMutableList()
 
         return buildList {
             while (currentStartNodes.isNotEmpty()) {
@@ -42,12 +40,20 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
                 add(currentNode)
 
                 adjacencyList[currentNode]?.forEach { edge ->
-                    inDegree[edge.sink] = (inDegree[edge.sink] ?: 0) - 1
-                    if (inDegree[edge.sink] == 0) currentStartNodes.add(edge.sink)
+                    val currentList = inNodes[edge.sink]!!
+                    currentList.remove(edge.source)
+                    if (currentList.isEmpty()) currentStartNodes.add(edge.sink)
                 }
             }
-        }.also {
-            if (it.size != nodes.size) throw IllegalArgumentException("Graph contains cycles")
+        }.also { candidateList ->
+            if (candidateList.size != nodes.size) throw IllegalArgumentException("Graph contains cycles").also {
+                Logger.debug { "Error in topological sort: Graph contains cycles" }
+                Logger.run("SCC Edges") {
+                    val sccNodes = nodes - candidateList.toSet()
+                    sccNodes.flatMap { sink -> inNodes[sink]!!.map { source -> source.value to sink.value } }
+                        .forEach { (source, sink) -> Logger.debug { "$source -> $sink" } }
+                }
+            }
         }
     }
 

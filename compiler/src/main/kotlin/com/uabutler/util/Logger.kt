@@ -13,10 +13,11 @@ object Logger {
     private val stack: MutableList<Layer> = mutableListOf()
 
     enum class Level(val number: Int, val prefix: String) {
-        DEBUG(0, "[DEBUG] "),
-        INFO (1, "[INFO]  "),
-        WARN (2, "[WARN]  "),
-        ERROR(3, "[ERROR] "),
+        TRACE(0, "[TRACE] "),
+        DEBUG(1, "[DEBUG] "),
+        INFO (2, "[INFO]  "),
+        WARN (3, "[WARN]  "),
+        ERROR(4, "[ERROR] "),
     }
 
     private fun printLog(message: String, level: Level) {
@@ -49,11 +50,13 @@ object Logger {
 
     fun setLevel(level: Level) { this.level = level }
 
+    fun trace(message: () -> String) = runLogger(message, Level.TRACE)
     fun debug(message: () -> String) = runLogger(message, Level.DEBUG)
     fun info(message: () -> String) = runLogger(message, Level.INFO)
     fun warn(message: () -> String) = runLogger(message, Level.WARN)
     fun error(message: () -> String) = runLogger(message, Level.ERROR)
 
+    fun <T> ifTrace(function: () -> T) = runIf(function, Level.TRACE)
     fun <T> ifDebug(function: () -> T) = runIf(function, Level.DEBUG)
     fun <T> ifInfo(function: () -> T) = runIf(function, Level.INFO)
     fun <T> ifWarn(function: () -> T) = runIf(function, Level.WARN)

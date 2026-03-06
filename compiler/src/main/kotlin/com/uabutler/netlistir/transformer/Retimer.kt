@@ -14,6 +14,7 @@ import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.util.FastSolver
 import com.uabutler.util.graph.util.MinimalRegisterSolver
 import com.uabutler.util.graph.util.Retiming
+import com.uabutler.verilogir.builder.creator.util.Identifier
 
 /* TODO: Interface
  *   I think we want to control retiming via these command line argument
@@ -41,12 +42,12 @@ class Retimer(
         name: String,
         module: Module,
     ) {
-        Logger.debug {
+        Logger.trace {
             val registerWires = module.getBodyNodes().sumOf { it.inputWires().size }
             "$name body wire count: $registerWires"
         }
 
-        Logger.debug {
+        Logger.trace {
             val registerWires =  module.getBodyNodes()
                 .filterIsInstance<PredefinedFunctionNode>()
                 .filter { it.predefinedFunction is RegisterFunction }
@@ -59,38 +60,53 @@ class Retimer(
         name: String,
         graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>,
     ) {
-        Logger.debug { "$name leiserson graph register count: ${graph.edges.sumOf { it.weight }}" }
-        Logger.debug { "$name leiserson graph clock period: ${graph.computeClockPeriod()}" }
+        Logger.trace { "$name leiserson graph register count: ${graph.edges.sumOf { it.weight }}" }
+        Logger.trace { "$name leiserson graph clock period: ${graph.computeClockPeriod()}" }
         Logger.run("$name leiserson graph edge weights") {
             graph.edges.groupBy { it.weight }.forEach { (weight, edges) ->
-                Logger.debug { "${edges.size} edges with weight $weight" }
+                Logger.trace { "${edges.size} edges with weight $weight" }
             }
         }
 
-        Logger.ifDebug {
-            Logger.start("$name graph path analysis")
+        Logger.ifTrace {
+            Logger.start("$name graph path analysis", Logger.Level.TRACE)
             val inputNodes = graph.nodes.filter { it.value is InputNode }.toList()
             val outputNodes = graph.nodes.filter { it.value is OutputNode }.toSet()
 
-            Logger.start("Shortest combinational delays")
+            Logger.start("Shortest combinational delays", Logger.Level.TRACE)
             inputNodes.forEach { inputNode ->
                 val fastestConnectionsToOutputs = graph.findFastestConnectionsFromNode(inputNode)
                     .filter { it.sink in outputNodes }
 
                 fastestConnectionsToOutputs.forEach { connection ->
-                    Logger.debug { "${connection.source.value.name()} -> ${connection.sink.value.name()}: ${connection.registerCount}" }
+                    Logger.trace { "${connection.source.value.name()} -> ${connection.sink.value.name()}: ${connection.registerCount}" }
                 }
             }
             Logger.finish()
 
-            Logger.start("All combinational delays")
+            Logger.start("All combinational delays", Logger.Level.TRACE)
             inputNodes.forEach { inputNode ->
                 val fastestConnectionsToOutputs = graph.registerDelaysFrom(inputNode)
                     .filter { it.key in outputNodes }
 
                 fastestConnectionsToOutputs.forEach { connection ->
-                    Logger.debug { "${inputNode.value.name()} -> ${connection.key.value.name()}: ${connection.value}" }
+                    Logger.trace { "${inputNode.value.name()} -> ${connection.key.value.name()}: ${connection.value}" }
                 }
+            }
+            Logger.finish()
+
+            Logger.start("Register size count", Logger.Level.TRACE)
+            val registerSizeCount = mutableMapOf<Int, Int>()
+
+            graph.edges.forEach { edge ->
+                val registerSize = edge.value.count()
+
+                val registerCount = registerSizeCount.getOrDefault(registerSize, 0) + edge.weight
+                registerSizeCount[registerSize] = registerCount
+            }
+
+            registerSizeCount.forEach { (size, count) ->
+                Logger.trace { "$size: $count" }
             }
             Logger.finish()
 
@@ -109,6 +125,7 @@ class Retimer(
          */
 
         val retimedModules = original.asSequence()
+            .onEach { Logger.start("Retiming module ${Identifier.module(it.invocation)}") }
             .onEach { module -> recordModuleStats("Unretimed", module) }
             .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, maintainTiming) }
             .onEach { graph -> recordGraphStats("Unretimed", graph) }
@@ -117,14 +134,15 @@ class Retimer(
                 val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
                 val clockPeriod = targetClockPeriod ?: Retiming(graph).findMinimumClockPeriod(fastSolver)
 
-                Logger.debug { "Retiming will use clock period of $clockPeriod" }
-                Logger.debug { "Retiming will use ${finalSolver::class.simpleName} solver" }
+                Logger.trace { "Retiming will use clock period of $clockPeriod" }
+                Logger.trace { "Retiming will use ${finalSolver::class.simpleName} solver" }
 
                 finalSolver.solveOrNull(clockPeriod) ?: throw Exception("Failed to find feasible solution")
             }
             .onEach { graph -> recordGraphStats("Retimed", graph) }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }
             .onEach { module -> recordModuleStats("Retimed", module) }
+            .onEach { Logger.finish() }
             .toList()
 
         Logger.finish()

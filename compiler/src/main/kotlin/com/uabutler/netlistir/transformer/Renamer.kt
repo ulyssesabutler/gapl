@@ -6,11 +6,11 @@ import com.uabutler.util.Logger
 // Module names are useful for debugging, but their length could present a problem for the synthesizer.
 object Renamer: Transformer {
     fun renameNodesInModule(original: Module): Module {
-        Logger.start("Renaming nodes in ${original.identifier()}")
+        Logger.start("Renaming nodes in ${original.identifier()}", Logger.Level.TRACE)
         var counter = 0
         fun genNodeName() = "node${counter++}"
 
-        Logger.debug { "Renaming ${original.getBodyNodes().size} nodes" }
+        Logger.trace { "Renaming ${original.getBodyNodes().size} nodes" }
         original.getBodyNodes().forEach { it.rename(genNodeName()) }
 
         return original.also { Logger.finish() }

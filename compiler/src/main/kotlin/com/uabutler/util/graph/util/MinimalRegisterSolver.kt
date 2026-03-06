@@ -19,13 +19,13 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         }
     }
 
-    override fun solveOrNull(targetClockPeriod: Int?): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count") {
-        Logger.debug { "Target clock period: $targetClockPeriod" }
+    override fun solveOrNull(targetClockPeriod: Int?): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
+        Logger.trace { "Target clock period: $targetClockPeriod" }
 
-        Logger.start("Creating LP problem")
+        Logger.start("Creating LP problem", Logger.Level.TRACE)
 
         // Precompute
-        Logger.start("Precomputing WD values")
+        Logger.start("Precomputing WD values", Logger.Level.TRACE)
 
         val pathSequence = graph.nodes.asSequence()
             .flatMap { graph.findFastestConnectionsFromNode(it) }
@@ -44,7 +44,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         // Step 2: create the variables
         val upperBound = computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null
-        Logger.debug { "Upper bound on retiming label: $upperBound" }
+        Logger.trace { "Upper bound on retiming label: $upperBound" }
         val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
             node to model.newIntVar(-upperBound, upperBound, index.toString())
         }.toMap()
@@ -65,7 +65,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         val objectiveFunction = LinearExpr.sum(objectiveFunctionTerms.toTypedArray())
         model.minimize(objectiveFunction)
 
-        Logger.debug { "Created objective function with ${objectiveFunctionTerms.size} terms" }
+        Logger.trace { "Created objective function with ${objectiveFunctionTerms.size} terms" }
 
         // Step 4: Add constraints to prevent negative register counts
         val negativeRegisterConstraintCount = graph.edges.onEach { edge ->
@@ -78,7 +78,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
             model.addGreaterOrEqual(linearExpression, bound)
         }.count()
 
-        Logger.debug { "Added $negativeRegisterConstraintCount negative register constrains" }
+        Logger.trace { "Added $negativeRegisterConstraintCount negative register constrains" }
 
         // Step 5: Add constraints to enforce the clock period constraint
         val clockPeriodConstraintCount = timingConstrainedPaths
@@ -92,7 +92,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
                 model.addGreaterOrEqual(linearExpression, bound)
             }.count()
 
-        Logger.debug { "Added $clockPeriodConstraintCount clock period constraints" }
+        Logger.trace { "Added $clockPeriodConstraintCount clock period constraints" }
 
         // Step 6: Add constraints to prevent registers to virtual nodes
         val zeroVirtualNodeRegisterConstraintCount = graph.edges
@@ -107,7 +107,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
                 model.addEquality(linearExpression, bound)
             }.count()
 
-        Logger.debug { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
+        Logger.trace { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
 
         // Step 7: Add an anchor constraint
         val anchorNode = graph.nodes.first()
@@ -119,7 +119,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         // Step 7: Run the solver
         val solver = CpSolver()
-        val solverStatus = Logger.run("Running LP solver") { solver.solve(model) }
+        val solverStatus = Logger.run("Running LP solver", Logger.Level.TRACE) { solver.solve(model) }
 
         when (solverStatus) {
             CpSolverStatus.OPTIMAL -> Logger.debug { "LP solver found optimal solution" }
@@ -137,7 +137,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
             retiming.setNodeLag(node, retimingLabel.toInt())
             retimingLabel
         }.groupBy { it }.mapValues { (_, value) -> value.size }.forEach {
-            Logger.debug { "${it.value} nodes with lag r(v)=${it.key}" }
+            Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
         }
 
         return@run retiming.generateNewCircuit()

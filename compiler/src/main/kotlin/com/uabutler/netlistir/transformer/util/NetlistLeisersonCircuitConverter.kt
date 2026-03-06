@@ -163,11 +163,11 @@ object NetlistLeisersonCircuitConverter {
             null
         }
 
-        Logger.debug { "Node Count:              ${nodes.size}" }
-        Logger.debug { "Edge Count:              ${edges.size}" }
-        Logger.debug { "Super Input Edge Count:  ${superInputEdges.size}" }
-        Logger.debug { "Super Output Edge Count: ${superInputEdges.size}" }
-        Logger.debug { "Loop Edge Count:         ${loopEdge?.let { 1 } ?: 0}" }
+        Logger.trace { "Node Count:              ${nodes.size}" }
+        Logger.trace { "Edge Count:              ${edges.size}" }
+        Logger.trace { "Super Input Edge Count:  ${superInputEdges.size}" }
+        Logger.trace { "Super Output Edge Count: ${superInputEdges.size}" }
+        Logger.trace { "Loop Edge Count:         ${loopEdge?.let { 1 } ?: 0}" }
 
         return LeisersonCircuitGraph(
             value = module,

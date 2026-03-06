@@ -7,12 +7,12 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
 
     override fun solveOrNull(
         targetClockPeriod: Int?
-    ): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming for clock period $targetClockPeriod") {
+    ): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming for clock period $targetClockPeriod", Logger.Level.DEBUG) {
         if (targetClockPeriod == null) return@run graph
 
         val retiming = Retiming(graph)
 
-        Logger.debug { "Running ${graph.nodes.size - 1} iterations" }
+        Logger.trace { "Running ${graph.nodes.size - 1} iterations" }
         var iteration = 0
         do {
             var changed = false
@@ -25,10 +25,10 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
             iteration++
         } while (changed && iteration < graph.nodes.size - 1)
 
-        Logger.debug { "Finished after $iteration iterations" }
+        Logger.trace { "Finished after $iteration iterations" }
 
         val clockPeriodOfRetimedGraph = retiming.generateNewCircuit().computeClockPeriod()
-        Logger.debug { "Clock period of retimed graph: $clockPeriodOfRetimedGraph" }
+        Logger.trace { "Clock period of retimed graph: $clockPeriodOfRetimedGraph" }
 
         return@run if (clockPeriodOfRetimedGraph <= targetClockPeriod) {
             Logger.debug { "Found feasible solution" }

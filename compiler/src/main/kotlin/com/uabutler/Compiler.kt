@@ -14,6 +14,7 @@ import com.uabutler.resolver.Resolver
 import com.uabutler.util.Logger
 import com.uabutler.util.standardLibary
 import com.uabutler.verilogir.builder.VerilogBuilder
+import com.uabutler.verilogir.builder.creator.util.Identifier
 
 object Compiler {
 
@@ -72,7 +73,18 @@ object Compiler {
 
         return Logger.run("Running Transformers") {
             transformers.fold(inputNetlist) { intermediate, transformer ->
-                Logger.run("Running ${transformer::class.simpleName}", Logger.Level.INFO) { transformer.transform(intermediate) }
+                Logger.run("Running ${transformer::class.simpleName}", Logger.Level.INFO) {
+                    transformer.transform(intermediate).also {
+                        Logger.run("Original Module List", Logger.Level.TRACE) {
+                            Logger.trace { "${intermediate.size} modules" }
+                            intermediate.forEach { Logger.trace { Identifier.module(it.invocation) } }
+                        }
+                        Logger.run("Transformed Module List", Logger.Level.TRACE) {
+                            Logger.trace { "${it.size} modules" }
+                            it.forEach { Logger.trace { Identifier.module(it.invocation) } }
+                        }
+                    }
+                }
             }
         }
     }

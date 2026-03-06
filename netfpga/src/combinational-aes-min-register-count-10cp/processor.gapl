@@ -63,18 +63,32 @@ function round_key(round_number: integer) previous_key: aes_block => current_key
 
         declare round_constant_node: round_constant(round_number - 1) => declare current_round_constant: aes_block_column;
 
-        transformed_last_column, current_round_constant => word_addition() => declare last_column_with_round_constant: aes_block_column;
+        transformed_last_column, current_round_constant => declare n1: word_addition() => declare last_column_with_round_constant: aes_block_column;
 
+        declare updated_key_column0: aes_block_column;
+        declare updated_key_column1: aes_block_column;
+        declare updated_key_column2: aes_block_column;
+        declare updated_key_column3: aes_block_column;
+
+        last_column_with_round_constant, previous_key[3] => declare n2: word_addition() => updated_key_column3;
+
+        updated_key_column3, previous_key[2] => word_addition() => updated_key_column2;
+        updated_key_column2, previous_key[1] => word_addition() => updated_key_column1;
+        updated_key_column1, previous_key[0] => word_addition() => updated_key_column0;
+
+        /*
         declare updated_key: aes_block;
 
-        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key[3];
-
         updated_key[1:3], previous_key[0:2]
-            => vector_zip(aes_block_column, aes_block_column, 3)
-            => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
+            => declare n3: vector_zip(aes_block_column, aes_block_column, 3)
+            => declare n4: vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
             => updated_key[0:2];
+        */
 
-        updated_key => current_key;
+        updated_key_column0 => current_key[0];
+        updated_key_column1 => current_key[1];
+        updated_key_column2 => current_key[2];
+        updated_key_column3 => current_key[3];
     }
 }
 

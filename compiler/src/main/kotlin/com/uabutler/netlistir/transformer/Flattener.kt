@@ -42,11 +42,8 @@ object Flattener: Transformer {
                 .also { Logger.finish() }
         }
 
-        fun depthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
+        fun inline(currentModule: Module, inliningModule: Module, node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
-            val currentModule = node.parentModule
-            val inliningModule = depthFirstFlattenModule(modules[node.invocation]!!)
-            // Logger.debug { "Inlining ${node.invocation} into ${currentModule.invocation}" }
 
             var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
 
@@ -121,6 +118,13 @@ object Flattener: Transformer {
             Timer.stop("Step 2b")
 
             currentModule.removeNode(node)
+        }
+
+        fun depthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
+            val currentModule = node.parentModule
+            val inliningModule = depthFirstFlattenModule(modules[node.invocation]!!)
+
+            inline(currentModule, inliningModule, node)
         }
 
         fun depthFirstFlattenModule(module: Module): Module {
@@ -136,83 +140,10 @@ object Flattener: Transformer {
         }
 
         fun breadthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
-            val invocationIdentifier = node.name()
             val currentModule = node.parentModule
             val inliningModule = modules[node.invocation]!!
 
-            var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
-
-            // STEP 1a: Create the IO Nodes. We create a PassThrough node for each IO Node in the inlining module
-            Timer.start("Step 1a")
-            val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
-                val createdNode = copyInputNodeToPassThroughNode(inputNode, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
-                inputNode.name() to createdNode.node
-            }
-
-            val outputNodes = inliningModule.getOutputNodes().associate { outputNode ->
-                val createdNode = copyOutputNodeToPassThroughNode(outputNode, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
-                outputNode.name() to createdNode.node
-            }
-            Timer.stop("Step 1a")
-
-            // STEP 1b: Disconnect the ModuleInvocationNode and connect the new PassThroughNodes for each IO Node
-            //  Note: These will have no equivalent in the "wire pairs" list
-            Timer.start("Step 1b")
-            val inputGroupLookup = node.inputWireVectorGroups.associateBy { it.identifier }
-            inputNodes.keys.forEach { variableName ->
-                val currentGroup = inputGroupLookup[variableName]!!
-                val newNodeGroup = inputNodes[variableName]!!.inputWireVectorGroups.first()
-
-                currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
-                    val currentWireSource = currentModule.getConnectionForInputWire(currentWire).source
-                    currentModule.disconnect(currentWire)
-                    currentModule.connect(newWire, currentWireSource)
-                }
-            }
-
-            val outputGroupLookup = node.outputWireVectorGroups.associateBy { it.identifier }
-            outputNodes.keys.forEach { variableName ->
-                val currentGroup = outputGroupLookup[variableName]!!
-                val newNodeGroup = outputNodes[variableName]!!.outputWireVectorGroups.first()
-
-                currentGroup.wires().zip(newNodeGroup.wires()).forEach { (currentWire, newWire) ->
-                    val currentWireConnections = currentModule.getConnectionsForOutputWire(currentWire)
-
-                    currentWireConnections.forEach { connection ->
-                        currentModule.disconnect(connection.sink)
-                        currentModule.connect(connection.sink, newWire)
-                    }
-                }
-            }
-            Timer.stop("Step 1b")
-
-            // Step 2a: Create an identical body node in the current module for each node in the inlining module
-            Timer.start("Step 2a")
-            val bodyNodes = inliningModule.getBodyNodes().map {
-                val createdNode = copyBodyNode(it, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
-                createdNode.node
-            }
-
-            val inliningInput = wirePairs.input.associate { it.current to it.inlining }
-            val currentOutput = wirePairs.output.associate { it.inlining to it.current }
-            Timer.stop("Step 2a")
-
-            // Step 2b: Connect each new node in the new module based on the connections in the inlining module
-            Timer.start("Step 2b")
-            (bodyNodes + outputNodes.values).forEach { node ->
-                node.inputWires().forEach { inputWire ->
-                    val correspondingOfCurrentInput = inliningInput[inputWire]!!
-                    val sourceOfCorresponding = inliningModule.getConnectionForInputWire(correspondingOfCurrentInput).source
-                    val correspondingOfSource = currentOutput[sourceOfCorresponding]!!
-                    currentModule.connect(inputWire, correspondingOfSource)
-                }
-            }
-            Timer.stop("Step 2b")
-
-            currentModule.removeNode(node)
+            inline(currentModule, inliningModule, node)
         }
 
         fun breadthFirstFlattenModule(module: Module): Module {
@@ -245,9 +176,52 @@ object Flattener: Transformer {
                 }
             }
         }
+
+        private fun flattenRecursive(module: Module): List<Module> {
+            val currentModuleIdentifier = module.invocation.gaplFunctionName
+
+            fun nodesToInline() = module.getBodyNodes()
+                .filterIsInstance<ModuleInvocationNode>()
+                .filter { it.invocation.gaplFunctionName == currentModuleIdentifier }
+
+            do {
+                val nodesToInline = nodesToInline()
+                nodesToInline.forEach { inline(module, modules[it.invocation]!!, it) }
+            } while (nodesToInline().isNotEmpty())
+
+            val remainingInvocations = module.getBodyNodes()
+                .filterIsInstance<ModuleInvocationNode>()
+
+            val otherModules = remainingInvocations.asSequence()
+                .flatMap { flattenRecursive(modules[it.invocation]!!) }
+                .distinct()
+                .toList()
+
+            return listOf(module) + otherModules
+        }
+
+        fun flattenRecursive(): List<Module> {
+            Timer.create("Step 1a")
+            Timer.create("Step 1b")
+            Timer.create("Step 2a")
+            Timer.create("Step 2b")
+
+            return rootModules().asSequence()
+                .flatMap { flattenRecursive(it) }
+                .distinct()
+                .toList()
+                .also {
+                    Logger.run("Flattening component times") {
+                        Logger.debug { "Step 1a: ${Timer.getTimes("Step 1a")}" }
+                        Logger.debug { "Step 1b: ${Timer.getTimes("Step 1b")}" }
+                        Logger.debug { "Step 2a: ${Timer.getTimes("Step 2a")}" }
+                        Logger.debug { "Step 2b: ${Timer.getTimes("Step 2b")}" }
+                    }
+                }
+        }
     }
 
     override fun transform(original: List<Module>): List<Module> {
-        return Helper(original).flatten()
+        return Helper(original).flattenRecursive()
     }
 }

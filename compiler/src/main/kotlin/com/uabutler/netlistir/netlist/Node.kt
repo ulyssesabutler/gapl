@@ -21,7 +21,7 @@ sealed class Node(
     fun inputWireVectors() = inputWireVectorGroups.flatMap { it.wireVectors }
     fun outputWireVectors() = outputWireVectorGroups.flatMap { it.wireVectors }
 
-    override fun toString(): String {
+    fun fullString(): String {
         return ObjectUtils.toStringBuilder(
             obj = this,
             normalProps = mapOf(
@@ -33,6 +33,12 @@ sealed class Node(
                 "parentModule" to parentModule
             )
         )
+    }
+
+    fun shortString(): String = name()
+
+    override fun toString(): String {
+        return shortString()
     }
 }
 
