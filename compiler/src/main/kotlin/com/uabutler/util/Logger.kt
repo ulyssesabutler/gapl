@@ -32,7 +32,9 @@ object Logger {
 
     private fun writeLog(message: String, level: Level) {
         if (level.number >= this.level.number) {
-            printLog(message, level)
+            message.lines().forEach { line ->
+                printLog(line, level)
+            }
         }
     }
 
