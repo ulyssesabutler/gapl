@@ -1,6 +1,7 @@
 package graph
 
 import com.uabutler.util.Logger
+import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.util.FastSolver
 import com.uabutler.util.graph.util.Retiming
 import graph.TestUtil.createGraph
@@ -19,7 +20,10 @@ class ClockPeriodMinimizationTest {
 
     fun Graph.minimizeClockPeriod(): Graph {
         val solver = FastSolver(this)
-        val minimumClockPeriod = Retiming(this).findMinimumClockPeriod(solver)
+        val minimumClockPeriod = Retiming(
+            graph = this,
+            graphFactory = { nodes, edges -> Graph(this.value, nodes, edges) },
+        ).findMinimumClockPeriod(solver)
         return solver.solveOrNull(minimumClockPeriod)!!
     }
 

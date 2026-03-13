@@ -10,7 +10,10 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
     ): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming for clock period $targetClockPeriod", Logger.Level.DEBUG) {
         if (targetClockPeriod == null) return@run graph
 
-        val retiming = Retiming(graph)
+        val retiming = Retiming(
+            graph = graph,
+            graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
+        )
 
         Logger.trace { "Running ${graph.nodes.size - 1} iterations" }
         var iteration = 0

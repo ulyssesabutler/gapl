@@ -4,8 +4,8 @@ interface aes_block aes_block_column[4]
 
 function to_aes_block() i: wire[128] => o: aes_block
 {
-    i => vector_chunk(wire, 8, 16)
-      => vector_chunk(aes_block_item, 4, 4)
+    i => declare v1: vector_chunk(wire, 8, 16)
+      => declare v2: vector_chunk(aes_block_item, 4, 4)
       => o;
 }
 

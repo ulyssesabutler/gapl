@@ -1,26 +1,25 @@
 package com.uabutler.util.graph.util
 
 import com.google.ortools.Loader
-import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.Logger
 import com.google.ortools.sat.CpModel
 import com.google.ortools.sat.CpSolver
 import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
-import com.uabutler.netlistir.netlist.VirtualNode
+import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
 
-class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
+class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: HierarchicalLeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
     companion object {
         init { Loader.loadNativeLibraries() }
 
-        fun computeUpperRetimingUpperBound(graph: LeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
+        fun computeUpperRetimingUpperBound(graph: HierarchicalLeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
             if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
             return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.sumOf { it.weight }?.toLong()
         }
     }
 
-    override fun solveOrNull(targetClockPeriod: Int?): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
+    override fun solveOrNull(targetClockPeriod: Int?): HierarchicalLeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
         Logger.trace { "Target clock period: $targetClockPeriod" }
 
         Logger.start("Creating LP problem", Logger.Level.TRACE)
@@ -95,7 +94,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         Logger.trace { "Added $clockPeriodConstraintCount clock period constraints" }
 
-        // Step 6: Add constraints to prevent registers to virtual nodes
+        // Step 6: Add constraints to prevent registers to virtual IO nodes
         val zeroVirtualNodeRegisterConstraintCount = graph.edges
             .filter { it.source.value is VirtualIONode || it.sink.value is VirtualIONode }
             .onEach { edge ->
@@ -110,14 +109,26 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         Logger.trace { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
 
-        // Step 7: Add an anchor constraint
+        // Step 7: Add constraints to require the contract circuits to account for contracted registers
+        val contractedRegisterConstraintCount = graph.contractCircuitGraphs.onEach { contractCircuitGraph ->
+            val sourceTerm = LinearExpr.term(retimingLabelVariables[contractCircuitGraph.inputNode]!!, -1L)
+            val sinkTerm = retimingLabelVariables[contractCircuitGraph.outputNode]!!
+            val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
+
+            val value = (contractCircuitGraph.retimedRegisterDelay - contractCircuitGraph.unretimedRegisterDelay).toLong()
+            model.addEquality(linearExpression, value)
+        }.count()
+
+        Logger.trace { "Added $contractedRegisterConstraintCount contract circuit constrains" }
+
+        // Step 8: Add an anchor constraint
         val anchorNode = graph.nodes.first()
         val anchorTerm = retimingLabelVariables[anchorNode]!!
         model.addEquality(anchorTerm, 0L)
 
         Logger.finish() // Creating LP problem
 
-        // Step 7: Run the solver
+        // Step 9: Run the solver
         val solver = CpSolver()
         val solverStatus = Logger.run("Running LP solver", Logger.Level.TRACE) { solver.solve(model) }
 
@@ -132,7 +143,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         // Step 8: Use the retiming values
         val retiming = Retiming(
             graph = graph,
-            graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
+            graphFactory = { nodes, edges -> HierarchicalLeisersonCircuitGraph(graph.value, nodes, edges, graph.contractCircuitGraphs) }
         )
 
         graph.nodes.map { node ->
@@ -143,6 +154,10 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
             Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
         }
 
-        return@run retiming.generateNewCircuit()
+        val initialUpdatedCircuit = retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
+        val actualEdgeValues = initialUpdatedCircuit.contractCircuitGraphs.associate { it.edge to it.retimedRegisterDelay }
+        val revertedEdges = initialUpdatedCircuit.edges.map { if (it in actualEdgeValues) { it.copy(weight = actualEdgeValues[it]!!) } else { it } }
+
+        return@run HierarchicalLeisersonCircuitGraph(graph.value, graph.nodes, revertedEdges, graph.contractCircuitGraphs)
     }
 }

@@ -92,6 +92,7 @@ fun main(args : Array<String>) {
         }
 
         when (level.uppercase()) {
+            "TRACE" -> Logger.setLevel(Logger.Level.TRACE)
             "DEBUG" -> Logger.setLevel(Logger.Level.DEBUG)
             "INFO"  -> Logger.setLevel(Logger.Level.INFO)
             "WARN"  -> Logger.setLevel(Logger.Level.WARN)

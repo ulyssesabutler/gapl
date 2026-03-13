@@ -1,46 +1,19 @@
 package com.uabutler.netlistir.transformer
 
-import com.uabutler.netlistir.netlist.BodyNode
-import com.uabutler.netlistir.netlist.InputNode
-import com.uabutler.netlistir.netlist.InputWire
-import com.uabutler.netlistir.netlist.InputWireVectorGroup
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
-import com.uabutler.netlistir.netlist.Node
-import com.uabutler.netlistir.netlist.OutputNode
-import com.uabutler.netlistir.netlist.OutputWire
-import com.uabutler.netlistir.netlist.OutputWireVectorGroup
-import com.uabutler.netlistir.netlist.PassThroughNode
-import com.uabutler.netlistir.netlist.PredefinedFunctionNode
-import com.uabutler.netlistir.netlist.Wire
 import com.uabutler.netlistir.transformer.util.NodeCopier
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNodeToPassThroughNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNodeToPassThroughNode
+import com.uabutler.netlistir.transformer.util.InvocationGraph
 import com.uabutler.util.Logger
 import com.uabutler.util.Timer
 
 object Flattener: Transformer {
-    private class Helper(val original: List<Module>) {
-        val modules = original.associateBy { it.invocation }
+    private class Helper(val originalModuleList: List<Module>) {
+        val modules = originalModuleList.associateBy { it.invocation }
         val flattenedModules = mutableMapOf<Module.Invocation, Module>()
-
-        fun rootModules(): List<Module> {
-            Logger.start("Finding Root Modules")
-            val couldBeRoot = original.associate { it.invocation to true }.toMutableMap()
-
-            val invocations = original.flatMap { it.getBodyNodes() }
-                .filterIsInstance<ModuleInvocationNode>()
-                .map { it.invocation }
-                .toSet()
-
-            invocations.forEach { couldBeRoot[it] = false }
-
-            return couldBeRoot.filterValues { it }.keys
-                .onEach { Logger.debug { "Found root module: ${it.gaplFunctionName}" } }
-                .map { modules[it]!! }
-                .also { Logger.finish() }
-        }
 
         fun inline(currentModule: Module, inliningModule: Module, node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
@@ -167,7 +140,7 @@ object Flattener: Transformer {
             Timer.create("Step 2a")
             Timer.create("Step 2b")
 
-            return rootModules().onEach { breadthFirstFlattenModule(it) }.also {
+            return InvocationGraph(originalModuleList).rootModules().onEach { breadthFirstFlattenModule(it) }.also {
                 Logger.run("Flattening component times") {
                     Logger.debug { "Step 1a: ${Timer.getTimes("Step 1a")}" }
                     Logger.debug { "Step 1b: ${Timer.getTimes("Step 1b")}" }
@@ -206,7 +179,7 @@ object Flattener: Transformer {
             Timer.create("Step 2a")
             Timer.create("Step 2b")
 
-            return rootModules().asSequence()
+            return InvocationGraph(originalModuleList).rootModules().asSequence()
                 .flatMap { flattenRecursive(it) }
                 .distinct()
                 .toList()

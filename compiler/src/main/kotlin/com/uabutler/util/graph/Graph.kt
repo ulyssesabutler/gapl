@@ -57,6 +57,10 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
         }
     }
 
+    fun rootNodes(): List<NodeT> = nodes - edges.map { it.sink }.toSet()
+
+    fun leafNodes(): List<NodeT> = nodes - edges.map { it.source }.toSet()
+
     fun subgraph(
         nodeFilter: (NodeT) -> Boolean = { true },
         edgeFilter: (EdgeT) -> Boolean = { true },

@@ -2,17 +2,20 @@ package com.uabutler.netlistir.transformer.util
 
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
+import com.uabutler.netlistir.netlist.IONode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputWire
+import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.netlist.VirtualNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
-import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.Logger
@@ -86,7 +89,7 @@ object NetlistLeisersonCircuitConverter {
 
     private fun nodeType(node: Node) = if (node !is PredefinedFunctionNode) node::class.simpleName else node.predefinedFunction::class.simpleName
 
-    fun printGraph(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>) = buildString {
+    private fun printGraph(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>) = buildString {
         println("PRINTING GRAPH:")
         println("  Nodes:")
         graph.nodes.forEach { node ->
@@ -98,18 +101,30 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
+    fun getDelay(node: Node, delay: PropagationDelay): Int {
+        return when (node) {
+            is VirtualNode,
+            is IONode,
+            is ModuleInvocationNode,
+            is PassThroughNode
+                -> 0
+            else
+                -> delay.forNode(node)
+        }
+    }
+
     fun fromModule(module: Module, delay: PropagationDelay, maintainTiming: Boolean): LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>> {
         Logger.start("Converting from module to Leiserson circuit graph")
         val nodes = module.getNodes()
             .filter { !isRegisterNode(it) }
             .associateWith { moduleNode ->
                 WeightedGraph.Node(
-                    weight = delay.forNode(moduleNode),
+                    weight = getDelay(moduleNode, delay),
                     value = moduleNode
                 )
             }
 
-        val superInputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperInputNode", module))
+        val superInputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualIONode(identifier = "SuperInputNode", module))
         val superInputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getNodes()
             .filter { it.inputWires().isEmpty() }
             .map { sourceNode ->
@@ -122,7 +137,7 @@ object NetlistLeisersonCircuitConverter {
             }
 
 
-        val superOutputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualNode(identifier = "SuperOutputNode", module))
+        val superOutputNode = WeightedGraph.Node<Node>(weight = 0, value = VirtualIONode(identifier = "SuperOutputNode", module))
         val superOutputEdges: List<WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getOutputNodes()
             .map { outputNode ->
                 WeightedGraph.Edge(
@@ -227,9 +242,9 @@ object NetlistLeisersonCircuitConverter {
         val edgesAttachedToNode = graph.edges.groupBy { it.source } + graph.edges.groupBy { it.sink }
 
         graph.nodes.forEach { node ->
-            if (node.value is VirtualNode) {
+            if (node.value is VirtualIONode) {
                 edgesAttachedToNode[node]?.forEach { edge ->
-                    if (edge.weight != 0) throw Exception("Virtual node cannot have non-zero weight")
+                    if (edge.weight != 0) throw Exception("Virtual IO node cannot have non-zero weight")
                 }
             }
         }

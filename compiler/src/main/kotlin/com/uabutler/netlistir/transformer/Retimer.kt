@@ -5,6 +5,7 @@ import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.transformer.util.HierarchicalRetimer
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.NonRegisterConnection
@@ -38,7 +39,7 @@ class Retimer(
         }
     }
 
-    fun recordModuleStats(
+    private fun recordModuleStats(
         name: String,
         module: Module,
     ) {
@@ -56,7 +57,7 @@ class Retimer(
         }
     }
 
-    fun recordGraphStats(
+    private fun recordGraphStats(
         name: String,
         graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>,
     ) {
@@ -114,7 +115,7 @@ class Retimer(
         }
     }
 
-    override fun transform(original: List<Module>): List<Module> {
+    private fun transformPiecewise(original: List<Module>): List<Module> {
         Logger.start("Retimer Transformer")
 
         /*
@@ -132,7 +133,11 @@ class Retimer(
             .map { graph ->
                 val fastSolver = FastSolver(graph)
                 val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
-                val clockPeriod = targetClockPeriod ?: Retiming(graph).findMinimumClockPeriod(fastSolver)
+                val retiming = Retiming(
+                    graph = graph,
+                    graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
+                )
+                val clockPeriod = targetClockPeriod ?: retiming.findMinimumClockPeriod(fastSolver)
 
                 Logger.trace { "Retiming will use clock period of $clockPeriod" }
                 Logger.trace { "Retiming will use ${finalSolver::class.simpleName} solver" }
@@ -148,6 +153,15 @@ class Retimer(
         Logger.finish()
 
         return retimedModules
+    }
+
+    private fun transformAll(original: List<Module>): List<Module> {
+        if (maintainTiming) throw Exception("Maintain timing is not supported yet")
+        return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod!!)
+    }
+
+    override fun transform(original: List<Module>): List<Module> {
+        return transformAll(original)
     }
 
 }

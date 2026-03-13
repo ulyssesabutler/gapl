@@ -4,11 +4,14 @@ import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 
-class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
+class Retiming<G, N, E>(
+    val graph: LeisersonCircuitGraph<G, N, E>,
+    private val graphFactory: (Collection<WeightedGraph.Node<N>>, Collection<WeightedGraph.Edge<N, E>>) -> LeisersonCircuitGraph<G, N, E>
+) {
 
     private val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
 
-    abstract class Solver<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
+    abstract class Solver<G, N, E>(open val graph: LeisersonCircuitGraph<G, N, E>) {
         abstract fun solveOrNull(
             targetClockPeriod: Int?,
         ): LeisersonCircuitGraph<G, N, E>?
@@ -24,10 +27,9 @@ class Retiming<G, N, E>(val graph: LeisersonCircuitGraph<G, N, E>) {
 
     fun generateNewCircuit(): LeisersonCircuitGraph<G, N, E> {
         return try {
-            LeisersonCircuitGraph(
-                value = graph.value,
-                nodes = graph.nodes,
-                edges = graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
+            graphFactory(
+                graph.nodes,
+                graph.edges.map { edge -> edge.copy(weight = getEdgeRegisterCount(edge)) },
             )
         } catch (e: IllegalArgumentException) {
             throw Exception("Failed to generate graph: Illegal retiming", e)
