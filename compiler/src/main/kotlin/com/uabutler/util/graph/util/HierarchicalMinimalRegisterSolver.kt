@@ -130,7 +130,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
         Logger.finish() // Creating LP problem
 
         // LP export for debugging
-        Logger.trace {
+        Logger.debug {
             fun varName(node: WeightedGraph.Node<N>) = retimingLabelVariables[node]!!.name
             fun formatTerm(coeff: Int, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
 

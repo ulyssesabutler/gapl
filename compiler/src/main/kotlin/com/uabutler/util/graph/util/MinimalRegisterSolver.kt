@@ -9,6 +9,7 @@ import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.netlist.VirtualNode
+import com.uabutler.util.graph.WeightedGraph
 
 class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
     companion object {
@@ -47,7 +48,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         val upperBound = (computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null) + 1
         Logger.debug { "Upper bound on retiming label: $upperBound" }
         val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
-            node to model.newIntVar(-upperBound, upperBound, index.toString())
+            node to model.newIntVar(-upperBound, upperBound, "v$index-${node.value}")
         }.toMap()
 
         // Step 3: Create the objective function
@@ -116,6 +117,52 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
         model.addEquality(anchorTerm, 0L)
 
         Logger.finish() // Creating LP problem
+
+        Logger.debug {
+            fun varName(node: WeightedGraph.Node<N>) = retimingLabelVariables[node]!!.name
+            fun formatTerm(coeff: Int, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
+
+            val sb = StringBuilder()
+
+            // Objective
+            val objTerms = graph.nodes.mapNotNull { node ->
+                val coeff = nodeCost[node]!!
+                if (coeff == 0) null else formatTerm(coeff, varName(node))
+            }
+            sb.appendLine("Minimize")
+            sb.appendLine("  obj: ${objTerms.joinToString(" ").removePrefix("+ ")}")
+            sb.appendLine()
+
+            sb.appendLine("Subject To")
+
+            graph.edges.forEachIndexed { i, edge ->
+                sb.appendLine("  neg_$i: ${varName(edge.sink)} - ${varName(edge.source)} >= ${-edge.weight}")
+            }
+
+            timingConstrainedPaths.forEachIndexed { i, conn ->
+                sb.appendLine("  clk_$i: ${varName(conn.sink)} - ${varName(conn.source)} >= ${-conn.registerCount + 1}")
+            }
+
+            graph.edges
+                .filter { it.source.value is VirtualIONode || it.sink.value is VirtualIONode }
+                .forEachIndexed { i, edge ->
+                    sb.appendLine("  virt_$i: ${varName(edge.sink)} - ${varName(edge.source)} = 0")
+                }
+
+            sb.appendLine("  anchor: ${varName(anchorNode)} = 0")
+
+            sb.appendLine()
+            sb.appendLine("Bounds")
+            graph.nodes.forEach { node -> sb.appendLine("  -$upperBound <= ${varName(node)} <= $upperBound") }
+
+            sb.appendLine()
+            sb.appendLine("Generals")
+            sb.appendLine("  ${graph.nodes.joinToString(" ") { varName(it) }}")
+            sb.appendLine()
+            sb.append("End")
+
+            sb.toString()
+        }
 
         // Step 7: Run the solver
         val solver = CpSolver()
