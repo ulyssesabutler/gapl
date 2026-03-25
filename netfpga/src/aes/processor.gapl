@@ -63,18 +63,23 @@ function round_key(round_number: integer) previous_key: aes_block => current_key
 
         declare round_constant_node: round_constant(round_number - 1) => declare current_round_constant: aes_block_column;
 
-        transformed_last_column, current_round_constant => word_addition() => declare last_column_with_round_constant: aes_block_column;
+        transformed_last_column, current_round_constant => declare n1: word_addition() => declare last_column_with_round_constant: aes_block_column;
 
-        declare updated_key: aes_block;
+        declare updated_key_column0: aes_block_column;
+        declare updated_key_column1: aes_block_column;
+        declare updated_key_column2: aes_block_column;
+        declare updated_key_column3: aes_block_column;
 
-        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key[3];
+        last_column_with_round_constant, previous_key[3] => declare n2: word_addition() => updated_key_column3;
 
-        updated_key[1:3], previous_key[0:2]
-            => vector_zip(aes_block_column, aes_block_column, 3)
-            => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
-            => updated_key[0:2];
+        updated_key_column3, previous_key[2] => word_addition() => updated_key_column2;
+        updated_key_column2, previous_key[1] => word_addition() => updated_key_column1;
+        updated_key_column1, previous_key[0] => word_addition() => updated_key_column0;
 
-        updated_key => current_key;
+        updated_key_column0 => current_key[0];
+        updated_key_column1 => current_key[1];
+        updated_key_column2 => current_key[2];
+        updated_key_column3 => current_key[3];
     }
 }
 
@@ -204,10 +209,7 @@ function aes_encrypt_from_round(from_round_number: integer) i: aes_block, key: a
     i, key => declare aes_encrypt_round_current: aes_encrypt_round(from_round_number) => after_round_body, after_round_key;
 
     if (from_round_number < 10) {
-        after_round_body => declare after_round_body_register: register(aes_block);
-        after_round_key  => declare after_round_key_register:  register(aes_block);
-
-        after_round_body_register, after_round_key_register
+        after_round_body, after_round_key
             => declare aes_encrypt_round_recursive: aes_encrypt_from_round(from_round_number + 1)
             => o;
     } else {
@@ -251,25 +253,15 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
     declare encrypt_2_output: wire[128];
     encrypt_2_input, key => declare aes_encrypt_2_node: aes_encrypt() => encrypt_2_output;
 
-    declare input_register: register(netfpga_packet_body);
-    declare output_register: register(netfpga_packet_body);
+    i.data[0:127]   => encrypt_1_input;
+    i.data[128:255] => encrypt_2_input;
 
-    i => input_register;
-    output_register => o;
+    encrypt_1_output => o.data[0:127];
+    encrypt_2_output => o.data[128:255];
 
-    input_register.data[0:127]   => encrypt_1_input;
-    input_register.data[128:255] => encrypt_2_input;
-
-    encrypt_1_output => output_register.data[0:127];
-    encrypt_2_output => output_register.data[128:255];
-
-    declare keep_delay:  repeat(boolean[32], 10, register(boolean[32]));
-    declare valid_delay: repeat(boolean, 10, register(boolean));
-    declare last_delay:  repeat(boolean, 10, register(boolean));
-
-    input_register.keep  => keep_delay  => output_register.keep;
-    input_register.valid => valid_delay => output_register.valid;
-    input_register.last  => last_delay  => output_register.last;
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
 }
 
 function round_constant(round_number: integer) null => o: aes_block_column

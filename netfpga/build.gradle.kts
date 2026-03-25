@@ -39,10 +39,14 @@ val vitisPath  = optPropOrEnv("vitisPath",  "VITIS_PATH",  "/tools/Xilinx/Vitis/
 val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_switch")
 
 // Program Name
-val programName = propOrEnv("programName", "PROGRAM_NAME", "regex")
+val programName = propOrEnv("programName", "PROGRAM_NAME", null)
+val programVariationName = propOrEnv("programVariationName", "PROGRAM_VARIATION_NAME", null)
 
-// Program Name
+// Clock Period
 val clockPeriodNs = propOrEnv("clockPeriodNs", "CLOCK_PERIOD_NS", "10.000")
+
+// Log Level
+val logLevel = propOrEnv("logLevel", "LOG_LEVEL", "info")
 
 // Derived paths
 val projects         = "$sumeFolder/projects"
@@ -73,13 +77,14 @@ val pythonPath = listOf(
 ).joinToString(":")
 
 val gaplSrcRoot = layout.projectDirectory.dir("src/$programName").asFile
+val configSrcRoot = layout.projectDirectory.dir("src/$programName/$programVariationName").asFile
 
 val delayModelPath = propOrEnv("delayModelPath", "DELAY_MODEL_PATH", "delay.yaml")
 
 val delayModelFile = File(delayModelPath)
     .let { candidate ->
         if (candidate.isAbsolute) candidate
-        else File(gaplSrcRoot, candidate.path)   // resolve relative to gaplSrcRoot
+        else File(configSrcRoot, candidate.path)   // resolve relative to gaplSrcRoot
     }
 
 // Validate: under src, exists, and ends with .gapl
@@ -99,7 +104,7 @@ fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension +
 val compilerPath = project(":compiler")
     .layout.buildDirectory.file("install/gapl/bin/gapl")
 
-val testPropsFile = gaplSrcRoot.resolve("test.properties")
+val testPropsFile = configSrcRoot.resolve("test.properties")
 val testProps = Properties().apply {
     testPropsFile.inputStream().use { load(it) }
 }
@@ -118,12 +123,14 @@ fun propBool(name: String, default: Boolean = false): Boolean =
 val testInputs = propString("testInputs")!!
 val testExpectedOutputs = propString("testExpectedOutputs")!!
 
+val retime = propBool("retime", true)
+
 val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
 
 val retimingMinimizeRegisterCount = propBool("retimingMinimizeRegisterCount", false)
 val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 
-val flattenMode = propString("flattenMode", "all")!!
+val flattenMode = propString("flatten", "all")!!
 
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
@@ -192,7 +199,10 @@ tasks.register("generateGaplVerilog") {
             add("-o")
             add(verilogFile.absolutePath)
 
-            if (delayModelFile.exists()) {
+            if (retime) {
+                if (!delayModelFile.exists())
+                    throw GradleException("Delay model file not found: ${delayModelFile.absolutePath}")
+
                 add("-retime")
                 add(delayModelFile.absolutePath)
 
@@ -207,7 +217,7 @@ tasks.register("generateGaplVerilog") {
             add(flattenMode)
 
             add("-log-level")
-            add("DEBUG")
+            add(logLevel)
         }
 
         val err = java.io.ByteArrayOutputStream()
