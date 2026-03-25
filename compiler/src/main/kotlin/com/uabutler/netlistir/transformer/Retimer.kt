@@ -25,11 +25,17 @@ import com.uabutler.verilogir.builder.creator.util.Identifier
  */
 
 class Retimer(
+    val mode: Mode,
     val delay: PropagationDelay,
     val targetClockPeriod: Int?,
     val minimizeRegisterCount: Boolean,
     val maintainTiming: Boolean,
 ): Transformer {
+
+    enum class Mode(val mode: String) {
+        MONOLITH("monolith"),
+        HIERARCHICAL("hierarchical"),
+    }
 
     companion object {
         fun retimeModuleFilter(module: Module): Boolean {
@@ -118,13 +124,6 @@ class Retimer(
     private fun transformPiecewise(original: List<Module>): List<Module> {
         Logger.start("Retimer Transformer")
 
-        /*
-        val moduleRetimability = original.groupBy { retimeModuleFilter(it) }
-
-        val modulesToRetime = moduleRetimability[true] ?: emptyList()
-        val modulesToSkip = moduleRetimability[false] ?: emptyList()
-         */
-
         val retimedModules = original.asSequence()
             .onEach { Logger.start("Retiming module ${Identifier.module(it.invocation)}") }
             .onEach { module -> recordModuleStats("Unretimed", module) }
@@ -161,7 +160,23 @@ class Retimer(
     }
 
     override fun transform(original: List<Module>): List<Module> {
-        return transformAll(original)
+        // Validate options
+        if (mode == Mode.HIERARCHICAL) {
+            if (targetClockPeriod == null) throw Exception("Must specify target clock period for hierarchical retime")
+            if (!minimizeRegisterCount) throw Exception("Must specify minimize register count for hierarchical retime")
+            if (maintainTiming) throw Exception("Maintain timing is not supported for hierarchical retime")
+        }
+
+        return when (mode) {
+            Mode.MONOLITH -> {
+                Logger.debug { "Retiming in monolithic mode" }
+                transformPiecewise(original)
+            }
+            Mode.HIERARCHICAL -> {
+                Logger.debug { "Retiming in hierarchical mode" }
+                transformAll(original)
+            }
+        }
     }
 
 }

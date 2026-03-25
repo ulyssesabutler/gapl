@@ -118,7 +118,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         Logger.finish() // Creating LP problem
 
-        Logger.debug {
+        Logger.trace {
             fun varName(node: WeightedGraph.Node<N>) = retimingLabelVariables[node]!!.name
             fun formatTerm(coeff: Int, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
 

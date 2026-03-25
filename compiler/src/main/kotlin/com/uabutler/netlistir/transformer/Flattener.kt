@@ -10,7 +10,14 @@ import com.uabutler.netlistir.transformer.util.InvocationGraph
 import com.uabutler.util.Logger
 import com.uabutler.util.Timer
 
-object Flattener: Transformer {
+class Flattener(val mode: Mode): Transformer {
+
+    enum class Mode(val mode: String) {
+        NONE("none"),
+        ALL("all"),
+        RECURSIVE("recursive"),
+    }
+
     private class Helper(val originalModuleList: List<Module>) {
         val modules = originalModuleList.associateBy { it.invocation }
         val flattenedModules = mutableMapOf<Module.Invocation, Module>()
@@ -195,6 +202,19 @@ object Flattener: Transformer {
     }
 
     override fun transform(original: List<Module>): List<Module> {
-        return Helper(original).flattenRecursive()
+        return when (mode) {
+            Mode.NONE -> {
+                Logger.debug { "Flattening is disabled" }
+                original
+            }
+            Mode.ALL -> {
+                Logger.debug { "Flattening all modules" }
+                Helper(original).flatten()
+            }
+            Mode.RECURSIVE -> {
+                Logger.debug { "Flattening recursive modules" }
+                Helper(original).flattenRecursive()
+            }
+        }
     }
 }

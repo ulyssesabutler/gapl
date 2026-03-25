@@ -119,10 +119,11 @@ val testInputs = propString("testInputs")!!
 val testExpectedOutputs = propString("testExpectedOutputs")!!
 
 val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
-// If you want it nullable, drop the "!!" and handle null.
 
 val retimingMinimizeRegisterCount = propBool("retimingMinimizeRegisterCount", false)
 val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
+
+val flattenMode = propString("flattenMode", "all")!!
 
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
@@ -202,13 +203,15 @@ tasks.register("generateGaplVerilog") {
                 if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
             }
 
-            // add("-ono-flatten")
+            add("-flatten")
+            add(flattenMode)
 
             add("-log-level")
             add("DEBUG")
         }
 
         val err = java.io.ByteArrayOutputStream()
+        println("Running: ${compilerCommand.joinToString(" ")}")
         val result = project.exec {
             isIgnoreExitValue = true
             commandLine(compilerCommand)

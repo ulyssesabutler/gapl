@@ -19,7 +19,7 @@ import com.uabutler.verilogir.builder.creator.util.Identifier
 object Compiler {
 
     data class Options(
-        val flatten: Boolean,
+        val flattenMode: Flattener.Mode,
         val literalSimplification: Boolean,
         val constantSimplification: Boolean,
         val includeStdLib: Boolean,
@@ -27,27 +27,27 @@ object Compiler {
         val retimingClockPeriod: Int?,
         val retimingMinimizeRegisterCount: Boolean,
         val retimingMaintainTiming: Boolean,
-    )
+    ) {
+    }
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
         val transformers = Logger.run("Building Transformer List") {
             buildList {
-                if (options.flatten) {
+                if (options.flattenMode != Flattener.Mode.NONE) {
                     Logger.debug { "Flattener" }
-                    add(Flattener)
+                    add(Flattener(options.flattenMode))
                 }
 
-                if (options.includeStdLib && options.flatten) {
+                if (options.includeStdLib && options.flattenMode == Flattener.Mode.ALL) {
                     Logger.debug { "Standard Library Filter" }
                     add(StandardLibraryFilter)
                 }
 
-                /*
                 if (options.constantSimplification) {
                     Logger.debug { "Constant Simplifier" }
                     add(ConstantSimplifier)
+                    TODO()
                 }
-                 */
 
                 if (options.literalSimplification) {
                     Logger.debug { "Literal Simplifier" }
@@ -58,7 +58,14 @@ object Compiler {
                 add(PassThroughRemover)
 
                 if (options.retime != null) {
+                    val retimeMode = when (options.flattenMode) {
+                        Flattener.Mode.ALL -> Retimer.Mode.MONOLITH
+                        Flattener.Mode.RECURSIVE,
+                        Flattener.Mode.NONE -> Retimer.Mode.HIERARCHICAL
+                    }
+
                     add(Retimer(
+                        mode = retimeMode,
                         delay = options.retime,
                         targetClockPeriod = options.retimingClockPeriod,
                         minimizeRegisterCount = options.retimingMinimizeRegisterCount,

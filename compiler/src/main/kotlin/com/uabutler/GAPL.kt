@@ -1,5 +1,6 @@
 package com.uabutler
 
+import com.uabutler.netlistir.transformer.Flattener.Mode
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
@@ -27,9 +28,9 @@ fun createDelayModelFromFile(yaml: File): PropagationDelay {
 
 fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
     return Compiler.Options(
-        flatten = !parsedArgs.containsKey("-ono-flatten"),
+        flattenMode = Mode.entries.first { it.name.lowercase() == (parsedArgs["-flatten"]?.first()?.lowercase() ?: "all") },
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
-        constantSimplification = !parsedArgs.containsKey("-ono-constant-simplification"),
+        constantSimplification = parsedArgs.containsKey("-constant-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
         retimingClockPeriod = parsedArgs["-retiming-clock-period"]?.first()?.lowercase()?.let { if (it == "min") null else it.toIntOrNull() },
@@ -47,11 +48,14 @@ fun printHelp() {
     println("    Usage:       -o OUTPUT_FILENAME")
     println("    Description: The output verilog file")
     println("  Flatten")
-    println("    Usage:       [-ono-flatten]")
-    println("    Description: Defaults to true. Providing this option disables function inlining.")
+    println("    Usage:       -flatten none|all|recursive")
+    println("    Description: Defaults to all. Determine the type of inlining.")
     println("  Literal Simplification")
     println("    Usage:       [-ono-literal-simplification]")
     println("    Description: Defaults to true. Providing this option disables function inlining.")
+    println("  Constant Simplification")
+    println("    Usage:       [-constant-simplification]")
+    println("    Description: Experimental. Doesn't work. Evaluate constant expressions at compile time.")
     println("  Retime")
     println("    Usage:       -retime DELAY_MODEL_FILENAME")
     println("    Description: Provide a YAML file that specifies the delay model to be used.")
