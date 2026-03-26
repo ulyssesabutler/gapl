@@ -19,7 +19,12 @@ class Retiming<G, N, E>(
 
     fun setNodeLag(node: WeightedGraph.Node<N>, lag: Int) = nodeLag.put(node, lag)
 
-    fun getNodeLag(node: WeightedGraph.Node<N>) = nodeLag[node]!!
+    fun getNodeLag(node: WeightedGraph.Node<N>) = try {
+        nodeLag[node]!!
+    } catch (e: NullPointerException) {
+        nodeLag.keys.forEach { Logger.debug { "$it: ${nodeLag[it]}" } }
+        throw Exception("Node $node is not in the graph", e)
+    }
 
     fun getEdgeRegisterCount(edge: WeightedGraph.Edge<N, E>): Int = edge.weight + getNodeLag(edge.sink) - getNodeLag(edge.source)
 

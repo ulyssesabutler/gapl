@@ -237,7 +237,6 @@ class HierarchicalRetimer(
         }
     }
 
-
     fun retimeAll(propagationDelay: PropagationDelay, targetClockPeriod: Int): List<Module> {
         val baseGraph = modules
             .map { NetlistLeisersonCircuitConverter.fromModule(it, propagationDelay, false) }
