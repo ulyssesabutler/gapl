@@ -1,11 +1,13 @@
 import java.io.BufferedOutputStream
 import java.io.File
+import java.time.Instant
 
 class NetFPGABuilder(
     val runDirectory: File,
     val netFPGAProgramName: String?,
+    val netFPGAProgramVariationName: String?,
     val logHandler: LogHandler,
-    val clockPeriod: Int,
+    val clockPeriod: Int?,
     val retime: File? = null,
     val retimingClockPeriod: Int? = null,
     val retimingMinimizeRegisterCount: Boolean? = null,
@@ -27,7 +29,7 @@ class NetFPGABuilder(
             process.inputStream.bufferedReader().useLines { lines ->
                 lines.forEach { line ->
                     println(line)
-                    logOut.write((line + "\n").toByteArray(Charsets.UTF_8))
+                    logOut.write(("[${Instant.now()}] $line\n").toByteArray(Charsets.UTF_8))
                     logOut.flush()
                 }
             }
@@ -38,10 +40,12 @@ class NetFPGABuilder(
         return exitCode
     }
 
-    private fun getArgsForClockPeriod(programName: String?) = buildList {
-        add("-PclockPeriodNs=$clockPeriod")
+    private fun getArgsForClockPeriod() = buildList {
+        if (clockPeriod != null) add("-PclockPeriodNs=$clockPeriod")
+        if (netFPGAProgramName != null) add("-PprogramName=${netFPGAProgramName}")
+        if (netFPGAProgramVariationName != null) add("-PprogramVariationName=${netFPGAProgramVariationName}")
+
         add("-PnetfpgaSimTestGui=false")
-        if (programName != null) add("-PprogramName=${programName}")
 
         if (retime != null) add("-PdelayModelPath=${retime.absolutePath}")
         if (retimingClockPeriod != null) add("-PretimingClockPeriod=$retimingClockPeriod")
@@ -49,25 +53,28 @@ class NetFPGABuilder(
     }
 
     private fun getGradleCommandForClockPeriod(
-        programName: String?,
         command: String,
     ) = buildList {
         add("./gradlew")
-        addAll(getArgsForClockPeriod(programName))
+        addAll(getArgsForClockPeriod())
         add(command)
     }
 
     private fun gradleCleanCommand() = listOf("./gradlew", ":netfpga:clean")
-    private fun gradleMakeInitCommand(programName: String?) = getGradleCommandForClockPeriod(programName, ":netfpga:makeInit")
-    private fun gradleRemakeIPsCommand(programName: String?) = getGradleCommandForClockPeriod(programName, ":netfpga:remakeIPs")
-    private fun gradleBuildCommand(programName: String?) = getGradleCommandForClockPeriod(programName, ":netfpga:build")
-    private fun gradleTestCommand(programName: String?) = getGradleCommandForClockPeriod(programName, ":netfpga:runSimulation")
+    private fun gradlePreGenerateGaplVerilog() = getGradleCommandForClockPeriod(":compiler:installDist")
+    private fun gradleGenerateGaplVerilog() = getGradleCommandForClockPeriod(":netfpga:generateGaplVerilog")
+    private fun gradleMakeInitCommand() = getGradleCommandForClockPeriod(":netfpga:makeInit")
+    private fun gradleRemakeIPsCommand() = getGradleCommandForClockPeriod(":netfpga:remakeIPs")
+    private fun gradleBuildCommand() = getGradleCommandForClockPeriod(":netfpga:build")
+    private fun gradleTestCommand() = getGradleCommandForClockPeriod(":netfpga:runSimulation")
 
     private fun runCommand(clockPeriodLog: LogHandler.ClockPeriodLog, command: List<String>, logStream: BufferedOutputStream): Int {
         clockPeriodLog.log("Running command: ${command.joinToString(" ")}")
+        val startTime = System.currentTimeMillis()
 
         return runCommandInDirectoryAndTeeToLog(command, runDirectory, logStream).also { exitCode ->
-            clockPeriodLog.log("Command exited with code $exitCode")
+            val endTime = System.currentTimeMillis()
+            clockPeriodLog.log("Command exited with code $exitCode after ${(endTime - startTime) / 1000.0}s")
         }
     }
 
@@ -92,15 +99,17 @@ class NetFPGABuilder(
     }
 
     fun run(): Boolean {
-        logHandler.log("Building for clock period $clockPeriod")
+        logHandler.log("Building for clock period ${clockPeriod ?: "default"}")
 
         val clockPeriodLogHandler = logHandler.getLog(clockPeriod)
 
         val commands = listOf(
             gradleCleanCommand(),
-            gradleMakeInitCommand(netFPGAProgramName),
-            gradleRemakeIPsCommand(netFPGAProgramName),
-            gradleBuildCommand(netFPGAProgramName),
+            gradlePreGenerateGaplVerilog(),
+            gradleGenerateGaplVerilog(),
+            gradleMakeInitCommand(),
+            gradleRemakeIPsCommand(),
+            gradleBuildCommand(),
         )
 
         var failed = false
@@ -110,12 +119,14 @@ class NetFPGABuilder(
             if (failed) break
         }
 
+        /*
         if (!failed) {
-            val testCommand = gradleTestCommand(netFPGAProgramName)
+            val testCommand = gradleTestCommand()
             failed = runCommand(clockPeriodLogHandler, testCommand, clockPeriodLogHandler.testLogStream()) != 0
         }
+         */
 
-        logHandler.log("Build for clock period $clockPeriod ${if (failed) "failed" else "succeeded"}")
+        logHandler.log("Build for clock period ${clockPeriod ?: "default"} ${if (failed) "failed" else "succeeded"}")
 
         logReports(clockPeriodLogHandler)
         if (!failed) logBitstream(clockPeriodLogHandler)

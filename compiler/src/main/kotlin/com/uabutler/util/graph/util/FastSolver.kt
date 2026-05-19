@@ -2,6 +2,7 @@ package com.uabutler.util.graph.util
 
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
+import kotlin.collections.sorted
 
 class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
 
@@ -14,6 +15,35 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solve
             graph = graph,
             graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
         )
+
+        Logger.debug { "Nodes:" }
+        graph.nodes.forEach { node ->
+            Logger.debug { "  $node" }
+        }
+
+        Logger.debug { "Edges:" }
+        graph.edges.forEach { edge ->
+            Logger.debug { "  ${edge.source.value} -> ${edge.sink.value}" }
+        }
+
+        Logger.debug { "Node Values:" }
+        graph.nodes
+            .map { it.value }
+            .distinct()
+            .sortedBy { it.toString() }
+            .forEach { node ->
+                Logger.debug { "  $node" }
+            }
+
+        Logger.debug { "Edge Node Values:" }
+        graph.edges
+            .flatMap { listOf(it.source, it.sink) }
+            .distinct()
+            .map { it.value }
+            .sortedBy { it.toString() }
+            .forEach { node ->
+                Logger.debug { "  $node" }
+            }
 
         Logger.trace { "Running ${graph.nodes.size - 1} iterations" }
         var iteration = 0

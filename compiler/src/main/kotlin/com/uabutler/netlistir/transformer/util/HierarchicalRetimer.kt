@@ -115,20 +115,11 @@ class HierarchicalRetimer(
                 value = emptyList(),
             )
 
-            val contractCircuitGraph = HierarchicalLeisersonCircuitGraph.ContractCircuitGraph(
-                moduleInvocationNode = moduleInvocationNode,
-                retimedInputDelay = retimedModuleStats.inputDelay,
-                retimedOutputDelay = retimedModuleStats.outputDelay,
-                unretimedRegisterDelay = unretimedModuleStats.registerDelay,
-                retimedRegisterDelay = retimedModuleStats.registerDelay,
-                inputNode = newInputNode,
-                outputNode = newOutputNode,
-                edge = registerEdge,
-            )
-
             val newIncomingEdges = oldIncomingEdges.map { oldIncomingEdge ->
+                val newSource = if (oldIncomingEdge.source == invocationNode) newOutputNode else oldIncomingEdge.source
+
                 WeightedGraph.Edge(
-                    source = oldIncomingEdge.source,
+                    source = newSource,
                     sink = newInputNode,
                     weight = oldIncomingEdge.weight,
                     value = oldIncomingEdge.value,
@@ -136,13 +127,31 @@ class HierarchicalRetimer(
             }
 
             val newOutgoingEdges = oldOutgoingEdges.map { oldOutgoingEdge ->
+                val newSink = if (oldOutgoingEdge.sink == invocationNode) newInputNode else oldOutgoingEdge.sink
+
                 WeightedGraph.Edge(
                     source = newOutputNode,
-                    sink = oldOutgoingEdge.sink,
+                    sink = newSink,
                     weight = oldOutgoingEdge.weight,
                     value = oldOutgoingEdge.value,
                 )
             }
+
+            val contractCircuitGraph = HierarchicalLeisersonCircuitGraph.ContractCircuitGraph(
+                moduleInvocationNode = moduleInvocationNode,
+                retimedInputDelay = retimedModuleStats.inputDelay,
+                retimedOutputDelay = retimedModuleStats.outputDelay,
+                unretimedRegisterDelay = unretimedModuleStats.registerDelay,
+                retimedRegisterDelay = retimedModuleStats.registerDelay,
+                contractedInputNode = newInputNode,
+                contractedOutputNode = newOutputNode,
+                contractedEdge = registerEdge,
+                contractedIncomingEdges = newIncomingEdges,
+                contractedOutgoingEdges = newOutgoingEdges,
+                originalNode = invocationNode,
+                originalIncomingEdges = oldIncomingEdges,
+                originalOutgoingEdges = oldOutgoingEdges,
+            )
 
             // Remove the old graph
             currentNodeSet.remove(invocationNode)
@@ -175,45 +184,19 @@ class HierarchicalRetimer(
         val currentNodeSet = graph.nodes.toMutableSet()
 
         graph.contractCircuitGraphs.forEach { contractCircuitGraph ->
-            val newNode = WeightedGraph.Node(
-                weight = 0,
-                value = contractCircuitGraph.moduleInvocationNode as Node,
-            )
-
-            val oldIncomingEdges = currentEdgeSet.filter { it.sink == contractCircuitGraph.inputNode }
-            val oldOutgoingEdges = currentEdgeSet.filter { it.source == contractCircuitGraph.outputNode }
-
-            val newIncomingEdges = oldIncomingEdges.map { oldIncomingEdge ->
-                WeightedGraph.Edge(
-                    source = oldIncomingEdge.source,
-                    sink = newNode,
-                    weight = oldIncomingEdge.weight,
-                    value = oldIncomingEdge.value,
-                )
-            }
-
-            val newOutgoingEdges = oldOutgoingEdges.map { oldOutgoingEdge ->
-                WeightedGraph.Edge(
-                    source = newNode,
-                    sink = oldOutgoingEdge.sink,
-                    weight = oldOutgoingEdge.weight,
-                    value = oldOutgoingEdge.value,
-                )
-            }
-
             // Remove the old graph
-            currentNodeSet.remove(contractCircuitGraph.inputNode)
-            currentNodeSet.remove(contractCircuitGraph.outputNode)
-            currentEdgeSet.remove(contractCircuitGraph.edge)
+            currentNodeSet.remove(contractCircuitGraph.contractedInputNode)
+            currentNodeSet.remove(contractCircuitGraph.contractedOutputNode)
+            currentEdgeSet.remove(contractCircuitGraph.contractedEdge)
 
             // Unhook from graph
-            currentEdgeSet.removeAll(oldIncomingEdges.toSet())
-            currentEdgeSet.removeAll(oldOutgoingEdges.toSet())
+            currentEdgeSet.removeAll(contractCircuitGraph.contractedIncomingEdges.toSet())
+            currentEdgeSet.removeAll(contractCircuitGraph.contractedOutgoingEdges.toSet())
 
             // Add the new graph
-            currentNodeSet.add(newNode)
-            currentEdgeSet.addAll(newIncomingEdges)
-            currentEdgeSet.addAll(newOutgoingEdges)
+            currentNodeSet.add(contractCircuitGraph.originalNode)
+            currentEdgeSet.addAll(contractCircuitGraph.originalIncomingEdges)
+            currentEdgeSet.addAll(contractCircuitGraph.originalOutgoingEdges)
         }
 
         return LeisersonCircuitGraph(

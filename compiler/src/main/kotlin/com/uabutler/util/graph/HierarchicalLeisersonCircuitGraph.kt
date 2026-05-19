@@ -15,9 +15,14 @@ open class HierarchicalLeisersonCircuitGraph<G, N, E>(
         val retimedOutputDelay: Int,
         val unretimedRegisterDelay: Int,
         val retimedRegisterDelay: Int,
-        val inputNode: Node<N>,
-        val outputNode: Node<N>,
-        val edge: Edge<N, E>,
+        val contractedEdge: Edge<N, E>,
+        val contractedInputNode: Node<N>,
+        val contractedOutputNode: Node<N>,
+        val contractedIncomingEdges: List<Edge<N, E>>,
+        val contractedOutgoingEdges: List<Edge<N, E>>,
+        val originalNode: Node<N>,
+        val originalIncomingEdges: List<Edge<N, E>>,
+        val originalOutgoingEdges: List<Edge<N, E>>,
     ) {
         fun additionalRegisterDelay() = retimedRegisterDelay - unretimedRegisterDelay
     }

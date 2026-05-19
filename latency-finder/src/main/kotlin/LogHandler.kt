@@ -11,7 +11,7 @@ class LogHandler(
     }
 
     data class ClockPeriodLog(
-        val clockPeriod: Int,
+        val clockPeriod: Int?,
         val directory: File,
         val abridgedLogFile: File = directory.resolve("log.txt"),
         val buildLogFile: File = directory.resolve("build.txt"),
@@ -41,9 +41,9 @@ class LogHandler(
         fun testLogStream() = testLogFile.outputStream().buffered()
     }
 
-    private val logs = mutableMapOf<Int, ClockPeriodLog>()
+    private val logs = mutableMapOf<Int?, ClockPeriodLog>()
 
-    fun getLog(clockPeriod: Int) = logs.getOrPut(clockPeriod) { ClockPeriodLog(clockPeriod, logDirectory.resolve("clock-period-$clockPeriod")) }
+    fun getLog(clockPeriod: Int?) = logs.getOrPut(clockPeriod) { ClockPeriodLog(clockPeriod, logDirectory.resolve("clock-period-${clockPeriod ?: "default"}")) }
 
     fun log(message: String) {
         abridgedLogFile.appendText("$message\n")

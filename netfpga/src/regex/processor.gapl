@@ -163,7 +163,7 @@ function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_bod
     declare output_state: state;
 
     input_characters, input_state
-        => declare n1: combinational_vector_fold(character, state, 32, email_regex_update_nfa)
+        => declare VERYBADNODE: combinational_vector_fold(character, state, 32, email_regex_update_nfa)
         => output_state;
 
     output_state => declare state_register: register(state) => input_state;

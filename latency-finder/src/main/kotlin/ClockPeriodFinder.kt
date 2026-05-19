@@ -9,7 +9,8 @@ import kotlin.math.roundToInt
 class ClockPeriodFinder(
     val projectRoot: File,
     val netFPGAProgramName: String? = null,
-    val logHandler: LogHandler = LogHandler(projectRoot.resolve("latency-finder-logs").resolve(netFPGAProgramName ?: "default")),
+    val netFPGAProgramVariationName: String? = null,
+    val logHandler: LogHandler = LogHandler(projectRoot.resolve("latency-finder-logs").resolve(netFPGAProgramName ?: "default").resolve(netFPGAProgramVariationName ?: "default")),
     val minClockPeriod: Int = 10,
 ) {
 
@@ -53,6 +54,7 @@ class ClockPeriodFinder(
         val builder = NetFPGABuilder(
             runDirectory = projectRoot,
             netFPGAProgramName = netFPGAProgramName,
+            netFPGAProgramVariationName = netFPGAProgramVariationName,
             logHandler = logHandler,
             clockPeriod = clockPeriod,
         )

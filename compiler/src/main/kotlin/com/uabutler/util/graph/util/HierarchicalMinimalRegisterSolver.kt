@@ -112,8 +112,8 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
 
         // Step 7: Add constraints to require the contract circuits to account for contracted registers
         val contractedRegisterConstraintCount = graph.contractCircuitGraphs.onEach { contractCircuitGraph ->
-            val sourceTerm = LinearExpr.term(retimingLabelVariables[contractCircuitGraph.inputNode]!!, -1L)
-            val sinkTerm = retimingLabelVariables[contractCircuitGraph.outputNode]!!
+            val sourceTerm = LinearExpr.term(retimingLabelVariables[contractCircuitGraph.contractedInputNode]!!, -1L)
+            val sinkTerm = retimingLabelVariables[contractCircuitGraph.contractedOutputNode]!!
             val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
 
             val value = (contractCircuitGraph.retimedRegisterDelay - contractCircuitGraph.unretimedRegisterDelay).toLong()
@@ -163,7 +163,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
 
             graph.contractCircuitGraphs.forEachIndexed { i, ccg ->
                 val value = ccg.retimedRegisterDelay - ccg.unretimedRegisterDelay
-                sb.appendLine("  contract_$i: ${varName(ccg.outputNode)} - ${varName(ccg.inputNode)} = $value")
+                sb.appendLine("  contract_$i: ${varName(ccg.contractedOutputNode)} - ${varName(ccg.contractedInputNode)} = $value")
             }
 
             sb.appendLine("  anchor: ${varName(anchorNode)} = 0")
@@ -208,7 +208,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
         }
 
         val initialUpdatedCircuit = retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
-        val actualEdgeValues = initialUpdatedCircuit.contractCircuitGraphs.associate { it.edge to it.retimedRegisterDelay }
+        val actualEdgeValues = initialUpdatedCircuit.contractCircuitGraphs.associate { it.contractedEdge to it.retimedRegisterDelay }
         val revertedEdges = initialUpdatedCircuit.edges.map { if (it in actualEdgeValues) { it.copy(weight = actualEdgeValues[it]!!) } else { it } }
 
         return@run HierarchicalLeisersonCircuitGraph(graph.value, graph.nodes, revertedEdges, graph.contractCircuitGraphs)
