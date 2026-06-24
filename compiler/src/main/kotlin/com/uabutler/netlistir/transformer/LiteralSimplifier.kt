@@ -1,12 +1,12 @@
 package com.uabutler.netlistir.transformer
 
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.LiteralFunction
 import java.math.BigInteger
 
 object LiteralSimplifier: Transformer {
-    class ModuleSimplifier(val module: Module) {
+    class ModuleSimplifier(val module: MutableModule) {
         data class LiteralFunctionSignature(
             val size: Int,
             val value: BigInteger,
@@ -29,7 +29,7 @@ object LiteralSimplifier: Transformer {
             ).also { module.addBodyNode(it) }
         }
 
-        fun simplify(): Module {
+        fun simplify(): MutableModule {
             val existingLiteralNodes = module.getBodyNodes().filterIsInstance<PredefinedFunctionNode>()
                 .filter { it.predefinedFunction is LiteralFunction }
 
@@ -55,7 +55,7 @@ object LiteralSimplifier: Transformer {
         }
     }
 
-    override fun transform(original: List<Module>): List<Module> {
+    override fun transform(original: List<MutableModule>): List<MutableModule> {
         return original.map { ModuleSimplifier(it).simplify() }
     }
 

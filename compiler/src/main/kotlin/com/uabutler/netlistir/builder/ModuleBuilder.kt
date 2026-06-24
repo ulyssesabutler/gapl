@@ -4,6 +4,7 @@ import com.uabutler.ast.node.ProgramNode
 import com.uabutler.netlistir.builder.util.ModuleInstantiationTracker
 import com.uabutler.netlistir.builder.util.ProgramContext
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 
 class ModuleBuilder(val program: ProgramNode) {
 
@@ -17,7 +18,7 @@ class ModuleBuilder(val program: ProgramNode) {
     )
 
 
-    fun buildAllModules(): List<Module> {
+    fun buildAllModules(): List<MutableModule> {
         /* First, add all concrete modules to the set of modules. These are modules that don't have any
          * generic parameters. These modules can be built without any additional information or context. To build
          * any other module, we need to know the actual parameter values.
@@ -57,7 +58,7 @@ class ModuleBuilder(val program: ProgramNode) {
 
     private fun buildModule(
         instantiation: ModuleInstantiationTracker.ModuleInstantiation,
-    ) = Module(
+    ) = MutableModule(
         invocation = instantiation.moduleInvocation,
     ).also { module ->
         NodeBuilder(

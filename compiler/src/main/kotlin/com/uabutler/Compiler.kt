@@ -1,7 +1,7 @@
 package com.uabutler
 
 import com.uabutler.netlistir.builder.ModuleBuilder
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.transformer.ConstantSimplifier
 import com.uabutler.netlistir.transformer.Flattener
 import com.uabutler.netlistir.transformer.LiteralSimplifier
@@ -30,7 +30,7 @@ object Compiler {
     ) {
     }
 
-    fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
+    fun runNetlistTransformers(inputNetlist: List<MutableModule>, options: Options): List<MutableModule> {
         val transformers = Logger.run("Building Transformer List") {
             buildList {
                 if (options.flattenMode != Flattener.Mode.NONE) {

@@ -2,6 +2,7 @@ package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.util.InterfaceType
 
 class ModuleInstantiationTracker(
@@ -26,7 +27,7 @@ class ModuleInstantiationTracker(
         val genericInterfaceValues: Map<String, InterfaceStructure>,
         val genericParameterValues: Map<String, ParameterValue<*>>,
 
-        var module: Module?,
+        var module: MutableModule?,
     )
 
     // This is the main map we use to store all the modules while they're being built
@@ -87,7 +88,7 @@ class ModuleInstantiationTracker(
 
     fun getUnbuiltModules() = modules.filter { it.value.module == null }.values
 
-    fun addBuiltModule(instantiation: Module.Invocation, module: Module) {
+    fun addBuiltModule(instantiation: Module.Invocation, module: MutableModule) {
         modules[instantiation]!!.module = module
     }
 

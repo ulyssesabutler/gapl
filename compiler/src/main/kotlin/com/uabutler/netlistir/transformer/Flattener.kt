@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.transformer.util.NodeCopier
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
@@ -18,11 +19,11 @@ class Flattener(val mode: Mode): Transformer {
         RECURSIVE("recursive"),
     }
 
-    private class Helper(val originalModuleList: List<Module>) {
+    private class Helper(val originalModuleList: List<MutableModule>) {
         val modules = originalModuleList.associateBy { it.invocation }
-        val flattenedModules = mutableMapOf<Module.Invocation, Module>()
+        val flattenedModules = mutableMapOf<Module.Invocation, MutableModule>()
 
-        fun inline(currentModule: Module, inliningModule: Module, node: ModuleInvocationNode) {
+        fun inline(currentModule: MutableModule, inliningModule: MutableModule, node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
 
             var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
@@ -107,7 +108,7 @@ class Flattener(val mode: Mode): Transformer {
             inline(currentModule, inliningModule, node)
         }
 
-        fun depthFirstFlattenModule(module: Module): Module {
+        fun depthFirstFlattenModule(module: MutableModule): MutableModule {
             if (module.invocation in flattenedModules) return module
 
             module.getBodyNodes()
@@ -126,7 +127,7 @@ class Flattener(val mode: Mode): Transformer {
             inline(currentModule, inliningModule, node)
         }
 
-        fun breadthFirstFlattenModule(module: Module): Module {
+        fun breadthFirstFlattenModule(module: MutableModule): MutableModule {
             var nodesToInline = module.getBodyNodes().filterIsInstance<ModuleInvocationNode>()
             var iterations = 1
 
@@ -141,7 +142,7 @@ class Flattener(val mode: Mode): Transformer {
             return module
         }
 
-        fun flatten(): List<Module> {
+        fun flatten(): List<MutableModule> {
             Timer.create("Step 1a")
             Timer.create("Step 1b")
             Timer.create("Step 2a")
@@ -157,7 +158,7 @@ class Flattener(val mode: Mode): Transformer {
             }
         }
 
-        private fun flattenRecursive(module: Module): List<Module> {
+        private fun flattenRecursive(module: MutableModule): List<MutableModule> {
             val currentModuleIdentifier = module.invocation.gaplFunctionName
 
             fun nodesToInline() = module.getBodyNodes()
@@ -180,7 +181,7 @@ class Flattener(val mode: Mode): Transformer {
             return listOf(module) + otherModules
         }
 
-        fun flattenRecursive(): List<Module> {
+        fun flattenRecursive(): List<MutableModule> {
             Timer.create("Step 1a")
             Timer.create("Step 1b")
             Timer.create("Step 2a")
@@ -201,7 +202,7 @@ class Flattener(val mode: Mode): Transformer {
         }
     }
 
-    override fun transform(original: List<Module>): List<Module> {
+    override fun transform(original: List<MutableModule>): List<MutableModule> {
         return when (mode) {
             Mode.NONE -> {
                 Logger.debug { "Flattening is disabled" }

@@ -4,7 +4,7 @@ import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.InputWireVectorGroup
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
@@ -13,7 +13,6 @@ import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.Wire
-import com.uabutler.util.Logger
 
 object NodeCopier {
 
@@ -52,7 +51,7 @@ object NodeCopier {
         )
     }
 
-    fun copyInputNode(inputNode: InputNode, newParent: Module): CreatedNode<InputNode> {
+    fun copyInputNode(inputNode: InputNode, newParent: MutableModule): CreatedNode<InputNode> {
         val node = InputNode(
             identifier = inputNode.name(), // Unlike body nodes, IO nodes must keep the same name.
             parentModule = newParent,
@@ -68,7 +67,7 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyOutputNode(outputNode: OutputNode, newParent: Module): CreatedNode<OutputNode> {
+    fun copyOutputNode(outputNode: OutputNode, newParent: MutableModule): CreatedNode<OutputNode> {
         val node = OutputNode(
             identifier = outputNode.name(), // Unlike body nodes, IO nodes must keep the same name.
             parentModule = newParent,
@@ -84,7 +83,7 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
+    fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<PassThroughNode> {
         val node = PassThroughNode(
             identifier = copiedIdentifier(invocationIdentifier, inputNode.name()),
             parentModule = newParent,
@@ -105,7 +104,7 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyOutputNodeToPassThroughNode(outputNode: OutputNode, invocationIdentifier: String, newParent: Module): CreatedNode<PassThroughNode> {
+    fun copyOutputNodeToPassThroughNode(outputNode: OutputNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<PassThroughNode> {
         val node = PassThroughNode(
             identifier = copiedIdentifier(invocationIdentifier, outputNode.name()),
             parentModule = newParent,
@@ -127,7 +126,7 @@ object NodeCopier {
     }
 
 
-    fun copyBodyNode(bodyNode: BodyNode, invocationIdentifier: String, newParent: Module): CreatedNode<BodyNode> {
+    fun copyBodyNode(bodyNode: BodyNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<BodyNode> {
         return when (bodyNode) {
             is ModuleInvocationNode -> {
                 // This shouldn't be a bug with breadth-first

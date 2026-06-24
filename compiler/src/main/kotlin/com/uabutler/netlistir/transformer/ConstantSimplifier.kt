@@ -2,7 +2,7 @@ package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputWire
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.AdditionFunction
@@ -171,7 +171,7 @@ object ConstantSimplifier: Transformer {
         }
     }
 
-    private fun simplify(module: Module): Module {
+    private fun simplify(module: MutableModule): MutableModule {
         do {
             val collapsibleNodes = module.getBodyNodes().filter { isCollapsibleNode(it) }
             val collapsedNodes = collapsibleNodes.associateWith { createCollapsedLiteralNode(it) }
@@ -185,7 +185,7 @@ object ConstantSimplifier: Transformer {
         return module
     }
 
-    override fun transform(original: List<Module>): List<Module> {
+    override fun transform(original: List<MutableModule>): List<MutableModule> {
         return original.map { simplify(it) }
     }
 }

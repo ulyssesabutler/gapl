@@ -1,7 +1,7 @@
 package com.uabutler.verilogir.builder
 
 import com.uabutler.netlistir.netlist.WireVectorGroup
-import com.uabutler.netlistir.netlist.Module as NetlistModule
+import com.uabutler.netlistir.netlist.MutableModule as NetlistModule
 import com.uabutler.verilogir.builder.creator.util.Identifier
 import com.uabutler.verilogir.module.ModuleIO
 import com.uabutler.verilogir.module.ModuleIODirection

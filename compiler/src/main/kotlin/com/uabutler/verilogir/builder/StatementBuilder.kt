@@ -1,9 +1,7 @@
 package com.uabutler.verilogir.builder
 
 import com.uabutler.netlistir.netlist.InputNode
-import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.InputWireVector
-import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode

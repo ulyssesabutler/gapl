@@ -1,7 +1,7 @@
 package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.InputNode
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
@@ -38,7 +38,7 @@ class Retimer(
     }
 
     companion object {
-        fun retimeModuleFilter(module: Module): Boolean {
+        fun retimeModuleFilter(module: MutableModule): Boolean {
             return module.getNodes().any {
                 it is PredefinedFunctionNode && it.predefinedFunction is RegisterFunction
             }
@@ -47,7 +47,7 @@ class Retimer(
 
     private fun recordModuleStats(
         name: String,
-        module: Module,
+        module: MutableModule,
     ) {
         Logger.trace {
             val registerWires = module.getBodyNodes().sumOf { it.inputWires().size }
@@ -65,7 +65,7 @@ class Retimer(
 
     private fun recordGraphStats(
         name: String,
-        graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>,
+        graph: LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>,
     ) {
         Logger.trace { "$name leiserson graph register count: ${graph.edges.sumOf { it.weight }}" }
         Logger.trace { "$name leiserson graph clock period: ${graph.computeClockPeriod()}" }
@@ -121,7 +121,7 @@ class Retimer(
         }
     }
 
-    private fun transformPiecewise(original: List<Module>): List<Module> {
+    private fun transformPiecewise(original: List<MutableModule>): List<MutableModule> {
         Logger.start("Retimer Transformer")
 
         val retimedModules = original.asSequence()
@@ -154,12 +154,12 @@ class Retimer(
         return retimedModules
     }
 
-    private fun transformAll(original: List<Module>): List<Module> {
+    private fun transformAll(original: List<MutableModule>): List<MutableModule> {
         if (maintainTiming) throw Exception("Maintain timing is not supported yet")
         return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod!!)
     }
 
-    override fun transform(original: List<Module>): List<Module> {
+    override fun transform(original: List<MutableModule>): List<MutableModule> {
         // Validate options
         if (mode == Mode.HIERARCHICAL) {
             if (targetClockPeriod == null) throw Exception("Must specify target clock period for hierarchical retime")

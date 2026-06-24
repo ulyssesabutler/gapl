@@ -1,6 +1,7 @@
 package com.uabutler.util.graph.util
 
 import com.google.ortools.Loader
+import com.google.ortools.sat.Constraint
 import com.uabutler.util.Logger
 import com.google.ortools.sat.CpModel
 import com.google.ortools.sat.CpSolver
@@ -111,16 +112,45 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
         Logger.trace { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
 
         // Step 7: Add constraints to require the contract circuits to account for contracted registers
-        val contractedRegisterConstraintCount = graph.contractCircuitGraphs.onEach { contractCircuitGraph ->
-            val sourceTerm = LinearExpr.term(retimingLabelVariables[contractCircuitGraph.contractedInputNode]!!, -1L)
-            val sinkTerm = retimingLabelVariables[contractCircuitGraph.contractedOutputNode]!!
+        val contractedGraphConstraintCount = graph.contractCircuitGraphs.flatMap { contractCircuitGraph ->
+            val inputVariable = retimingLabelVariables[contractCircuitGraph.contractedInputNode]!!
+            val outputVariable = retimingLabelVariables[contractCircuitGraph.contractedOutputNode]!!
+
+            // Retiming difference constraint
+            val sourceTerm = LinearExpr.term(inputVariable, -1L)
+            val sinkTerm = LinearExpr.term(outputVariable, 1L)
             val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
 
-            val value = (contractCircuitGraph.retimedRegisterDelay - contractCircuitGraph.unretimedRegisterDelay).toLong()
-            model.addEquality(linearExpression, value)
+            val value = contractCircuitGraph.additionalRegisterDelay().toLong()
+            val retimingDifferenceConstraint = model.addEquality(linearExpression, value)
+
+            // Register path constraints
+            var inputPathConstraint: Constraint? = null
+            var outputPathConstraint: Constraint? = null
+            if (contractCircuitGraph.contractedRegisterDelayEdge != null) {
+                val registerPathInputVariable = retimingLabelVariables[contractCircuitGraph.contractedInputDelayNode]!!
+                inputPathConstraint = model.addEquality(inputVariable, registerPathInputVariable)
+
+                val registerPathOutputVariable = retimingLabelVariables[contractCircuitGraph.contractedOutputDelayNode]!!
+                outputPathConstraint = model.addEquality(outputVariable, registerPathOutputVariable)
+            }
+
+            // Combinational path constraint
+            var combinationalPathConstraint: Constraint? = null
+            if (contractCircuitGraph.contractedCombinationalDelayNode != null) {
+                val combinationalPathNodeVariable = retimingLabelVariables[contractCircuitGraph.contractedCombinationalDelayNode]!!
+                combinationalPathConstraint = model.addEquality(outputVariable, combinationalPathNodeVariable)
+            }
+
+            listOfNotNull(
+                retimingDifferenceConstraint,
+                inputPathConstraint,
+                outputPathConstraint,
+                combinationalPathConstraint,
+            )
         }.count()
 
-        Logger.trace { "Added $contractedRegisterConstraintCount contract circuit constrains" }
+        Logger.trace { "Added $contractedGraphConstraintCount contract circuit constrains" }
 
         // Step 8: Add an anchor constraint
         val anchorNode = graph.nodes.first()
@@ -207,10 +237,14 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
             Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
         }
 
+        /*
         val initialUpdatedCircuit = retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
         val actualEdgeValues = initialUpdatedCircuit.contractCircuitGraphs.associate { it.contractedEdge to it.retimedRegisterDelay }
         val revertedEdges = initialUpdatedCircuit.edges.map { if (it in actualEdgeValues) { it.copy(weight = actualEdgeValues[it]!!) } else { it } }
 
         return@run HierarchicalLeisersonCircuitGraph(graph.value, graph.nodes, revertedEdges, graph.contractCircuitGraphs)
+         */
+
+        return@run retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
     }
 }

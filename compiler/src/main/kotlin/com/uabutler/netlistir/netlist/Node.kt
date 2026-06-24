@@ -5,7 +5,7 @@ import com.uabutler.netlistir.util.PredefinedFunction
 
 sealed class Node(
     private var identifier: String,
-    val parentModule: Module,
+    val parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>
 ) {
@@ -44,48 +44,48 @@ sealed class Node(
 
 sealed class VirtualNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
 ) : Node(identifier, parentModule, { emptyList() }, { emptyList() })
 
 class VirtualIONode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
 ): VirtualNode(identifier, parentModule)
 
 class VirtualBodyNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
 ): VirtualNode(identifier, parentModule)
 
 sealed class IONode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>
 ) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
 
 class InputNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>
 ) : IONode(identifier, parentModule, { emptyList() }, outputWireVectorGroupsBuilder)
 
 class OutputNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
 ) : IONode(identifier, parentModule, inputWireVectorGroupsBuilder, { emptyList() })
 
 sealed class BodyNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>
 ) : Node(identifier, parentModule, inputWireVectorGroupsBuilder, outputWireVectorGroupsBuilder)
 
 class ModuleInvocationNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
     val invocation: Module.Invocation,
@@ -93,7 +93,7 @@ class ModuleInvocationNode(
 
 class PredefinedFunctionNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,
     outputWireVectorGroupsBuilder: (Node) -> List<OutputWireVectorGroup>,
     val predefinedFunction: PredefinedFunction
@@ -101,7 +101,7 @@ class PredefinedFunctionNode(
 
 class PassThroughNode(
     identifier: String,
-    parentModule: Module,
+    parentModule: MutableModule,
     // TODO: We need some way to represent the interface that will be the same on both sides
     //   For now, the user is just going to pinky promise they're the same
     inputWireVectorGroupsBuilder: (Node) -> List<InputWireVectorGroup>,

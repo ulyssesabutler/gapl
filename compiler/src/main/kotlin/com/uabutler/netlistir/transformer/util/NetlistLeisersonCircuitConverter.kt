@@ -4,7 +4,7 @@ import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
 import com.uabutler.netlistir.netlist.IONode
 import com.uabutler.netlistir.netlist.InputWire
-import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputWire
@@ -47,7 +47,7 @@ object NetlistLeisersonCircuitConverter {
         return node is PredefinedFunctionNode && node.predefinedFunction is RegisterFunction
     }
 
-    private fun getNonRegisterConnections(module: Module): Collection<WeightedNonRegisterConnection> {
+    private fun getNonRegisterConnections(module: MutableModule): Collection<WeightedNonRegisterConnection> {
         val registerWires = module.getNodes()
             .filterIsInstance<PredefinedFunctionNode>()
             .filter { it.predefinedFunction is RegisterFunction }
@@ -89,7 +89,7 @@ object NetlistLeisersonCircuitConverter {
 
     private fun nodeType(node: Node) = if (node !is PredefinedFunctionNode) node::class.simpleName else node.predefinedFunction::class.simpleName
 
-    private fun printGraph(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>) = buildString {
+    private fun printGraph(graph: LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>) = buildString {
         println("PRINTING GRAPH:")
         println("  Nodes:")
         graph.nodes.forEach { node ->
@@ -113,7 +113,7 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
-    fun fromModule(module: Module, delay: PropagationDelay, maintainTiming: Boolean): LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>> {
+    fun fromModule(module: MutableModule, delay: PropagationDelay, maintainTiming: Boolean): LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>> {
         Logger.start("Converting from module to Leiserson circuit graph")
         val nodes = module.getNodes()
             .filter { !isRegisterNode(it) }
@@ -191,7 +191,7 @@ object NetlistLeisersonCircuitConverter {
         ).also { Logger.finish() }
     }
 
-    private fun addWeightedConnection(module: Module, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {
+    private fun addWeightedConnection(module: MutableModule, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {
         val sourceWires = if (weight > 0) {
             val registerFunction = RegisterFunction(
                 storageStructure = VectorInterfaceStructure(
@@ -226,7 +226,7 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
-    private fun addWeightedConnection(module: Module, weightedConnection: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>) {
+    private fun addWeightedConnection(module: MutableModule, weightedConnection: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>) {
         addWeightedConnection(
             module = module,
             source = weightedConnection.value.map { it.source },
@@ -235,7 +235,7 @@ object NetlistLeisersonCircuitConverter {
         )
     }
 
-    fun toModule(graph: LeisersonCircuitGraph<Module, Node, Collection<NonRegisterConnection>>): Module {
+    fun toModule(graph: LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>): MutableModule {
         val oldModule = graph.value
 
         // Validation
@@ -250,7 +250,7 @@ object NetlistLeisersonCircuitConverter {
         }
 
         // First, create the new module
-        val newModule = Module(oldModule.invocation)
+        val newModule = MutableModule(oldModule.invocation)
 
         // Next, create copies of the input, output, and non-register body nodes.
         // Maps of old to new

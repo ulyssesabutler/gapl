@@ -11,7 +11,7 @@ import java.math.BigInteger
 class NodeBuilder(
     val programContext: ProgramContext,
     val moduleInstantiationTracker: ModuleInstantiationTracker,
-    val module: Module,
+    val module: MutableModule,
     val functionDefinitionAstNode: FunctionDefinitionNode,
     val interfaceValuesContext: Map<String, InterfaceStructure>,
     val parameterValuesContext: Map<String, ParameterValue<*>>,
