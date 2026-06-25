@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.InputNode
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
@@ -121,6 +122,22 @@ class Retimer(
         }
     }
 
+    private fun recordCircuitStats(
+        name: String,
+        modules: List<Module>
+    ) {
+        Logger.ifInfo {
+            Flattener(Flattener.Mode.ALL).transform(modules).forEach { module ->
+                val circuitName = module.invocation.gaplFunctionName
+                val circuit = NetlistLeisersonCircuitConverter.fromModule(module.toMutableModule(), delay, maintainTiming)
+                val clockPeriod = circuit.computeClockPeriod()
+
+                Logger.start("$name $circuitName circuit analysis", Logger.Level.INFO)
+                Logger.info { "Clock Period: $clockPeriod" }
+            }
+        }
+    }
+
     private fun transformPiecewise(original: List<MutableModule>): List<MutableModule> {
         Logger.start("Retimer Transformer")
 
@@ -159,7 +176,9 @@ class Retimer(
         return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod!!)
     }
 
-    override fun transform(original: List<MutableModule>): List<MutableModule> {
+    override fun transform(original: List<Module>): List<Module> {
+        val original = original.map { it.toMutableModule() }
+
         // Validate options
         if (mode == Mode.HIERARCHICAL) {
             if (targetClockPeriod == null) throw Exception("Must specify target clock period for hierarchical retime")
@@ -170,11 +189,17 @@ class Retimer(
         return when (mode) {
             Mode.MONOLITH -> {
                 Logger.debug { "Retiming in monolithic mode" }
-                transformPiecewise(original)
+                recordCircuitStats("Unretimed", original)
+                transformPiecewise(original).also {
+                    recordCircuitStats("Retimed", it)
+                }
             }
             Mode.HIERARCHICAL -> {
                 Logger.debug { "Retiming in hierarchical mode" }
-                transformAll(original)
+                recordCircuitStats("Unretimed", original)
+                transformAll(original).also {
+                    recordCircuitStats("Retimed", it)
+                }
             }
         }
     }

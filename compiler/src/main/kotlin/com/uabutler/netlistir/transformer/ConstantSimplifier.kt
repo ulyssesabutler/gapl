@@ -2,6 +2,7 @@ package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputWire
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
@@ -139,9 +140,7 @@ object ConstantSimplifier: Transformer {
         throw IllegalStateException("Unexpected node type")
     }
 
-    private fun createCollapsedLiteralNode(node: BodyNode): PredefinedFunctionNode {
-        val module = node.parentModule
-
+    private fun createCollapsedLiteralNode(module: MutableModule, node: BodyNode): PredefinedFunctionNode {
         val bitArray = createBitArrayFromNode(node)
 
         val literalFunction = LiteralFunction(bitArray.size, createLiteral(bitArray))
@@ -159,8 +158,7 @@ object ConstantSimplifier: Transformer {
         ).also { module.addBodyNode(it) }
     }
 
-    private fun swapInLiteralNode(originalNode: BodyNode, newNode: PredefinedFunctionNode) {
-        val module = originalNode.parentModule
+    private fun swapInLiteralNode(module: MutableModule, originalNode: BodyNode, newNode: PredefinedFunctionNode) {
         val originalNodeToNewNodeOutputWire = originalNode.outputWires().zip(newNode.outputWires()).toMap()
 
         originalNode.outputWires().forEach {
@@ -171,11 +169,13 @@ object ConstantSimplifier: Transformer {
         }
     }
 
-    private fun simplify(module: MutableModule): MutableModule {
+    private fun simplify(module: Module): Module {
+        val module = module.toMutableModule()
+
         do {
             val collapsibleNodes = module.getBodyNodes().filter { isCollapsibleNode(it) }
-            val collapsedNodes = collapsibleNodes.associateWith { createCollapsedLiteralNode(it) }
-            collapsedNodes.forEach { (originalNode, newNode) -> swapInLiteralNode(originalNode, newNode) }
+            val collapsedNodes = collapsibleNodes.associateWith { createCollapsedLiteralNode(module, it) }
+            collapsedNodes.forEach { (originalNode, newNode) -> swapInLiteralNode(module, originalNode, newNode) }
             collapsibleNodes.forEach {
                 it.inputWires().forEach { module.disconnect(it)}
                 module.removeNode(it)
@@ -185,7 +185,7 @@ object ConstantSimplifier: Transformer {
         return module
     }
 
-    override fun transform(original: List<MutableModule>): List<MutableModule> {
+    override fun transform(original: List<Module>): List<Module> {
         return original.map { simplify(it) }
     }
 }

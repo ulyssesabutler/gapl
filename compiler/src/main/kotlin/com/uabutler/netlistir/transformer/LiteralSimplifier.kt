@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer
 
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.LiteralFunction
@@ -55,8 +56,10 @@ object LiteralSimplifier: Transformer {
         }
     }
 
-    override fun transform(original: List<MutableModule>): List<MutableModule> {
-        return original.map { ModuleSimplifier(it).simplify() }
+    override fun transform(original: List<Module>): List<Module> {
+        return original
+            .map { it.toMutableModule() }
+            .map { ModuleSimplifier(it).simplify() }
     }
 
 }

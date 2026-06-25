@@ -1,9 +1,9 @@
 package com.uabutler.netlistir.transformer
 
-import com.uabutler.netlistir.netlist.MutableModule
+import com.uabutler.netlistir.netlist.Module
 
 interface Transformer {
 
-    fun transform(original: List<MutableModule>): List<MutableModule>
+    fun transform(original: List<Module>): List<Module>
 
 }

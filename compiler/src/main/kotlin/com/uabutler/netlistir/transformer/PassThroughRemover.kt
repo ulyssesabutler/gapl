@@ -1,28 +1,29 @@
 package com.uabutler.netlistir.transformer
 
+import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.PassThroughNode
 
 object PassThroughRemover: Transformer {
-    override fun transform(original: List<MutableModule>): List<MutableModule> {
-        return original.map { transformModule(it) }
+    override fun transform(original: List<Module>): List<Module> {
+        return original
+            .map { it.toMutableModule() }
+            .map { transformModule(it) }
     }
 
     private fun transformModule(module: MutableModule): MutableModule {
         val passThroughNodes = module.getBodyNodes().filterIsInstance<PassThroughNode>()
 
         passThroughNodes.forEach {
-            disconnectPassThroughNode(it)
+            disconnectPassThroughNode(module, it)
             module.removeNode(it)
         }
 
         return module
     }
 
-    private fun disconnectPassThroughNode(node: Node) {
-        val module = node.parentModule
-
+    private fun disconnectPassThroughNode(module: MutableModule, node: Node) {
         val passThroughWirePairs = node.inputWires().zip(node.outputWires())
 
         /* Original Source -> PassThrough Input -> PassThrough Output ---> Original Sink 1

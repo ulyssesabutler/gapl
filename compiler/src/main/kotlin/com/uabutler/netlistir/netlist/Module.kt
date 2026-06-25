@@ -4,6 +4,7 @@ import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.util.ObjectUtils
 import com.uabutler.verilogir.builder.creator.util.Identifier
+import com.uabutler.netlistir.transformer.util.NodeCopier
 
 open class Module(
     val invocation: Invocation,
@@ -50,7 +51,7 @@ open class Module(
     fun getBodyNode(identifier: String) = bodyNodes[identifier]!!
 
     fun getConnectionForInputWireOrNull(inputWire: InputWire) = connectionByInput[inputWire]
-    fun getConnectionForInputWire(inputWire: InputWire) = getConnectionForInputWireOrNull(inputWire) ?: throw Exception("Input wire $inputWire of ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName} not connected")
+    fun getConnectionForInputWire(inputWire: InputWire) = getConnectionForInputWireOrNull(inputWire) ?: throw Exception("Input wire $inputWire of ${Identifier.wire(inputWire.parentWireVector)} at ${inputWire.index} in ${inputWire.parentWireVector.parentGroup.parentNode.parentModule.invocation.gaplFunctionName}:${inputWire.parentWireVector.parentGroup.parentNode.nodeType()} not connected")
 
     // Multi Getters
     fun getInputNodes() = inputNodes.values.toList()
@@ -64,109 +65,42 @@ open class Module(
     fun getConnectionsForNodeOutput(node: Node) = node.outputWires().flatMap { getConnectionsForOutputWire(it) }
     fun getConnectionsForNode(node: Node) = getConnectionsForNodeInput(node) + getConnectionsForNodeOutput(node)
 
+    fun validateModule() {
+        getNodes()
+            .flatMap { it.inputWires() }
+            .forEach { wire -> getConnectionForInputWire(wire) }
+    }
+
     fun toMutableModule(): MutableModule {
         val newModule = MutableModule(invocation)
 
+        var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
+
         for (node in getInputNodes()) {
-            newModule.addInputNode(InputNode(
-                identifier = node.name(),
-                parentModule = newModule,
-            ) { newNode ->
-                node.outputWireVectorGroups.map { group ->
-                    OutputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                }
-            })
+            wirePairs += NodeCopier.copyInputNode(node, newModule).wirePairs
         }
 
         for (node in getOutputNodes()) {
-            newModule.addOutputNode(OutputNode(
-                identifier = node.name(),
-                parentModule = newModule,
-            ) { newNode ->
-                node.inputWireVectorGroups.map { group ->
-                    InputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                }
-            })
+            wirePairs += NodeCopier.copyOutputNode(node, newModule).wirePairs
         }
 
         for (node in getBodyNodes()) {
-            newModule.addBodyNode(when (node) {
-                is ModuleInvocationNode -> ModuleInvocationNode(
-                    identifier = node.name(),
-                    parentModule = newModule,
-                    inputWireVectorGroupsBuilder = { newNode ->
-                        node.inputWireVectorGroups.map { group ->
-                            InputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                    outputWireVectorGroupsBuilder = { newNode ->
-                        node.outputWireVectorGroups.map { group ->
-                            OutputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                    invocation = node.invocation,
-                )
-                is PredefinedFunctionNode -> PredefinedFunctionNode(
-                    identifier = node.name(),
-                    parentModule = newModule,
-                    inputWireVectorGroupsBuilder = { newNode ->
-                        node.inputWireVectorGroups.map { group ->
-                            InputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                    outputWireVectorGroupsBuilder = { newNode ->
-                        node.outputWireVectorGroups.map { group ->
-                            OutputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                    predefinedFunction = node.predefinedFunction,
-                )
-                is PassThroughNode -> PassThroughNode(
-                    identifier = node.name(),
-                    parentModule = newModule,
-                    inputWireVectorGroupsBuilder = { newNode ->
-                        node.inputWireVectorGroups.map { group ->
-                            InputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                    outputWireVectorGroupsBuilder = { newNode ->
-                        node.outputWireVectorGroups.map { group ->
-                            OutputWireVectorGroup(group.identifier, newNode, group.gaplStructure)
-                        }
-                    },
-                )
-            })
+            wirePairs += NodeCopier.copyBodyNode(node, invocation.gaplFunctionName, newModule, { _, n -> n }).wirePairs
         }
 
-        val outputWireMap = mutableMapOf<OutputWire, OutputWire>()
-        val inputWireMap = mutableMapOf<InputWire, InputWire>()
+        val newToOldInput = wirePairs.input.associate { it.current to it.inlining }
+        val oldToNewOutput = wirePairs.output.associate { it.inlining to it.current }
 
-        fun mapWires(oldNode: Node, newNode: Node) {
-            oldNode.outputWireVectorGroups.zip(newNode.outputWireVectorGroups).forEach { (oldGroup, newGroup) ->
-                oldGroup.wireVectors.zip(newGroup.wireVectors).forEach { (oldVec, newVec) ->
-                    oldVec.wires.zip(newVec.wires).forEach { (oldWire, newWire) ->
-                        outputWireMap[oldWire] = newWire
-                    }
-                }
-            }
-            oldNode.inputWireVectorGroups.zip(newNode.inputWireVectorGroups).forEach { (oldGroup, newGroup) ->
-                oldGroup.wireVectors.zip(newGroup.wireVectors).forEach { (oldVec, newVec) ->
-                    oldVec.wires.zip(newVec.wires).forEach { (oldWire, newWire) ->
-                        inputWireMap[oldWire] = newWire
-                    }
-                }
+        (newModule.getOutputNodes() + newModule.getBodyNodes()).forEach { node ->
+            node.inputWires().forEach { inputWire ->
+                val oldInputWire = newToOldInput[inputWire]!!
+                val oldConnection = getConnectionForInputWireOrNull(oldInputWire) ?: return@forEach
+                val newSourceWire = oldToNewOutput[oldConnection.source]!!
+                newModule.connect(inputWire, newSourceWire)
             }
         }
 
-        for (node in getInputNodes()) mapWires(node, newModule.getInputNode(node.name()))
-        for (node in getOutputNodes()) mapWires(node, newModule.getOutputNode(node.name()))
-        for (node in getBodyNodes()) mapWires(node, newModule.getBodyNode(node.name()))
-
-        for (connection in getConnections()) {
-            val newOutputWire = outputWireMap[connection.source]!!
-            val newInputWire = inputWireMap[connection.sink]!!
-            newModule.connect(newInputWire, newOutputWire)
-        }
+        newModule.validateModule()
 
         return newModule
     }

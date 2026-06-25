@@ -67,7 +67,10 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyOutputNode(outputNode: OutputNode, newParent: MutableModule): CreatedNode<OutputNode> {
+    fun copyOutputNode(
+        outputNode: OutputNode,
+        newParent: MutableModule,
+    ): CreatedNode<OutputNode> {
         val node = OutputNode(
             identifier = outputNode.name(), // Unlike body nodes, IO nodes must keep the same name.
             parentModule = newParent,
@@ -83,9 +86,14 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyInputNodeToPassThroughNode(inputNode: InputNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<PassThroughNode> {
+    fun copyInputNodeToPassThroughNode(
+        inputNode: InputNode,
+        invocationIdentifier: String,
+        newParent: MutableModule,
+        identifier: (i: String, n: String) -> String = { i, n -> copiedIdentifier(i, n) },
+    ): CreatedNode<PassThroughNode> {
         val node = PassThroughNode(
-            identifier = copiedIdentifier(invocationIdentifier, inputNode.name()),
+            identifier = identifier(invocationIdentifier, inputNode.name()),
             parentModule = newParent,
             inputWireVectorGroupsBuilder = { parentNode ->
                 inputNode.outputWireVectorGroups.map {
@@ -104,9 +112,14 @@ object NodeCopier {
         return CreatedNode(node, wirePairs)
     }
 
-    fun copyOutputNodeToPassThroughNode(outputNode: OutputNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<PassThroughNode> {
+    fun copyOutputNodeToPassThroughNode(
+        outputNode: OutputNode,
+        invocationIdentifier: String,
+        newParent: MutableModule,
+        identifier: (i: String, n: String) -> String = { i, n -> copiedIdentifier(i, n) },
+    ): CreatedNode<PassThroughNode> {
         val node = PassThroughNode(
-            identifier = copiedIdentifier(invocationIdentifier, outputNode.name()),
+            identifier = identifier(invocationIdentifier, outputNode.name()),
             parentModule = newParent,
             inputWireVectorGroupsBuilder = { parentNode ->
                 outputNode.inputWireVectorGroups.map {
@@ -126,13 +139,18 @@ object NodeCopier {
     }
 
 
-    fun copyBodyNode(bodyNode: BodyNode, invocationIdentifier: String, newParent: MutableModule): CreatedNode<BodyNode> {
+    fun copyBodyNode(
+        bodyNode: BodyNode,
+        invocationIdentifier: String,
+        newParent: MutableModule,
+        identifier: (i: String, n: String) -> String = { i, n -> copiedIdentifier(i, n) },
+    ): CreatedNode<BodyNode> {
         return when (bodyNode) {
             is ModuleInvocationNode -> {
                 // This shouldn't be a bug with breadth-first
                 // throw Exception("This is a bug in the compiler. Module invocation nodes should have been inlined")
                 val node = ModuleInvocationNode(
-                    identifier = copiedIdentifier(invocationIdentifier, bodyNode.name()),
+                    identifier = identifier(invocationIdentifier, bodyNode.name()),
                     parentModule = newParent,
                     inputWireVectorGroupsBuilder = { parentNode ->
                         bodyNode.inputWireVectorGroups.map {
@@ -153,7 +171,7 @@ object NodeCopier {
             }
             is PassThroughNode -> {
                 val node = PassThroughNode(
-                    identifier = copiedIdentifier(invocationIdentifier, bodyNode.name()),
+                    identifier = identifier(invocationIdentifier, bodyNode.name()),
                     parentModule = newParent,
                     inputWireVectorGroupsBuilder = { parentNode ->
                         bodyNode.inputWireVectorGroups.map {
@@ -173,7 +191,7 @@ object NodeCopier {
             }
             is PredefinedFunctionNode -> {
                 val node = PredefinedFunctionNode(
-                    identifier = copiedIdentifier(invocationIdentifier, bodyNode.name()),
+                    identifier = identifier(invocationIdentifier, bodyNode.name()),
                     parentModule = newParent,
                     inputWireVectorGroupsBuilder = { parentNode ->
                         bodyNode.inputWireVectorGroups.map {

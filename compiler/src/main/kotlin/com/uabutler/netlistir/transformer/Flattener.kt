@@ -102,7 +102,7 @@ class Flattener(val mode: Mode): Transformer {
         }
 
         fun depthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
-            val currentModule = node.parentModule
+            val currentModule = modules[node.parentModule.invocation]!!
             val inliningModule = depthFirstFlattenModule(modules[node.invocation]!!)
 
             inline(currentModule, inliningModule, node)
@@ -121,7 +121,7 @@ class Flattener(val mode: Mode): Transformer {
         }
 
         fun breadthFirstInlineModuleInvocation(node: ModuleInvocationNode) {
-            val currentModule = node.parentModule
+            val currentModule = modules[node.parentModule.invocation]!!
             val inliningModule = modules[node.invocation]!!
 
             inline(currentModule, inliningModule, node)
@@ -181,13 +181,14 @@ class Flattener(val mode: Mode): Transformer {
             return listOf(module) + otherModules
         }
 
-        fun flattenRecursive(): List<MutableModule> {
+        fun flattenRecursive(): List<Module> {
             Timer.create("Step 1a")
             Timer.create("Step 1b")
             Timer.create("Step 2a")
             Timer.create("Step 2b")
 
             return InvocationGraph(originalModuleList).rootModules().asSequence()
+                .map { modules[it.invocation]!! }
                 .flatMap { flattenRecursive(it) }
                 .distinct()
                 .toList()
@@ -202,7 +203,9 @@ class Flattener(val mode: Mode): Transformer {
         }
     }
 
-    override fun transform(original: List<MutableModule>): List<MutableModule> {
+    override fun transform(original: List<Module>): List<Module> {
+        val original = original.map { it.toMutableModule() }
+
         return when (mode) {
             Mode.NONE -> {
                 Logger.debug { "Flattening is disabled" }

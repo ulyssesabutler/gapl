@@ -58,7 +58,7 @@ class HierarchicalRetimer(
             value = graph.value,
             nodes = graph.nodes,
             edges = graph.edges.map {
-                WeightedGraph.Edge(
+                Edge(
                     source = it.sink,
                     sink = it.source,
                     weight = it.weight,
@@ -308,13 +308,11 @@ class HierarchicalRetimer(
         )
     }
 
-    private fun nodeType(node: Node) = if (node !is PredefinedFunctionNode) node::class.simpleName else node.predefinedFunction::class.simpleName
-
     private fun printGraph(graph: LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>) = buildString {
         println("PRINTING GRAPH:")
         println("  Nodes:")
         graph.nodes.forEach { node ->
-            println("    ${node.weight}: ${node.value.name()} [${nodeType(node.value)}]")
+            println("    ${node.weight}: ${node.value.name()} [${node.value.nodeType()}]")
         }
         println("  Edges:")
         graph.edges.forEach { edge ->
