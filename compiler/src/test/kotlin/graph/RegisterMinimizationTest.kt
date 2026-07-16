@@ -1,7 +1,6 @@
 package graph
 
 import com.uabutler.util.Logger
-import com.uabutler.util.graph.util.FastSolver
 import com.uabutler.util.graph.util.MinimalRegisterSolver
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
@@ -26,9 +25,9 @@ class RegisterMinimizationTest {
         val graph = createGraph(
             name = "chain",
             edgeList = listOf(
-                Edge("a", "b", 1),
-                Edge("b", "c", 2),
-                Edge("c", "d", 3),
+                EdgeSketch("a", "b", 1),
+                EdgeSketch("b", "c", 2),
+                EdgeSketch("c", "d", 3),
             )
         )
 
@@ -44,10 +43,10 @@ class RegisterMinimizationTest {
         val graph = createGraph(
             name = "chain",
             edgeList = listOf(
-                Edge("a", "b", 1),
-                Edge("b", "c", 1),
-                Edge("c", "d", 1),
-                Edge("d", "a", 1),
+                EdgeSketch("a", "b", 1),
+                EdgeSketch("b", "c", 1),
+                EdgeSketch("c", "d", 1),
+                EdgeSketch("d", "a", 1),
             )
         )
 
@@ -60,14 +59,14 @@ class RegisterMinimizationTest {
     @Test
     fun `registers will be moved across nodes to lower fan-out`() {
         val largeFanOut = listOf(
-            Edge("a", "b", 1),
-            Edge("a", "c", 1),
-            Edge("b", "d", 1),
-            Edge("c", "d", 1),
+            EdgeSketch("a", "b", 1),
+            EdgeSketch("a", "c", 1),
+            EdgeSketch("b", "d", 1),
+            EdgeSketch("c", "d", 1),
         )
 
         val smallFanOut = listOf(
-            Edge("d", "a", 0),
+            EdgeSketch("d", "a", 0),
         )
 
         val graph = createGraph(
@@ -95,11 +94,11 @@ class RegisterMinimizationTest {
         val graph = createGraph(
             name = "chain",
             edgeList = listOf(
-                Edge("a", "b", 0),
-                Edge("b", "c", 0),
-                Edge("c", "d", 1),
-                Edge("d", "e", 0),
-                Edge("e", "f", 0),
+                EdgeSketch("a", "b", 0),
+                EdgeSketch("b", "c", 0),
+                EdgeSketch("c", "d", 1),
+                EdgeSketch("d", "e", 0),
+                EdgeSketch("e", "f", 0),
             )
         )
 

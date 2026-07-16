@@ -240,10 +240,9 @@ object NetlistLeisersonCircuitConverter {
         val edgesAttachedToNode = graph.edges.groupBy { it.source } + graph.edges.groupBy { it.sink }
 
         graph.nodes.forEach { node ->
-            if (node.value is VirtualIONode) {
-                edgesAttachedToNode[node]?.forEach { edge ->
-                    if (edge.weight != 0) throw Exception("Virtual IO node cannot have non-zero weight")
-                }
+            edgesAttachedToNode[node]?.forEach { edge ->
+                if (node.value is VirtualIONode && edge.weight != 0) throw Exception("Virtual IO node ${node.value.name()} cannot have non-zero weight: ${edge.weight}")
+                else if (edge.weight < 0) throw Exception("Negative weight edge for node ${node.value.name()}: ${edge.weight}")
             }
         }
 

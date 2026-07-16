@@ -18,14 +18,14 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `create graph with cycle`() {
         val cycle = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 1),
-            Edge("d", "a", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 1),
+            EdgeSketch("d", "a", 0),
         )
 
-        val start = Edge("start", "a", 0)
-        val end = Edge("b", "end", 0)
+        val start = EdgeSketch("start", "a", 0)
+        val end = EdgeSketch("b", "end", 0)
 
         val edgeList = buildList {
             add(start)
@@ -42,14 +42,14 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `create graph with zero-weight cycle fails`() {
         val cycle = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
-            Edge("d", "a", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
+            EdgeSketch("d", "a", 0),
         )
 
-        val start = Edge("start", "a", 0)
-        val end = Edge("b", "end", 0)
+        val start = EdgeSketch("start", "a", 0)
+        val end = EdgeSketch("b", "end", 0)
 
         val edgeList = buildList {
             add(start)
@@ -60,12 +60,12 @@ class LeisersonCircuitGraphTest {
         assertFails { createGraph("zero-weight cycle", edgeList) }
     }
 
-    @Test
+    @Deprecated("Negative weight edges are needed for hierarchical retiming, so this invariant no longer holds")
     fun `create graph with negative-weight edge fails`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", -1),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", -1),
+            EdgeSketch("c", "d", 0),
         )
 
         assertFails { createGraph("negative-weight edge", edgeList) }
@@ -74,9 +74,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `create graph with negative-weight node fails`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
         )
 
         val nodeWeights = mapOf("b" to -1)
@@ -87,9 +87,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `computeCombinationalDelays chain with a register in the middle`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 1), // register breaks the combinational chain
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 1), // register breaks the combinational chain
+            EdgeSketch("c", "d", 0),
         )
 
         val graph = createGraph("chain-with-mid-reg", edgeList)
@@ -108,9 +108,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `computeCombinationalDelays respects non-uniform node weights`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 1),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 1),
+            EdgeSketch("c", "d", 0),
         )
         val weights = mapOf("b" to 3, "c" to 2)
 
@@ -130,9 +130,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `computeCombinationalDelays fan-in takes max incoming delay`() {
         val edgeList = listOf(
-            Edge("a", "c", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "c", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
         )
         val weights = mapOf(
             "b" to 4,  // heavier, should dominate the fan-in
@@ -156,9 +156,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `computeCombinationalDelays ignores registered incoming edges at fan-in`() {
         val edgeList = listOf(
-            Edge("a", "c", 1), // register breaks combinational path from a
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "c", 1), // register breaks combinational path from a
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
         )
         val weights = mapOf(
             "a" to 10, // big, but should be ignored at c due to register
@@ -184,9 +184,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `possible clock periods for simple chain are contiguous sums`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
         )
 
         val graph = createGraph("chain-all-comb", edgeList)
@@ -198,9 +198,9 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `possible clock periods with non-uniform weights and a register`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 0),
         )
         val weights = mapOf(
             "a" to 1,
@@ -220,12 +220,12 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `possible clock periods on diamond keep only max-sum path for equal-register ties`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c1", 0),
-            Edge("b", "c2", 0),
-            Edge("c1", "d", 0),
-            Edge("c2", "d", 0),
-            Edge("d", "e", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c1", 0),
+            EdgeSketch("b", "c2", 0),
+            EdgeSketch("c1", "d", 0),
+            EdgeSketch("c2", "d", 0),
+            EdgeSketch("d", "e", 0),
         )
         val weights = mapOf(
             "c1" to 2,
@@ -250,12 +250,12 @@ class LeisersonCircuitGraphTest {
     @Test
     fun `possible clock periods on diamond keeps smaller register path`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c1", 0),
-            Edge("b", "c2", 0),
-            Edge("c1", "d", 0),
-            Edge("c2", "d", 1), // Add register
-            Edge("d", "e", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c1", 0),
+            EdgeSketch("b", "c2", 0),
+            EdgeSketch("c1", "d", 0),
+            EdgeSketch("c2", "d", 1), // Add register
+            EdgeSketch("d", "e", 0),
         )
         val weights = mapOf(
             "c1" to 2,

@@ -10,8 +10,6 @@ open class HierarchicalLeisersonCircuitGraph<G, N, E>(
 ): LeisersonCircuitGraph<G, N, E>(value, nodes, edges) {
 
     data class ContractCircuitGraph<N, E>(
-        val moduleInvocationNode: ModuleInvocationNode,
-
         val retimedInputDelay: Int?,
         val retimedOutputDelay: Int?,
         val retimedCombinationalDelay: Int?,
@@ -60,7 +58,5 @@ open class HierarchicalLeisersonCircuitGraph<G, N, E>(
             contractedCombinationalDelayOutputEdge,
         )
     }
-
-    private val contractCircuitGraphsByNode = contractCircuitGraphs.associateBy { it.moduleInvocationNode }
 
 }

@@ -1,7 +1,6 @@
 package graph
 
 import com.uabutler.util.Logger
-import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.util.FastSolver
 import com.uabutler.util.graph.util.Retiming
 import graph.TestUtil.createGraph
@@ -37,9 +36,9 @@ class ClockPeriodMinimizationTest {
         val graph = createGraph(
             name = "chain",
             edgeList = listOf(
-                Edge("a", "b", 1),
-                Edge("b", "c", 0),
-                Edge("c", "d", 0),
+                EdgeSketch("a", "b", 1),
+                EdgeSketch("b", "c", 0),
+                EdgeSketch("c", "d", 0),
             )
         )
 
@@ -54,14 +53,14 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime simple cycle`() {
         val cycle = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 0),
-            Edge("c", "d", 1),
-            Edge("d", "a", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 0),
+            EdgeSketch("c", "d", 1),
+            EdgeSketch("d", "a", 0),
         )
 
-        val start = Edge("start", "a", 0)
-        val end = Edge("b", "end", 0)
+        val start = EdgeSketch("start", "a", 0)
+        val end = EdgeSketch("b", "end", 0)
 
         val edgeList = buildList {
             add(start)
@@ -84,23 +83,23 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime simple cycle and chain`() {
         val cycle = listOf(
-            Edge("a1", "a2", 0),
-            Edge("a2", "a3", 0),
-            Edge("a3", "a4", 1),
-            Edge("a4", "a1", 0),
+            EdgeSketch("a1", "a2", 0),
+            EdgeSketch("a2", "a3", 0),
+            EdgeSketch("a3", "a4", 1),
+            EdgeSketch("a4", "a1", 0),
         )
 
-        val start = Edge("start", "a1", 0)
+        val start = EdgeSketch("start", "a1", 0)
 
         val chain = listOf(
-            Edge("a2", "b1", 0),
-            Edge("b1", "b2", 0),
-            Edge("b2", "b3", 0),
-            Edge("b3", "b4", 0),
-            Edge("b4", "b5", 0),
-            Edge("b5", "b6", 0),
-            Edge("b6", "b7", 0),
-            Edge("b7", "b8", 0),
+            EdgeSketch("a2", "b1", 0),
+            EdgeSketch("b1", "b2", 0),
+            EdgeSketch("b2", "b3", 0),
+            EdgeSketch("b3", "b4", 0),
+            EdgeSketch("b4", "b5", 0),
+            EdgeSketch("b5", "b6", 0),
+            EdgeSketch("b6", "b7", 0),
+            EdgeSketch("b7", "b8", 0),
         )
 
         val edgeList = buildList {
@@ -126,20 +125,20 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime multiple interconnected cycles`() {
         val firstCycle = listOf(
-            Edge("a1", "a2", 0),
-            Edge("a2", "a3", 1),
-            Edge("a3", "a1", 0),
+            EdgeSketch("a1", "a2", 0),
+            EdgeSketch("a2", "a3", 1),
+            EdgeSketch("a3", "a1", 0),
         )
 
         val secondCycle = listOf(
-            Edge("b1", "b2", 1),
-            Edge("b2", "b3", 0),
-            Edge("b3", "b1", 0),
+            EdgeSketch("b1", "b2", 1),
+            EdgeSketch("b2", "b3", 0),
+            EdgeSketch("b3", "b1", 0),
         )
 
         val interconnect = listOf(
-            Edge("a2", "b1", 0),
-            Edge("b2", "a3", 0),
+            EdgeSketch("a2", "b1", 0),
+            EdgeSketch("b2", "a3", 0),
         )
 
         val edgeList = buildList {
@@ -167,12 +166,12 @@ class ClockPeriodMinimizationTest {
         val shortBranchNodes = listOf("branchStart") + List(3) { "a$it" } + listOf("branchEnd")
         val longBranchNodes = listOf("branchStart") + List(10) { "b$it" } + listOf("branchEnd")
 
-        val shortBranchEdges = shortBranchNodes.zipWithNext().map { Edge(it.first, it.second, 0) }
-        val longBranchEdges = longBranchNodes.zipWithNext().map { Edge(it.first, it.second, 0) }
+        val shortBranchEdges = shortBranchNodes.zipWithNext().map { EdgeSketch(it.first, it.second, 0) }
+        val longBranchEdges = longBranchNodes.zipWithNext().map { EdgeSketch(it.first, it.second, 0) }
 
         val edgeList = buildList {
-            add(Edge("circuitStart", "branchStart", 0))
-            add(Edge("branchEnd", "circuitEnd", 0))
+            add(EdgeSketch("circuitStart", "branchStart", 0))
+            add(EdgeSketch("branchEnd", "circuitEnd", 0))
             addAll(shortBranchEdges)
             addAll(longBranchEdges)
         }
@@ -193,10 +192,10 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime multiple registers in cycle`() {
         val edgeList = listOf(
-            Edge("a", "b", 0),
-            Edge("b", "c", 2),
-            Edge("c", "d", 0),
-            Edge("d", "a", 0),
+            EdgeSketch("a", "b", 0),
+            EdgeSketch("b", "c", 2),
+            EdgeSketch("c", "d", 0),
+            EdgeSketch("d", "a", 0),
         )
 
         val graph = createGraph(
@@ -234,7 +233,7 @@ class ClockPeriodMinimizationTest {
     @Test
     fun `retime large cycle`() {
         val nodes = List(1000) { "node$it" }
-        val edges = nodes.zipWithNext().map { Edge(it.first, it.second, 0) } + Edge(nodes.last(), nodes.first(), 500)
+        val edges = nodes.zipWithNext().map { EdgeSketch(it.first, it.second, 0) } + EdgeSketch(nodes.last(), nodes.first(), 500)
 
         val graph = createGraph(
             name = "multiple registers in cycle",

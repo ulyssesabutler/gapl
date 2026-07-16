@@ -4,7 +4,6 @@ import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
-import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.VirtualBodyNode
 import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.NonRegisterConnection
 import com.uabutler.util.Logger
@@ -25,6 +24,8 @@ class HierarchicalRetimer(
         val outputDelay: Int?,
         val combinationalDelay: Int?,
         val registerDelay: Int,
+        val clockPeriod: Int,
+        val registerCount: Int,
     )
 
     private val unretimedGraphStats: MutableMap<Module.Invocation, GraphStats> = mutableMapOf()
@@ -45,7 +46,7 @@ class HierarchicalRetimer(
 
         val registerDelay = registerDelayPath.registerCount
 
-        val combinationalDelay = fullPaths.filter { it.registerCount == 0 }.maxBy { it.delay }.delay
+        val combinationalDelay = fullPaths.filter { it.registerCount == 0 }.maxByOrNull { it.delay }?.delay
 
         val inputDelay = inputNodes.flatMap { inputNode ->
             graph.findFastestConnectionsFromNode(inputNode)
@@ -74,11 +75,17 @@ class HierarchicalRetimer(
                 .map { it.delay }
         }.maxOrNull()
 
+        val clockPeriod = graph.computeClockPeriod()
+
+        val registerCount = graph.edges.sumOf { it.weight }
+
         return GraphStats(
             inputDelay = inputDelay,
             outputDelay = outputDelay,
             combinationalDelay = combinationalDelay,
             registerDelay = registerDelay,
+            clockPeriod = clockPeriod,
+            registerCount = registerCount,
         )
     }
 
@@ -224,8 +231,6 @@ class HierarchicalRetimer(
             }
 
             val contractCircuitGraph = HierarchicalLeisersonCircuitGraph.ContractCircuitGraph(
-                moduleInvocationNode = moduleInvocationNode,
-
                 retimedInputDelay = retimedModuleStats.inputDelay,
                 retimedOutputDelay = retimedModuleStats.outputDelay,
                 retimedCombinationalDelay = retimedModuleStats.combinationalDelay,
@@ -320,6 +325,37 @@ class HierarchicalRetimer(
         }
     }
 
+    private fun printAllGraphStats(retimeOrder: List<Module.Invocation>) {
+        retimeOrder.forEach { invocation ->
+            Logger.start("${invocation.gaplFunctionName} retiming analysis", Logger.Level.INFO)
+
+            val unretimedStats = unretimedGraphStats[invocation]
+            val retimedStats = retimedGraphStats[invocation]
+
+            if (unretimedStats != null && retimedStats != null) {
+                Logger.start("Unretimed", Logger.Level.INFO)
+                Logger.info { "Clock Period:   ${unretimedStats.clockPeriod}" }
+                Logger.info { "Register Count: ${unretimedStats.registerCount}" }
+                Logger.info { "Register Delay: ${unretimedStats.registerDelay}" }
+                Logger.finish()
+
+                Logger.start("Retimed", Logger.Level.INFO)
+                Logger.info { "Clock Period:   ${retimedStats.clockPeriod}" }
+                Logger.info { "Register Count: ${retimedStats.registerCount}" }
+                Logger.info { "Register Delay: ${retimedStats.registerDelay}" }
+                Logger.finish()
+
+                Logger.info { "Clock Period Decrease:   ${unretimedStats.clockPeriod - retimedStats.clockPeriod}" }
+                Logger.info { "Register Count Increase: ${retimedStats.registerCount - unretimedStats.registerCount}" }
+                Logger.info { "Register Delay Increase: ${retimedStats.registerDelay - unretimedStats.registerDelay}" }
+            } else {
+                Logger.error { "No stats for ${invocation.gaplFunctionName}" }
+            }
+
+            Logger.finish()
+        }
+    }
+
     fun retimeAll(propagationDelay: PropagationDelay, targetClockPeriod: Int): List<MutableModule> {
         val baseGraph = modules
             .map { NetlistLeisersonCircuitConverter.fromModule(it, propagationDelay, false) }
@@ -348,6 +384,8 @@ class HierarchicalRetimer(
 
             val retimedNonhierarchicalGraph = fromHierarchical(retimedHierarchicalLeisersonCircuitGraph)
             NetlistLeisersonCircuitConverter.toModule(retimedNonhierarchicalGraph).also { Logger.finish() }
+        }.also {
+            printAllGraphStats(retimeOrder)
         }
     }
 

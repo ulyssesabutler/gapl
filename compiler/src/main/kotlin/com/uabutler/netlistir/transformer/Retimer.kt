@@ -131,9 +131,12 @@ class Retimer(
                 val circuitName = module.invocation.gaplFunctionName
                 val circuit = NetlistLeisersonCircuitConverter.fromModule(module.toMutableModule(), delay, maintainTiming)
                 val clockPeriod = circuit.computeClockPeriod()
+                val registerCount = circuit.edges.sumOf { it.weight }
 
                 Logger.start("$name $circuitName circuit analysis", Logger.Level.INFO)
-                Logger.info { "Clock Period: $clockPeriod" }
+                Logger.info { "Clock Period:   $clockPeriod" }
+                Logger.info { "Register Count: $registerCount" }
+                Logger.finish()
             }
         }
     }
@@ -188,14 +191,14 @@ class Retimer(
 
         return when (mode) {
             Mode.MONOLITH -> {
-                Logger.debug { "Retiming in monolithic mode" }
+                Logger.info { "Retiming in monolithic mode with target $targetClockPeriod, ${if (minimizeRegisterCount) "minimizing" else "not minimizing"} register count, and ${if (maintainTiming) "maintaining" else "not maintaining"} timing" }
                 recordCircuitStats("Unretimed", original)
                 transformPiecewise(original).also {
                     recordCircuitStats("Retimed", it)
                 }
             }
             Mode.HIERARCHICAL -> {
-                Logger.debug { "Retiming in hierarchical mode" }
+                Logger.info { "Retiming in hierarchical mode with target $targetClockPeriod" }
                 recordCircuitStats("Unretimed", original)
                 transformAll(original).also {
                     recordCircuitStats("Retimed", it)

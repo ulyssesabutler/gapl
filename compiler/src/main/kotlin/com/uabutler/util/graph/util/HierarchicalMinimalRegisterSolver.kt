@@ -10,6 +10,7 @@ import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
+import kotlin.math.abs
 
 class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: HierarchicalLeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
     companion object {
@@ -17,7 +18,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: Hierarchica
 
         fun computeUpperRetimingUpperBound(graph: HierarchicalLeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
             if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
-            return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.sumOf { it.weight }?.toLong()
+            return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.map { abs(it.weight) }?.sumOf { it }?.toLong()
         }
     }
 

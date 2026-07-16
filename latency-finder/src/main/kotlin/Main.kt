@@ -1,4 +1,3 @@
-import SlackFinder
 import java.io.File
 
 fun parseArgs(args: Array<String>): Map<String, List<String>> {
@@ -95,12 +94,7 @@ fun main(args: Array<String>) {
         "cms" to listOf(
             "hierarchical-test-unretimed-hierarchical",
             "hierarchical-test-unretimed-monolith",
-            /*
-            "hierarchical-test-retimed-hierarchical",
-            "hierarchical-test-retimed-monolith",
-            */
         ),
-        /*
         "regex" to listOf(
             "hierarchical-test-unretimed-hierarchical",
             "hierarchical-test-unretimed-monolith",
@@ -117,7 +111,6 @@ fun main(args: Array<String>) {
             "hierarchical-test-retimed-hierarchical",
             "hierarchical-test-retimed-monolith",
         ),
-         */
     ))
 
     /*

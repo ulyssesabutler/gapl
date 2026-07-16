@@ -11,7 +11,7 @@ open class LeisersonCircuitGraph<G, N, E>(
 
     init {
         if (nodes.any { it.weight < 0 }) throw IllegalArgumentException("Node weights must be non-negative")
-        if (edges.any { it.weight < 0 }) throw IllegalArgumentException("Edge weights must be non-negative")
+        // if (edges.any { it.weight < 0 }) throw IllegalArgumentException("Edge weights must be non-negative")
 
         try {
             subgraph(edgeFilter = { it.weight == 0 }).topologicalSort()
