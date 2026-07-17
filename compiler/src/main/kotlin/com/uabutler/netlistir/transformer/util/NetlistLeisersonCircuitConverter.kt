@@ -43,11 +43,11 @@ object NetlistLeisersonCircuitConverter {
         val connections: Collection<NonRegisterConnection>,
     )
 
-    private fun isRegisterNode(node: Node): Boolean {
+    internal fun isRegisterNode(node: Node): Boolean {
         return node is PredefinedFunctionNode && node.predefinedFunction is RegisterFunction
     }
 
-    private fun getNonRegisterConnections(module: MutableModule): Collection<WeightedNonRegisterConnection> {
+    internal fun getNonRegisterConnections(module: MutableModule): Collection<WeightedNonRegisterConnection> {
         val registerWires = module.getNodes()
             .filterIsInstance<PredefinedFunctionNode>()
             .filter { it.predefinedFunction is RegisterFunction }
@@ -72,7 +72,7 @@ object NetlistLeisersonCircuitConverter {
             .map { getNonRegisterSourceWithWeight(it) }
     }
 
-    private fun condenseWeightedNonRegisterConnectionGroups(connectionGroups: Collection<WeightedNonRegisterConnectionGroup>): Collection<WeightedNonRegisterConnectionGroup> {
+    internal fun condenseWeightedNonRegisterConnectionGroups(connectionGroups: Collection<WeightedNonRegisterConnectionGroup>): Collection<WeightedNonRegisterConnectionGroup> {
          return connectionGroups.groupBy { it.sourceNode }.flatMap { (sourceNode, sourceGroup) ->
             sourceGroup.groupBy { it.sinkNode }.flatMap { (sinkNode, sourceSinkGroup) ->
                 sourceSinkGroup.groupBy { it.weight }.map { (weight, weightGroup) ->
@@ -189,7 +189,7 @@ object NetlistLeisersonCircuitConverter {
         ).also { Logger.finish() }
     }
 
-    private fun addWeightedConnection(module: MutableModule, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {
+    internal fun addWeightedConnection(module: MutableModule, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {
         val sourceWires = if (weight > 0) {
             val registerFunction = RegisterFunction(
                 storageStructure = VectorInterfaceStructure(
@@ -224,7 +224,7 @@ object NetlistLeisersonCircuitConverter {
         }
     }
 
-    private fun addWeightedConnection(module: MutableModule, weightedConnection: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>) {
+    internal fun addWeightedConnection(module: MutableModule, weightedConnection: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>) {
         addWeightedConnection(
             module = module,
             source = weightedConnection.value.map { it.source },

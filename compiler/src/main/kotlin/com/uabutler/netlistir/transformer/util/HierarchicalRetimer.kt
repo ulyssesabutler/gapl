@@ -13,6 +13,8 @@ import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
 import com.uabutler.util.graph.WeightedGraph.Edge
 import com.uabutler.util.graph.util.HierarchicalMinimalRegisterSolver
+import com.uabutler.util.graph.util.NewHierarchicalMinimalRegisterSolver
+import com.uabutler.util.graph.util.TimingProperties
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
 class HierarchicalRetimer(
@@ -357,36 +359,41 @@ class HierarchicalRetimer(
     }
 
     fun retimeAll(propagationDelay: PropagationDelay, targetClockPeriod: Int): List<MutableModule> {
-        val baseGraph = modules
-            .map { NetlistLeisersonCircuitConverter.fromModule(it, propagationDelay, false) }
-            .associateBy { it.value.invocation }
+        val hierarchicalGraphs = NewNetlistLeisersonCircuitConverter.fromModules(modules, propagationDelay)
 
-        val retimeOrder = InvocationGraph(modules).topologicalSort().map { it.invocation }.reversed()
+        var expansionCounter = 0
+        val solveResults = NewHierarchicalMinimalRegisterSolver(
+            graphs = hierarchicalGraphs,
+            expansionNodeFactory = {
+                VirtualBodyNode(
+                    identifier = "expansion-${expansionCounter++}",
+                    parentModule = modules.first(),
+                ) as Node
+            },
+            expansionEdgeValueFactory = { emptyList<NonRegisterConnection>() },
+        ).solveAll(targetClockPeriod)
 
-        return retimeOrder.map { invocation ->
-            Logger.start("Retiming module ${Identifier.module(invocation)}")
-            val unretimedNonhierarchicalGraph = baseGraph[invocation]!!
-            val unretimedHierarchicalGraph = toHierarchical(unretimedNonhierarchicalGraph)
+        solveResults.forEach { (graph, result) ->
+            val invocation = graph.value.invocation
+            unretimedGraphStats[invocation] = result.unretimedProperties.toGraphStats()
+            retimedGraphStats[invocation] = result.retimedProperties.toGraphStats()
+        }
 
-            unretimedGraphStats[invocation] = graphStats(unretimedHierarchicalGraph)
+        val retimeOrder = solveResults.keys.map { it.value.invocation }
+        val retimedGraphs = solveResults.values.map { it.retimedGraph }
 
-            val retimedBaseGraph = HierarchicalMinimalRegisterSolver(unretimedHierarchicalGraph).solveOrNull(targetClockPeriod)!!
-
-            // TODO: Gross, hacky
-            val retimedHierarchicalLeisersonCircuitGraph = HierarchicalLeisersonCircuitGraph(
-                value = retimedBaseGraph.value,
-                nodes = retimedBaseGraph.nodes,
-                edges = retimedBaseGraph.edges,
-                contractCircuitGraphs = unretimedHierarchicalGraph.contractCircuitGraphs,
-            )
-
-            retimedGraphStats[invocation] = graphStats(retimedHierarchicalLeisersonCircuitGraph)
-
-            val retimedNonhierarchicalGraph = fromHierarchical(retimedHierarchicalLeisersonCircuitGraph)
-            NetlistLeisersonCircuitConverter.toModule(retimedNonhierarchicalGraph).also { Logger.finish() }
-        }.also {
+        return NewNetlistLeisersonCircuitConverter.toModules(retimedGraphs).toList().also {
             printAllGraphStats(retimeOrder)
         }
     }
+
+    private fun TimingProperties.toGraphStats() = GraphStats(
+        inputDelay = inputDelay,
+        outputDelay = outputDelay,
+        combinationalDelay = combinationalDelay,
+        registerDelay = registerDelay,
+        clockPeriod = clockPeriod,
+        registerCount = registerCount,
+    )
 
 }

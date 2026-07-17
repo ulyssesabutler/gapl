@@ -11,7 +11,16 @@ import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.netlist.VirtualNode
 import com.uabutler.util.graph.WeightedGraph
 
-class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
+data class NodeEqualityConstraint<N>(
+    val source: WeightedGraph.Node<N>,
+    val sink: WeightedGraph.Node<N>,
+    val value: Long,
+)
+
+class MinimalRegisterSolver<G, N, E>(
+    graph: LeisersonCircuitGraph<G, N, E>,
+    private val additionalEqualityConstraints: List<NodeEqualityConstraint<N>> = emptyList(),
+): Retiming.Solver<G, N, E>(graph) {
     companion object {
         init { Loader.loadNativeLibraries() }
 
@@ -111,7 +120,17 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
 
         Logger.trace { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
 
-        // Step 7: Add an anchor constraint
+        // Step 7: Add additional equality constraints (r(sink) - r(source) = value)
+        val additionalConstraintCount = additionalEqualityConstraints.onEach { constraint ->
+            val sourceTerm = LinearExpr.term(retimingLabelVariables[constraint.source]!!, -1L)
+            val sinkTerm = retimingLabelVariables[constraint.sink]!!
+            val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
+            model.addEquality(linearExpression, constraint.value)
+        }.count()
+
+        Logger.trace { "Added $additionalConstraintCount additional equality constraints" }
+
+        // Step 8: Add an anchor constraint
         val anchorNode = graph.nodes.first()
         val anchorTerm = retimingLabelVariables[anchorNode]!!
         model.addEquality(anchorTerm, 0L)
@@ -149,6 +168,10 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
                     sb.appendLine("  virt_$i: ${varName(edge.sink)} - ${varName(edge.source)} = 0")
                 }
 
+            additionalEqualityConstraints.forEachIndexed { i, constraint ->
+                sb.appendLine("  extra_$i: ${varName(constraint.sink)} - ${varName(constraint.source)} = ${constraint.value}")
+            }
+
             sb.appendLine("  anchor: ${varName(anchorNode)} = 0")
 
             sb.appendLine()
@@ -164,7 +187,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
             sb.toString()
         }
 
-        // Step 7: Run the solver
+        // Step 9: Run the solver
         val solver = CpSolver()
         val solverStatus = Logger.run("Running LP solver", Logger.Level.TRACE) { solver.solve(model) }
 
@@ -176,7 +199,7 @@ class MinimalRegisterSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Ret
             }
         }
 
-        // Step 8: Use the retiming values
+        // Step 10: Use the retiming values
         val retiming = Retiming(
             graph = graph,
             graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
