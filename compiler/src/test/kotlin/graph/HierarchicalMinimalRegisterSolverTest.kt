@@ -2,14 +2,12 @@ package graph
 
 import com.uabutler.util.Logger
 import graph.HierarchicalTestUtil.createHierarchicalGraph
-import graph.TestUtil.createGraph
 import graph.HierarchicalTestUtil.solve
-import graph.print
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-class NewHierarchicalMinimalRegisterSolverTest {
+class HierarchicalMinimalRegisterSolverTest {
 
     @BeforeEach
     fun `setup logger`() {

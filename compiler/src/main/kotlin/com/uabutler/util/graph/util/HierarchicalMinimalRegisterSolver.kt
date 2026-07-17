@@ -1,251 +1,263 @@
 package com.uabutler.util.graph.util
 
-import com.google.ortools.Loader
-import com.google.ortools.sat.Constraint
 import com.uabutler.util.Logger
-import com.google.ortools.sat.CpModel
-import com.google.ortools.sat.CpSolver
-import com.google.ortools.sat.CpSolverStatus
-import com.google.ortools.sat.LinearExpr
-import com.uabutler.netlistir.netlist.VirtualIONode
+import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
-import kotlin.math.abs
 
-class HierarchicalMinimalRegisterSolver<G, N, E>(override val graph: HierarchicalLeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
-    companion object {
-        init { Loader.loadNativeLibraries() }
+data class TimingProperties(
+    val inputDelay: Int?,
+    val outputDelay: Int?,
+    val combinationalDelay: Int?,
+    val registerDelay: Int,
+    val clockPeriod: Int,
+    val registerCount: Int,
+)
 
-        fun computeUpperRetimingUpperBound(graph: HierarchicalLeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
-            if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
-            return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.map { abs(it.weight) }?.sumOf { it }?.toLong()
+class HierarchicalMinimalRegisterSolver<G, N, E>(
+    private val graphs: Collection<HierarchicalLeisersonCircuitGraph<G, N, E>>,
+    private val expansionNodeFactory: () -> N,
+    private val expansionEdgeValueFactory: () -> E,
+) {
+    data class SolveResult<G, N, E>(
+        val retimedGraph: HierarchicalLeisersonCircuitGraph<G, N, E>,
+        val unretimedProperties: TimingProperties,
+        val retimedProperties: TimingProperties,
+    )
+
+    private data class ChildExpansion<N>(
+        val inputNode: WeightedGraph.Node<N>,
+        val outputNode: WeightedGraph.Node<N>,
+        val inputDelayNode: WeightedGraph.Node<N>?,
+        val outputDelayNode: WeightedGraph.Node<N>?,
+        val combinationalDelayNode: WeightedGraph.Node<N>?,
+        val retimingDifference: Int,
+    )
+
+    fun solveAll(targetClockPeriod: Int): Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>> {
+        val results = mutableMapOf<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>>()
+        val processed = mutableSetOf<HierarchicalLeisersonCircuitGraph<G, N, E>>()
+
+        fun processGraph(graph: HierarchicalLeisersonCircuitGraph<G, N, E>) {
+            if (graph in processed) return
+            graph.childGraphs().forEach { processGraph(it) }
+            solveSingle(graph, results, targetClockPeriod)?.let { results[graph] = it }
+            processed.add(graph)
         }
+
+        graphs.forEach { processGraph(it) }
+        return results
     }
 
-    override fun solveOrNull(targetClockPeriod: Int?): HierarchicalLeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
-        Logger.trace { "Target clock period: $targetClockPeriod" }
+    private fun computeTimingProperties(graph: LeisersonCircuitGraph<G, N, E>): TimingProperties {
+        val inputNodes = graph.rootNodes()
+        val outputNodes = graph.leafNodes()
 
-        Logger.start("Creating LP problem", Logger.Level.TRACE)
-
-        // Precompute
-        Logger.start("Precomputing WD values", Logger.Level.TRACE)
-
-        val pathSequence = graph.nodes.asSequence()
-            .flatMap { graph.findFastestConnectionsFromNode(it) }
-
-        val timingConstrainedPaths = if (targetClockPeriod != null) {
-            pathSequence.filter { it.delay > targetClockPeriod }.toList()
-        } else {
-            pathSequence.count() // Force an evalu
-            emptyList()
+        val fullPaths = inputNodes.flatMap { inputNode ->
+            graph.findFastestConnectionsFromNode(inputNode)
+                .filter { it.sink in outputNodes }
         }
 
-        Logger.finish()
+        val registerDelay = fullPaths.minByOrNull { it.registerCount }?.registerCount ?: 0
+        val combinationalDelay = fullPaths.filter { it.registerCount == 0 }.maxByOrNull { it.delay }?.delay
 
-        // Step 1: create the module
-        val model = CpModel()
+        val inputDelay = inputNodes.flatMap { inputNode ->
+            graph.findFastestConnectionsFromNode(inputNode)
+                .filter { it.sink !in outputNodes }
+                .filter { it.registerCount == 0 }
+                .map { it.delay }
+        }.maxOrNull()
 
-        // Step 2: create the variables
-        val upperBound = (computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null) + 1
-        Logger.debug { "Upper bound on retiming label: $upperBound" }
-        val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
-            node to model.newIntVar(-upperBound, upperBound, "v$index-${node.value}")
-        }.toMap()
-
-        // Step 3: Create the objective function
-        val incomingEdges = graph.edges.groupBy { it.sink }
-        val outgoingEdges = graph.edges.groupBy { it.source }
-
-        val fanIn = graph.nodes.associateWith { incomingEdges[it]?.size ?: 0 }
-        val fanOut = graph.nodes.associateWith { outgoingEdges[it]?.size ?: 0 }
-
-        val nodeCost = graph.nodes.associateWith { fanIn[it]!! - fanOut[it]!! }
-
-        val objectiveFunctionTerms = graph.nodes.map { node ->
-            LinearExpr.term(retimingLabelVariables[node]!!, nodeCost[node]!!.toLong())
-        }
-
-        val objectiveFunction = LinearExpr.sum(objectiveFunctionTerms.toTypedArray())
-        model.minimize(objectiveFunction)
-
-        Logger.trace { "Created objective function with ${objectiveFunctionTerms.size} terms" }
-
-        // Step 4: Add constraints to prevent negative register counts
-        val negativeRegisterConstraintCount = graph.edges.onEach { edge ->
-            val sourceTerm = LinearExpr.term(retimingLabelVariables[edge.source]!!, -1L)
-            val sinkTerm = retimingLabelVariables[edge.sink]!!
-            val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
-
-            val bound = -edge.weight.toLong()
-
-            model.addGreaterOrEqual(linearExpression, bound)
-        }.count()
-
-        Logger.trace { "Added $negativeRegisterConstraintCount negative register constrains" }
-
-        // Step 5: Add constraints to enforce the clock period constraint
-        val clockPeriodConstraintCount = timingConstrainedPaths
-            .onEach { connection ->
-                val sourceTerm = LinearExpr.term(retimingLabelVariables[connection.source]!!, -1L)
-                val sinkTerm = retimingLabelVariables[connection.sink]!!
-                val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
-
-                val bound = -connection.registerCount.toLong() + 1
-
-                model.addGreaterOrEqual(linearExpression, bound)
-            }.count()
-
-        Logger.trace { "Added $clockPeriodConstraintCount clock period constraints" }
-
-        // Step 6: Add constraints to prevent registers to virtual IO nodes
-        val zeroVirtualNodeRegisterConstraintCount = graph.edges
-            .filter { it.source.value is VirtualIONode || it.sink.value is VirtualIONode }
-            .onEach { edge ->
-                val sourceTerm = LinearExpr.term(retimingLabelVariables[edge.source]!!, -1L)
-                val sinkTerm = retimingLabelVariables[edge.sink]!!
-                val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
-
-                val bound = 0L
-
-                model.addEquality(linearExpression, bound)
-            }.count()
-
-        Logger.trace { "Added $zeroVirtualNodeRegisterConstraintCount virtual node register constrains" }
-
-        // Step 7: Add constraints to require the contract circuits to account for contracted registers
-        val contractedGraphConstraintCount = graph.contractCircuitGraphs.flatMap { contractCircuitGraph ->
-            val inputVariable = retimingLabelVariables[contractCircuitGraph.contractedInputNode]!!
-            val outputVariable = retimingLabelVariables[contractCircuitGraph.contractedOutputNode]!!
-
-            // Retiming difference constraint
-            val sourceTerm = LinearExpr.term(inputVariable, -1L)
-            val sinkTerm = LinearExpr.term(outputVariable, 1L)
-            val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
-
-            val value = contractCircuitGraph.additionalRegisterDelay().toLong()
-            val retimingDifferenceConstraint = model.addEquality(linearExpression, value)
-
-            // Register path constraints
-            var inputPathConstraint: Constraint? = null
-            var outputPathConstraint: Constraint? = null
-            if (contractCircuitGraph.contractedRegisterDelayEdge != null) {
-                val registerPathInputVariable = retimingLabelVariables[contractCircuitGraph.contractedInputDelayNode]!!
-                inputPathConstraint = model.addEquality(inputVariable, registerPathInputVariable)
-
-                val registerPathOutputVariable = retimingLabelVariables[contractCircuitGraph.contractedOutputDelayNode]!!
-                outputPathConstraint = model.addEquality(outputVariable, registerPathOutputVariable)
-            }
-
-            // Combinational path constraint
-            var combinationalPathConstraint: Constraint? = null
-            if (contractCircuitGraph.contractedCombinationalDelayNode != null) {
-                val combinationalPathNodeVariable = retimingLabelVariables[contractCircuitGraph.contractedCombinationalDelayNode]!!
-                combinationalPathConstraint = model.addEquality(outputVariable, combinationalPathNodeVariable)
-            }
-
-            listOfNotNull(
-                retimingDifferenceConstraint,
-                inputPathConstraint,
-                outputPathConstraint,
-                combinationalPathConstraint,
-            )
-        }.count()
-
-        Logger.trace { "Added $contractedGraphConstraintCount contract circuit constrains" }
-
-        // Step 8: Add an anchor constraint
-        val anchorNode = graph.nodes.first()
-        val anchorTerm = retimingLabelVariables[anchorNode]!!
-        model.addEquality(anchorTerm, 0L)
-
-        Logger.finish() // Creating LP problem
-
-        // LP export for debugging
-        Logger.trace {
-            fun varName(node: WeightedGraph.Node<N>) = retimingLabelVariables[node]!!.name
-            fun formatTerm(coeff: Int, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
-
-            val sb = StringBuilder()
-
-            // Objective
-            val objTerms = graph.nodes.mapNotNull { node ->
-                val coeff = nodeCost[node]!!
-                if (coeff == 0) null else formatTerm(coeff, varName(node))
-            }
-            sb.appendLine("Minimize")
-            sb.appendLine("  obj: ${objTerms.joinToString(" ").removePrefix("+ ")}")
-            sb.appendLine()
-
-            sb.appendLine("Subject To")
-
-            graph.edges.forEachIndexed { i, edge ->
-                sb.appendLine("  neg_$i: ${varName(edge.sink)} - ${varName(edge.source)} >= ${-edge.weight}")
-            }
-
-            timingConstrainedPaths.forEachIndexed { i, conn ->
-                sb.appendLine("  clk_$i: ${varName(conn.sink)} - ${varName(conn.source)} >= ${-conn.registerCount + 1}")
-            }
-
-            graph.edges
-                .filter { it.source.value is VirtualIONode || it.sink.value is VirtualIONode }
-                .forEachIndexed { i, edge ->
-                    sb.appendLine("  virt_$i: ${varName(edge.sink)} - ${varName(edge.source)} = 0")
-                }
-
-            graph.contractCircuitGraphs.forEachIndexed { i, ccg ->
-                val value = ccg.retimedRegisterDelay - ccg.unretimedRegisterDelay
-                sb.appendLine("  contract_$i: ${varName(ccg.contractedOutputNode)} - ${varName(ccg.contractedInputNode)} = $value")
-            }
-
-            sb.appendLine("  anchor: ${varName(anchorNode)} = 0")
-
-            sb.appendLine()
-            sb.appendLine("Bounds")
-            graph.nodes.forEach { node -> sb.appendLine("  -$upperBound <= ${varName(node)} <= $upperBound") }
-
-            sb.appendLine()
-            sb.appendLine("Generals")
-            sb.appendLine("  ${graph.nodes.joinToString(" ") { varName(it) }}")
-            sb.appendLine()
-            sb.append("End")
-
-            sb.toString()
-        }
-
-        // Step 9: Run the solver
-        val solver = CpSolver()
-        val solverStatus = Logger.run("Running LP solver", Logger.Level.DEBUG) { solver.solve(model) }
-
-        when (solverStatus) {
-            CpSolverStatus.OPTIMAL -> Logger.debug { "LP solver found optimal solution" }
-            else -> {
-                Logger.debug { "LP solver did not find an optimal solution: $solverStatus" }
-                return@run null
-            }
-        }
-
-        // Step 8: Use the retiming values
-        val retiming = Retiming(
-            graph = graph,
-            graphFactory = { nodes, edges -> HierarchicalLeisersonCircuitGraph(graph.value, nodes, edges, graph.contractCircuitGraphs) }
+        val reversedGraph = LeisersonCircuitGraph(
+            value = graph.value,
+            nodes = graph.nodes,
+            edges = graph.edges.map { WeightedGraph.Edge(it.weight, it.sink, it.source, it.value) },
         )
 
-        graph.nodes.map { node ->
-            val retimingLabel = solver.value(retimingLabelVariables[node]!!)
-            retiming.setNodeLag(node, retimingLabel.toInt())
-            retimingLabel
-        }.groupBy { it }.mapValues { (_, value) -> value.size }.forEach {
-            Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
+        val outputDelay = reversedGraph.rootNodes().flatMap { outputNode ->
+            reversedGraph.findFastestConnectionsFromNode(outputNode)
+                .filter { it.sink !in inputNodes }
+                .filter { it.registerCount == 0 }
+                .map { it.delay }
+        }.maxOrNull()
+
+        return TimingProperties(
+            inputDelay = inputDelay,
+            outputDelay = outputDelay,
+            combinationalDelay = combinationalDelay,
+            registerDelay = registerDelay,
+            clockPeriod = graph.computeClockPeriod(),
+            registerCount = graph.edges.sumOf { it.weight },
+        )
+    }
+
+    private fun solveSingle(
+        graph: HierarchicalLeisersonCircuitGraph<G, N, E>,
+        childResults: Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>>,
+        targetClockPeriod: Int,
+    ): SolveResult<G, N, E>? = Logger.run("Retiming hierarchical graph") {
+        // Step 1: Flatten to LeisersonCircuitGraph
+
+        // Map from hierarchical node to its flat counterpart (for non-ChildGraphNode nodes)
+        val flatNodeByHierarchicalNode = mutableMapOf<HierarchicalLeisersonCircuitGraph.Node<N>, WeightedGraph.Node<N>>()
+        // Map from hierarchical child node to its expansion (keyed by Node<N> to avoid casts when looking up edge endpoints)
+        val expansionByChildNode = mutableMapOf<HierarchicalLeisersonCircuitGraph.Node<N>, ChildExpansion<N>>()
+        val allFlatNodes = mutableListOf<WeightedGraph.Node<N>>()
+
+        // Leaf and virtual nodes map directly to a single WeightedGraph.Node
+        graph.nodes.forEach { hierarchicalNode ->
+            val nodeValue: N = hierarchicalNode.value
+            when (hierarchicalNode) {
+                is HierarchicalLeisersonCircuitGraph.LeafNode<*> -> {
+                    val flatNode = WeightedGraph.Node(hierarchicalNode.weight, nodeValue)
+                    allFlatNodes.add(flatNode)
+                    flatNodeByHierarchicalNode[hierarchicalNode] = flatNode
+                }
+                is HierarchicalLeisersonCircuitGraph.VirtualNode<*> -> {
+                    val flatNode = WeightedGraph.Node(0, nodeValue)
+                    allFlatNodes.add(flatNode)
+                    flatNodeByHierarchicalNode[hierarchicalNode] = flatNode
+                }
+                is HierarchicalLeisersonCircuitGraph.ChildGraphNode<*, *, *> -> { /* handled below */ }
+            }
         }
 
-        /*
-        val initialUpdatedCircuit = retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
-        val actualEdgeValues = initialUpdatedCircuit.contractCircuitGraphs.associate { it.contractedEdge to it.retimedRegisterDelay }
-        val revertedEdges = initialUpdatedCircuit.edges.map { if (it in actualEdgeValues) { it.copy(weight = actualEdgeValues[it]!!) } else { it } }
+        // Child nodes expand into contracted subgraphs using the child's solve result
+        if (graph.childNodes().any { it.childGraph !in childResults }) {
+            Logger.error { "Missing child solve result — child was not processed first" }
+            return@run null
+        }
 
-        return@run HierarchicalLeisersonCircuitGraph(graph.value, graph.nodes, revertedEdges, graph.contractCircuitGraphs)
-         */
+        graph.childNodes().forEach { childNode ->
+            val childResult = childResults[childNode.childGraph]!!
+            val retimedProps = childResult.retimedProperties
+            val unretimedProps = childResult.unretimedProperties
+            val retimingDifference = retimedProps.registerDelay - unretimedProps.registerDelay
 
-        return@run retiming.generateNewCircuit() as HierarchicalLeisersonCircuitGraph<G, N, E>
+            val expansionInputNode = WeightedGraph.Node<N>(0, expansionNodeFactory())
+            val expansionOutputNode = WeightedGraph.Node<N>(0, expansionNodeFactory())
+            allFlatNodes.add(expansionInputNode)
+            allFlatNodes.add(expansionOutputNode)
+
+            var inputDelayNode: WeightedGraph.Node<N>? = null
+            var outputDelayNode: WeightedGraph.Node<N>? = null
+            if (retimedProps.inputDelay != null && retimedProps.outputDelay != null) {
+                inputDelayNode = WeightedGraph.Node(retimedProps.inputDelay, expansionNodeFactory())
+                outputDelayNode = WeightedGraph.Node(retimedProps.outputDelay, expansionNodeFactory())
+                allFlatNodes.add(inputDelayNode)
+                allFlatNodes.add(outputDelayNode)
+            }
+
+            var combinationalDelayNode: WeightedGraph.Node<N>? = null
+            if (retimedProps.combinationalDelay != null) {
+                combinationalDelayNode = WeightedGraph.Node(retimedProps.combinationalDelay, expansionNodeFactory())
+                allFlatNodes.add(combinationalDelayNode)
+            }
+
+            expansionByChildNode[childNode] = ChildExpansion(
+                inputNode = expansionInputNode,
+                outputNode = expansionOutputNode,
+                inputDelayNode = inputDelayNode,
+                outputDelayNode = outputDelayNode,
+                combinationalDelayNode = combinationalDelayNode,
+                retimingDifference = retimingDifference,
+            )
+        }
+
+        // Build flat edges — expansion internal edges first, then hierarchical edges
+        val allFlatEdges = mutableListOf<WeightedGraph.Edge<N, E>>()
+
+        expansionByChildNode.values.forEach { expansion ->
+            if (expansion.inputDelayNode != null && expansion.outputDelayNode != null) {
+                allFlatEdges.add(WeightedGraph.Edge(0, expansion.inputNode, expansion.inputDelayNode, expansionEdgeValueFactory()))
+                allFlatEdges.add(WeightedGraph.Edge(0, expansion.outputDelayNode, expansion.outputNode, expansionEdgeValueFactory()))
+                allFlatEdges.add(WeightedGraph.Edge(-expansion.retimingDifference + 1, expansion.inputDelayNode, expansion.outputDelayNode, expansionEdgeValueFactory()))
+            }
+            if (expansion.combinationalDelayNode != null) {
+                allFlatEdges.add(WeightedGraph.Edge(-expansion.retimingDifference, expansion.inputNode, expansion.combinationalDelayNode, expansionEdgeValueFactory()))
+                allFlatEdges.add(WeightedGraph.Edge(0, expansion.combinationalDelayNode, expansion.outputNode, expansionEdgeValueFactory()))
+            }
+        }
+
+        // Hierarchical edges follow expansion edges; track start index for back-mapping
+        val hierarchicalEdges = graph.edges.toList()
+        val flatEdgeStartIndex = allFlatEdges.size
+
+        fun flatNodeFor(hierarchicalNode: HierarchicalLeisersonCircuitGraph.Node<N>, isSource: Boolean): WeightedGraph.Node<N> {
+            flatNodeByHierarchicalNode[hierarchicalNode]?.let { return it }
+            val expansion = expansionByChildNode[hierarchicalNode]!!
+            return if (isSource) expansion.outputNode else expansion.inputNode
+        }
+
+        hierarchicalEdges.forEach { hEdge ->
+            allFlatEdges.add(
+                WeightedGraph.Edge(
+                    weight = hEdge.weight,
+                    source = flatNodeFor(hEdge.source, isSource = true),
+                    sink = flatNodeFor(hEdge.sink, isSource = false),
+                    value = hEdge.value,
+                )
+            )
+        }
+
+        val flatGraph = LeisersonCircuitGraph(graph.value, allFlatNodes, allFlatEdges)
+
+        // Step 2: Unretimed timing properties
+        val unretimedProperties = computeTimingProperties(flatGraph)
+
+        // Step 3: Equality constraints for contracted subgraph nodes
+        val equalityConstraints = mutableListOf<NodeEqualityConstraint<N>>()
+        expansionByChildNode.values.forEach { expansion ->
+            equalityConstraints.add(NodeEqualityConstraint(expansion.inputNode, expansion.outputNode, expansion.retimingDifference.toLong()))
+            if (expansion.inputDelayNode != null) {
+                equalityConstraints.add(NodeEqualityConstraint(expansion.inputNode, expansion.inputDelayNode, 0L))
+            }
+            if (expansion.outputDelayNode != null) {
+                equalityConstraints.add(NodeEqualityConstraint(expansion.outputNode, expansion.outputDelayNode, 0L))
+            }
+            if (expansion.combinationalDelayNode != null) {
+                equalityConstraints.add(NodeEqualityConstraint(expansion.outputNode, expansion.combinationalDelayNode, 0L))
+            }
+        }
+
+        // Step 4: Run the flat solver
+        val retimedFlatGraph = MinimalRegisterSolver(flatGraph, equalityConstraints).solveOrNull(targetClockPeriod)
+            ?: return@run null
+
+        // Step 5: Back-map retimed edge weights to the hierarchical graph
+        // Flat edges are ordered: expansion edges [0, flatEdgeStartIndex), then hierarchical edges [flatEdgeStartIndex, ...)
+        val retimedFlatEdgeList = retimedFlatGraph.edges.toList()
+
+        // Point each ChildGraphNode at its own (already-solved) retimed graph, so the graph returned here is
+        // self-consistent and safe to flatten(). ChildGraphNode is a data class keyed in part by childGraph, so
+        // both the node list and every edge endpoint that touches a child must be swapped together — leaving edges
+        // pointing at the old node would desync nodes/edges (breaking rootNodes()/leafNodes() and flatten()).
+        val retimedChildNodeByOriginal = mutableMapOf<HierarchicalLeisersonCircuitGraph.Node<N>, HierarchicalLeisersonCircuitGraph.ChildGraphNode<G, N, E>>()
+        graph.childNodes().forEach { childNode ->
+            retimedChildNodeByOriginal[childNode] = childNode.copy(
+                childGraph = childResults.getValue(childNode.childGraph).retimedGraph,
+            )
+        }
+
+        fun retimedNodeFor(node: HierarchicalLeisersonCircuitGraph.Node<N>) = retimedChildNodeByOriginal[node] ?: node
+
+        val retimedHierarchicalEdges = hierarchicalEdges.mapIndexed { hIdx, hEdge ->
+            hEdge.copy(
+                weight = retimedFlatEdgeList[flatEdgeStartIndex + hIdx].weight,
+                source = retimedNodeFor(hEdge.source),
+                sink = retimedNodeFor(hEdge.sink),
+            )
+        }
+
+        val retimedGraph = HierarchicalLeisersonCircuitGraph(
+            value = graph.value,
+            nodes = graph.nodes.map { retimedNodeFor(it) },
+            edges = retimedHierarchicalEdges,
+        )
+
+        // Step 6: Retimed timing properties
+        val retimedProperties = computeTimingProperties(retimedFlatGraph)
+
+        SolveResult(retimedGraph, unretimedProperties, retimedProperties)
     }
 }

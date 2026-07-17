@@ -1,11 +1,11 @@
 package graph
 
-import com.uabutler.util.graph.NewHierarchicalLeisersonCircuitGraph
-import com.uabutler.util.graph.util.NewHierarchicalMinimalRegisterSolver
+import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
+import com.uabutler.util.graph.util.HierarchicalMinimalRegisterSolver
 
-typealias HGraph = NewHierarchicalLeisersonCircuitGraph<String, String, String>
-typealias HEdge = NewHierarchicalLeisersonCircuitGraph.Edge<String, String>
-typealias HSolveResult = NewHierarchicalMinimalRegisterSolver.SolveResult<String, String, String>
+typealias HGraph = HierarchicalLeisersonCircuitGraph<String, String, String>
+typealias HEdge = HierarchicalLeisersonCircuitGraph.Edge<String, String>
+typealias HSolveResult = HierarchicalMinimalRegisterSolver.SolveResult<String, String, String>
 
 data class Edge(
     val source: String,
@@ -37,17 +37,17 @@ object HierarchicalTestUtil {
             virtualNodes
         ).toSet()
 
-        val nodes: Map<String, NewHierarchicalLeisersonCircuitGraph.Node<String>> = allNodeNames.associateWith { nodeName ->
+        val nodes: Map<String, HierarchicalLeisersonCircuitGraph.Node<String>> = allNodeNames.associateWith { nodeName ->
             when {
                 nodeName in virtualNodes ->
-                    NewHierarchicalLeisersonCircuitGraph.VirtualNode(nodeName)
+                    HierarchicalLeisersonCircuitGraph.VirtualNode(nodeName)
                 nodeName in childGraphs ->
-                    NewHierarchicalLeisersonCircuitGraph.ChildGraphNode(
+                    HierarchicalLeisersonCircuitGraph.ChildGraphNode(
                         value = nodeName,
                         childGraph = childGraphs[nodeName]!!,
                     )
                 else ->
-                    NewHierarchicalLeisersonCircuitGraph.LeafNode(
+                    HierarchicalLeisersonCircuitGraph.LeafNode(
                         value = nodeName,
                         weight = leafWeights[nodeName] ?: 1,
                     )
@@ -55,7 +55,7 @@ object HierarchicalTestUtil {
         }
 
         val edges = edgeList.map { sketch ->
-            NewHierarchicalLeisersonCircuitGraph.Edge(
+            HierarchicalLeisersonCircuitGraph.Edge(
                 source = nodes[sketch.source]!!,
                 sink = nodes[sketch.sink]!!,
                 value = sketch.value(),
@@ -74,7 +74,7 @@ object HierarchicalTestUtil {
         targetClockPeriod: Int,
     ): Map<HGraph, HSolveResult> {
         var counter = 0
-        return NewHierarchicalMinimalRegisterSolver(
+        return HierarchicalMinimalRegisterSolver(
             graphs = graphs,
             expansionNodeFactory = { "expansion-${counter++}" },
             expansionEdgeValueFactory = { "expansion-edge" },

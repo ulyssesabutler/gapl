@@ -16,19 +16,19 @@ import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
 import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
 import com.uabutler.util.PropagationDelay
-import com.uabutler.util.graph.NewHierarchicalLeisersonCircuitGraph
+import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
 
-object NewNetlistLeisersonCircuitConverter {
+object HierarchicalNetlistLeisersonCircuitConverter {
 
     fun fromModule(
         module: MutableModule,
         delay: PropagationDelay,
-        childGraphs: Map<Module.Invocation, NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>,
-    ): NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>> {
+        childGraphs: Map<Module.Invocation, HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>,
+    ): HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>> {
         val leafNodes = module.getNodes()
             .filter { !NetlistLeisersonCircuitConverter.isRegisterNode(it) && it !is ModuleInvocationNode }
             .associateWith { irNode ->
-                NewHierarchicalLeisersonCircuitGraph.LeafNode(
+                HierarchicalLeisersonCircuitGraph.LeafNode(
                     value = irNode,
                     weight = NetlistLeisersonCircuitConverter.getDelay(irNode, delay),
                 )
@@ -37,29 +37,29 @@ object NewNetlistLeisersonCircuitConverter {
         val childNodes = module.getNodes()
             .filterIsInstance<ModuleInvocationNode>()
             .associateWith { irNode ->
-                NewHierarchicalLeisersonCircuitGraph.ChildGraphNode(
+                HierarchicalLeisersonCircuitGraph.ChildGraphNode(
                     value = irNode as Node,
                     childGraph = childGraphs[irNode.invocation]!!,
                 )
             }
 
-        val allNonVirtualNodes = buildMap<Node, NewHierarchicalLeisersonCircuitGraph.Node<Node>> {
+        val allNonVirtualNodes = buildMap<Node, HierarchicalLeisersonCircuitGraph.Node<Node>> {
             putAll(leafNodes)
             putAll(childNodes)
         }
 
-        val superInputNode = NewHierarchicalLeisersonCircuitGraph.VirtualNode<Node>(
+        val superInputNode = HierarchicalLeisersonCircuitGraph.VirtualNode<Node>(
             value = VirtualIONode(identifier = "SuperInputNode", module) as Node
         )
 
-        val superInputEdges: List<NewHierarchicalLeisersonCircuitGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getNodes()
+        val superInputEdges: List<HierarchicalLeisersonCircuitGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getNodes()
             .filter { !NetlistLeisersonCircuitConverter.isRegisterNode(it) && it.inputWires().isEmpty() }
             .map { sourceNode ->
-                val graphNode: NewHierarchicalLeisersonCircuitGraph.Node<Node> = when (sourceNode) {
+                val graphNode: HierarchicalLeisersonCircuitGraph.Node<Node> = when (sourceNode) {
                     is ModuleInvocationNode -> childNodes[sourceNode]!!
                     else -> leafNodes[sourceNode]!!
                 }
-                NewHierarchicalLeisersonCircuitGraph.Edge(
+                HierarchicalLeisersonCircuitGraph.Edge(
                     source = superInputNode,
                     sink = graphNode,
                     weight = 0,
@@ -67,12 +67,12 @@ object NewNetlistLeisersonCircuitConverter {
                 )
             }
 
-        val superOutputNode = NewHierarchicalLeisersonCircuitGraph.VirtualNode<Node>(
+        val superOutputNode = HierarchicalLeisersonCircuitGraph.VirtualNode<Node>(
             value = VirtualIONode(identifier = "SuperOutputNode", module) as Node
         )
 
-        val superOutputEdges: List<NewHierarchicalLeisersonCircuitGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getOutputNodes().map { outputNode ->
-            NewHierarchicalLeisersonCircuitGraph.Edge(
+        val superOutputEdges: List<HierarchicalLeisersonCircuitGraph.Edge<Node, Collection<NonRegisterConnection>>> = module.getOutputNodes().map { outputNode ->
+            HierarchicalLeisersonCircuitGraph.Edge(
                 source = leafNodes[outputNode]!!,
                 sink = superOutputNode,
                 weight = 0,
@@ -91,7 +91,7 @@ object NewNetlistLeisersonCircuitConverter {
             }.let {
                 NetlistLeisersonCircuitConverter.condenseWeightedNonRegisterConnectionGroups(it)
             }.map { group ->
-                NewHierarchicalLeisersonCircuitGraph.Edge(
+                HierarchicalLeisersonCircuitGraph.Edge(
                     source = allNonVirtualNodes[group.sourceNode]!!,
                     sink = allNonVirtualNodes[group.sinkNode]!!,
                     weight = group.weight,
@@ -99,7 +99,7 @@ object NewNetlistLeisersonCircuitConverter {
                 )
             }
 
-        return NewHierarchicalLeisersonCircuitGraph(
+        return HierarchicalLeisersonCircuitGraph(
             value = module,
             nodes = leafNodes.values + childNodes.values + listOf(superInputNode, superOutputNode),
             edges = edges + superInputEdges + superOutputEdges,
@@ -109,9 +109,9 @@ object NewNetlistLeisersonCircuitConverter {
     fun fromModules(
         modules: Collection<MutableModule>,
         delay: PropagationDelay,
-    ): Collection<NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>> {
-        val childGraphs = mutableMapOf<Module.Invocation, NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>()
-        val result = mutableListOf<NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>()
+    ): Collection<HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>> {
+        val childGraphs = mutableMapOf<Module.Invocation, HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>()
+        val result = mutableListOf<HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>()
 
         InvocationGraph(modules).topologicalSort().reversed().forEach { module ->
             val graph = fromModule(module, delay, childGraphs)
@@ -123,7 +123,7 @@ object NewNetlistLeisersonCircuitConverter {
     }
 
     fun toModule(
-        graph: NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>,
+        graph: HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>,
     ): MutableModule {
         val oldModule = graph.value
         val newModule = MutableModule(oldModule.invocation)
@@ -138,7 +138,7 @@ object NewNetlistLeisersonCircuitConverter {
 
         graph.nodes.forEach { graphNode ->
             when (graphNode) {
-                is NewHierarchicalLeisersonCircuitGraph.LeafNode -> {
+                is HierarchicalLeisersonCircuitGraph.LeafNode -> {
                     val irNode = graphNode.value
                     when (irNode) {
                         is InputNode -> addNodeToMaps(copyInputNode(irNode, newModule))
@@ -146,15 +146,15 @@ object NewNetlistLeisersonCircuitConverter {
                         else -> addNodeToMaps(copyBodyNode(irNode as BodyNode, "FromHierarchical", newModule))
                     }
                 }
-                is NewHierarchicalLeisersonCircuitGraph.ChildGraphNode<*, *, *> -> {
+                is HierarchicalLeisersonCircuitGraph.ChildGraphNode<*, *, *> -> {
                     addNodeToMaps(copyBodyNode(graphNode.value as ModuleInvocationNode, "FromHierarchical", newModule))
                 }
-                is NewHierarchicalLeisersonCircuitGraph.VirtualNode -> { /* skip */ }
+                is HierarchicalLeisersonCircuitGraph.VirtualNode -> { /* skip */ }
             }
         }
 
         graph.edges
-            .filter { it.source !is NewHierarchicalLeisersonCircuitGraph.VirtualNode && it.sink !is NewHierarchicalLeisersonCircuitGraph.VirtualNode }
+            .filter { it.source !is HierarchicalLeisersonCircuitGraph.VirtualNode && it.sink !is HierarchicalLeisersonCircuitGraph.VirtualNode }
             .map { edge ->
                 WeightedNonRegisterConnectionGroup(
                     sourceNode = edge.source.value as Node,
@@ -177,7 +177,7 @@ object NewNetlistLeisersonCircuitConverter {
     }
 
     fun toModules(
-        graphs: Collection<NewHierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>,
+        graphs: Collection<HierarchicalLeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>>,
     ): Collection<MutableModule> = graphs.map { toModule(it) }
 
 }
