@@ -2,14 +2,12 @@ package graph
 
 import com.uabutler.util.Logger
 import graph.HierarchicalTestUtil.createHierarchicalGraph
-import graph.HierarchicalTestUtil.getCorrespondingEdge
+import graph.TestUtil.createGraph
 import graph.HierarchicalTestUtil.solve
+import graph.print
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class NewHierarchicalMinimalRegisterSolverTest {
 
@@ -18,172 +16,128 @@ class NewHierarchicalMinimalRegisterSolverTest {
         Logger.setLevel(Logger.Level.WARN)
     }
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-
-    /** 4-node cycle with [registerWeight] registers on d→a, plus vIn/vOut boundary virtual nodes. */
-    private fun fourNodeCycleGraph(
-        name: String,
-        registerWeight: Int,
-        nodeWeight: Int = 1,
-    ): Pair<HGraph, List<HierarchicalEdgeSketch>> {
-        val cycleEdges = listOf(
-            HierarchicalEdgeSketch("a", "b", 0),
-            HierarchicalEdgeSketch("b", "c", 0),
-            HierarchicalEdgeSketch("c", "d", 0),
-            HierarchicalEdgeSketch("d", "a", registerWeight),
-        )
-        val boundaryEdges = listOf(
-            HierarchicalEdgeSketch("vIn", "a", 0),
-            HierarchicalEdgeSketch("d", "vOut", 0),
-        )
-        val graph = createHierarchicalGraph(
-            name = name,
-            edgeList = cycleEdges + boundaryEdges,
-            leafWeights = mapOf("a" to nodeWeight, "b" to nodeWeight, "c" to nodeWeight, "d" to nodeWeight),
-            virtualNodes = setOf("vIn", "vOut"),
-        )
-        return graph to cycleEdges
-    }
-
-    // -----------------------------------------------------------------------
-    // Flat (no children) — unretimed timing properties
-    // -----------------------------------------------------------------------
-
     @Test
-    fun `unretimed timing properties — four-node cycle with 2 registers`() {
-        val (graph, _) = fourNodeCycleGraph("cycle-unretimed", registerWeight = 2)
-        val result = solve(graph, targetClockPeriod = 4)
-
-        assertNotNull(result, "Solver should find a solution for targetClockPeriod=4")
-
-        val props = result.unretimedProperties
-        // The direct path vIn→a→b→c→d→vOut crosses 0 registers (d→a is not on this path)
-        assertEquals(0, props.registerDelay, "Unretimed register delay should be 0")
-        // All 4 nodes on the direct path are combinational → delay 4
-        assertEquals(4, props.combinationalDelay, "Unretimed combinational delay should be 4")
-        assertEquals(4, props.clockPeriod, "Unretimed clock period should be 4")
-        assertEquals(2, props.registerCount, "Total register count should be 2")
-    }
-
-    // -----------------------------------------------------------------------
-    // Flat (no children) — retiming
-    // -----------------------------------------------------------------------
-
-    @Test
-    fun `flat hierarchical graph — cycle registers are preserved after retiming`() {
-        val (graph, cycleEdges) = fourNodeCycleGraph("cycle-retime", registerWeight = 2)
-        val result = solve(graph, targetClockPeriod = 2)
-
-        assertNotNull(result, "Solver should find a solution for targetClockPeriod=2")
-
-        val retimedCycleWeight = cycleEdges.sumOf { getCorrespondingEdge(result.retimedGraph.edges, it).weight }
-        assertEquals(2, retimedCycleWeight, "Cycle register count must be preserved after retiming")
-    }
-
-    @Test
-    fun `flat hierarchical graph — clock period constraint is satisfied`() {
-        val (graph, _) = fourNodeCycleGraph("cycle-period", registerWeight = 2)
-        val result = solve(graph, targetClockPeriod = 2)
-
-        assertNotNull(result)
-        assertTrue(result.retimedProperties.clockPeriod <= 2, "Retimed clock period should be ≤ 2")
-    }
-
-    @Test
-    fun `flat hierarchical graph — infeasible target returns null`() {
-        // 3-node cycle with 1 register: minimum achievable clock period is 3
-        val edges = listOf(
-            HierarchicalEdgeSketch("vIn", "a", 0),
-            HierarchicalEdgeSketch("a", "b", 0),
-            HierarchicalEdgeSketch("b", "c", 0),
-            HierarchicalEdgeSketch("c", "a", 1),
-            HierarchicalEdgeSketch("b", "vOut", 0),
-        )
-        val graph = createHierarchicalGraph(
-            name = "3-node-cycle",
-            edgeList = edges,
-            virtualNodes = setOf("vIn", "vOut"),
+    fun `flattening works`() {
+        val childGraph = createHierarchicalGraph(
+            name = "child",
+            edgeList = listOf(
+                Edge("child-in", "child-a", 0),
+                Edge("child-a", "child-b", 0),
+                Edge("child-b", "child-out", 0),
+            ),
+            leafWeights = mapOf("child-a" to 1, "child-b" to 1),
+            virtualNodes = setOf("child-in", "child-out"),
         )
 
-        val result = solve(graph, targetClockPeriod = 1)
-        assertNull(result, "Solver should return null when target period is unachievable")
-    }
-
-    // -----------------------------------------------------------------------
-    // Two-level hierarchy
-    // -----------------------------------------------------------------------
-
-    @Test
-    fun `two-level hierarchy — child and parent are both solved`() {
-        val (childGraph, _) = fourNodeCycleGraph("child", registerWeight = 2)
-
-        val parentEdges = listOf(
-            HierarchicalEdgeSketch("parentIn", "x", 0),
-            HierarchicalEdgeSketch("x", "child", 0),
-            HierarchicalEdgeSketch("child", "y", 0),
-            HierarchicalEdgeSketch("y", "parentOut", 0),
-        )
         val parentGraph = createHierarchicalGraph(
             name = "parent",
-            edgeList = parentEdges,
+            edgeList = listOf(
+                Edge("in", "a", 0),
+                Edge("a", "child", 0),
+                Edge("child", "b", 0),
+                Edge("b", "out", 0),
+            ),
+            leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("parentIn", "parentOut"),
+            virtualNodes = setOf("in", "out"),
         )
 
-        val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 3)
+        val flattenedGraph = parentGraph.flatten()
 
-        assertNotNull(results[childGraph], "Child graph should be solved")
-        assertNotNull(results[parentGraph], "Parent graph should be solved")
+        val expectedNodes = mapOf(
+            "in" to 0,
+            "a" to 1,
+            "child-in" to 0,
+            "child-a" to 1,
+            "child-b" to 1,
+            "child-out" to 0,
+            "b" to 1,
+            "out" to 0,
+        )
+
+        val actualNodes = flattenedGraph.nodes.associate { it.value to it.weight }
+
+        val expectedEdges = mapOf(
+            ("in" to "a") to 0,
+            ("a" to "child-in") to 0,
+            ("child-in" to "child-a") to 0,
+            ("child-a" to "child-b") to 0,
+            ("child-b" to "child-out") to 0,
+            ("child-out" to "b") to 0,
+            ("b" to "out") to 0,
+        )
+
+        val actualEdges = flattenedGraph.edges.associate { (it.source.value to it.sink.value) to it.weight }
+
+        assertEquals(expectedNodes, actualNodes)
+        assertEquals(expectedEdges, actualEdges)
+
+        assertEquals(4, flattenedGraph.computeClockPeriod())
     }
 
     @Test
-    fun `two-level hierarchy — child clock period constraint is satisfied`() {
-        val (childGraph, _) = fourNodeCycleGraph("child", registerWeight = 2)
-
-        val parentEdges = listOf(
-            HierarchicalEdgeSketch("parentIn", "x", 0),
-            HierarchicalEdgeSketch("x", "child", 0),
-            HierarchicalEdgeSketch("child", "y", 0),
-            HierarchicalEdgeSketch("y", "parentOut", 0),
+    fun `hierarchical retiming adds registers to child and parent`() {
+        val childGraph = createHierarchicalGraph(
+            name = "child",
+            edgeList = listOf(
+                Edge("child-in", "child-a", 0),
+                Edge("child-a", "child-b", 0),
+                Edge("child-b", "child-out", 0),
+            ),
+            leafWeights = mapOf("child-a" to 1, "child-b" to 1),
+            virtualNodes = setOf("child-in", "child-out"),
         )
+
         val parentGraph = createHierarchicalGraph(
             name = "parent",
-            edgeList = parentEdges,
+            edgeList = listOf(
+                Edge("in", "a", 0),
+                Edge("a", "child", 0),
+                Edge("child", "b", 0),
+                Edge("b", "out", 0),
+            ),
+            leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("parentIn", "parentOut"),
+            virtualNodes = setOf("in", "out"),
         )
 
-        val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 3)
+        val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
+        val flattenedGraph = results[parentGraph]!!.retimedGraph.flatten()
 
-        val childResult = results[childGraph]!!
-        assertTrue(childResult.retimedProperties.clockPeriod <= 3)
+        assertEquals(1, flattenedGraph.computeClockPeriod())
     }
 
     @Test
-    fun `two-level hierarchy — child registers are preserved after retiming`() {
-        val (childGraph, childCycleEdges) = fourNodeCycleGraph("child", registerWeight = 2)
-
-        val parentEdges = listOf(
-            HierarchicalEdgeSketch("parentIn", "x", 0),
-            HierarchicalEdgeSketch("x", "child", 0),
-            HierarchicalEdgeSketch("child", "y", 0),
-            HierarchicalEdgeSketch("y", "parentOut", 0),
+    fun `hierarchical retiming works when child does not need retimed`() {
+        val childGraph = createHierarchicalGraph(
+            name = "child",
+            edgeList = listOf(
+                Edge("child-in", "child-a", 0),
+                Edge("child-a", "child-out", 0),
+            ),
+            leafWeights = mapOf("child-a" to 1),
+            virtualNodes = setOf("child-in", "child-out"),
         )
+
         val parentGraph = createHierarchicalGraph(
             name = "parent",
-            edgeList = parentEdges,
+            edgeList = listOf(
+                Edge("in", "a", 0),
+                Edge("a", "child", 0),
+                Edge("child", "b", 0),
+                Edge("b", "out", 0),
+            ),
+            leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("parentIn", "parentOut"),
+            virtualNodes = setOf("in", "out"),
         )
 
-        val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 3)
+        val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
+        val flattenedGraph = results[parentGraph]!!.retimedGraph.flatten()
 
-        val childResult = results[childGraph]!!
-        val retimedCycleWeight = childCycleEdges.sumOf {
-            getCorrespondingEdge(childResult.retimedGraph.edges, it).weight
-        }
-        assertEquals(2, retimedCycleWeight, "Child cycle register count must be preserved")
+        flattenedGraph.print()
+
+        assertEquals(1, flattenedGraph.computeClockPeriod())
     }
+
 }

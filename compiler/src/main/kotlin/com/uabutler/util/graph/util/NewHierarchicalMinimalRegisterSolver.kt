@@ -227,13 +227,31 @@ class NewHierarchicalMinimalRegisterSolver<G, N, E>(
         // Step 5: Back-map retimed edge weights to the hierarchical graph
         // Flat edges are ordered: expansion edges [0, flatEdgeStartIndex), then hierarchical edges [flatEdgeStartIndex, ...)
         val retimedFlatEdgeList = retimedFlatGraph.edges.toList()
+
+        // Point each ChildGraphNode at its own (already-solved) retimed graph, so the graph returned here is
+        // self-consistent and safe to flatten(). ChildGraphNode is a data class keyed in part by childGraph, so
+        // both the node list and every edge endpoint that touches a child must be swapped together — leaving edges
+        // pointing at the old node would desync nodes/edges (breaking rootNodes()/leafNodes() and flatten()).
+        val retimedChildNodeByOriginal = mutableMapOf<NewHierarchicalLeisersonCircuitGraph.Node<N>, NewHierarchicalLeisersonCircuitGraph.ChildGraphNode<G, N, E>>()
+        graph.childNodes().forEach { childNode ->
+            retimedChildNodeByOriginal[childNode] = childNode.copy(
+                childGraph = childResults.getValue(childNode.childGraph).retimedGraph,
+            )
+        }
+
+        fun retimedNodeFor(node: NewHierarchicalLeisersonCircuitGraph.Node<N>) = retimedChildNodeByOriginal[node] ?: node
+
         val retimedHierarchicalEdges = hierarchicalEdges.mapIndexed { hIdx, hEdge ->
-            hEdge.copy(weight = retimedFlatEdgeList[flatEdgeStartIndex + hIdx].weight)
+            hEdge.copy(
+                weight = retimedFlatEdgeList[flatEdgeStartIndex + hIdx].weight,
+                source = retimedNodeFor(hEdge.source),
+                sink = retimedNodeFor(hEdge.sink),
+            )
         }
 
         val retimedGraph = NewHierarchicalLeisersonCircuitGraph(
             value = graph.value,
-            nodes = graph.nodes,
+            nodes = graph.nodes.map { retimedNodeFor(it) },
             edges = retimedHierarchicalEdges,
         )
 

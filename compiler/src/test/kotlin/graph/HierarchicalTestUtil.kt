@@ -7,7 +7,7 @@ typealias HGraph = NewHierarchicalLeisersonCircuitGraph<String, String, String>
 typealias HEdge = NewHierarchicalLeisersonCircuitGraph.Edge<String, String>
 typealias HSolveResult = NewHierarchicalMinimalRegisterSolver.SolveResult<String, String, String>
 
-data class HierarchicalEdgeSketch(
+data class Edge(
     val source: String,
     val sink: String,
     val weight: Int,
@@ -26,7 +26,7 @@ object HierarchicalTestUtil {
      */
     fun createHierarchicalGraph(
         name: String,
-        edgeList: List<HierarchicalEdgeSketch>,
+        edgeList: List<Edge>,
         leafWeights: Map<String, Int> = emptyMap(),
         childGraphs: Map<String, HGraph> = emptyMap(),
         virtualNodes: Set<String> = emptySet(),
@@ -66,7 +66,7 @@ object HierarchicalTestUtil {
         return HGraph(value = name, nodes = nodes.values, edges = edges)
     }
 
-    fun getCorrespondingEdge(edges: Collection<HEdge>, sketch: HierarchicalEdgeSketch): HEdge =
+    fun getCorrespondingEdge(edges: Collection<HEdge>, sketch: Edge): HEdge =
         edges.first { it.value == sketch.value() }
 
     fun solve(
