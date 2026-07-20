@@ -4,8 +4,6 @@ import com.uabutler.ast.node.functions.AbstractFunctionIONode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 
-object EmptyNode: TemporaryNode
-
 data class InstantiationNode(
     val definitionIdentifier: IdentifierNode,
     val genericInterfaces: List<GenericInterfaceValueNode>,
