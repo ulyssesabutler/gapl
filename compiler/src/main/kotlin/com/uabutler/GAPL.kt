@@ -1,5 +1,6 @@
 package com.uabutler
 
+import com.uabutler.diagnostics.DiagnosticFormatter
 import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.transformer.Flattener.Mode
 import com.uabutler.util.Logger
@@ -22,7 +23,7 @@ fun compile(inputFiles: List<String>, outputFile: String, options: Compiler.Opti
     val verilog = try {
         Compiler.compile(gapl, options)
     } catch (e: DiagnosticsException) {
-        e.diagnostics.forEach { println(it) }
+        e.diagnostics.forEach { println(DiagnosticFormatter.format(it, gapl)) }
         exitProcess(1)
     }
 

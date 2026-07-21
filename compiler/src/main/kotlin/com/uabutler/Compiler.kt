@@ -1,5 +1,6 @@
 package com.uabutler
 
+import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.transformer.ConstantSimplifier
@@ -101,10 +102,25 @@ object Compiler {
         appendLine(gapl)
     }
 
+    // The number of lines occupied by the prepended standard library in the preprocessed source,
+    // used to translate diagnostic spans back to the user's original source before reporting them.
+    fun stdLibLineOffset(options: Options) = if (options.includeStdLib) standardLibary.count { it == '\n' } + 1 else 0
+
     fun compile(gapl: String, options: Options): String {
         val preprocessed = Logger.run("Preprocessing", Logger.Level.INFO) { preprocessor(gapl, options) }
 
-        val program = Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(preprocessed).program() }
+        val program = try {
+            Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(preprocessed).program() }
+        } catch (e: DiagnosticsException) {
+            val offset = stdLibLineOffset(options)
+            throw DiagnosticsException(e.diagnostics.map { diagnostic ->
+                if (diagnostic.span.startLine - offset <= 0) {
+                    diagnostic.copy(message = "${diagnostic.message} (this location is inside the prepended standard library, not your source - if you did not modify the standard library, this is likely a compiler bug; please contact a TA)")
+                } else {
+                    diagnostic.shiftedLines(-offset)
+                }
+            })
+        }
 
         val initialNetlistModules = program
             .let { Logger.run("Resolver", Logger.Level.INFO) { Resolver.cstToAst(it) } }

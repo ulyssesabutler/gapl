@@ -15,6 +15,8 @@ data class SourceSpan(
         "$startLine:$startColumn-$endLine:$endColumn"
     }
 
+    fun shiftedLines(delta: Int) = copy(startLine = startLine + delta, endLine = endLine + delta)
+
     companion object {
         fun of(token: Token) = SourceSpan(
             startLine = token.line,

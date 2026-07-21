@@ -8,4 +8,6 @@ data class Diagnostic(
     enum class Severity { ERROR, WARNING }
 
     override fun toString() = "${severity.name.lowercase()} at $span: $message"
+
+    fun shiftedLines(delta: Int) = copy(span = span.shiftedLines(delta))
 }
