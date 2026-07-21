@@ -18,6 +18,7 @@ import com.uabutler.ast.node.staticexpressions.RemainderStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.SubtractionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.TrueStaticExpressionNode
+import com.uabutler.diagnostics.ResolverDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTLexer
 import com.uabutler.parsers.generated.CSTParser
@@ -40,7 +41,7 @@ class StaticExpressionScope(
                 val atom = staticExpression.atom()!!
 
                 if (atom.parameterValues() != null) {
-                    diagnostics.reportError("Unexpected parameters for '${atom.identifier!!.text}' in static expression", span)
+                    diagnostics.reportError(ResolverDiagnosticKind.UnexpectedStaticExpressionParameters(atom.identifier!!.text!!), span)
                     return ErrorStaticExpressionNode(span, "unexpected parameters")
                 }
 
@@ -86,17 +87,17 @@ class StaticExpressionScope(
             }
 
             is CSTParser.LogicalAndExpressionContext, is CSTParser.LogicalOrExpressionContext -> {
-                diagnostics.reportError("Logical && / || are not supported in static expressions yet", span)
+                diagnostics.reportError(ResolverDiagnosticKind.UnsupportedLogicalOperatorsInStaticExpression, span)
                 ErrorStaticExpressionNode(span, "unsupported logical operator")
             }
 
             is CSTParser.AccessorExpressionContext -> {
-                diagnostics.reportError("Unexpected accessor expression in static expression", span)
+                diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorInStaticExpression, span)
                 ErrorStaticExpressionNode(span, "unexpected accessor")
             }
 
             is CSTParser.WireExpressionContext -> {
-                diagnostics.reportError("Unexpected use of 'wire' in static expression", span)
+                diagnostics.reportError(ResolverDiagnosticKind.UnexpectedWireInStaticExpression, span)
                 ErrorStaticExpressionNode(span, "unexpected wire")
             }
 

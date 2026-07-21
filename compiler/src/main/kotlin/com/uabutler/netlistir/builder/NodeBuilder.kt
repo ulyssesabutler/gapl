@@ -2,6 +2,7 @@ package com.uabutler.netlistir.builder
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.circuits.*
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
@@ -251,7 +252,7 @@ class NodeBuilder(
                 val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.name()
 
                 throw BuilderDiagnosticException(
-                    "Mismatch in $gaplModuleName of $previousOutputNodeName ($s1) to $currentInputNodeName ($s2)",
+                    BuilderDiagnosticKind.WireCountMismatch(gaplModuleName, previousOutputNodeName, s1, currentInputNodeName, s2),
                     connectionExpression.span,
                 )
             }
@@ -364,7 +365,7 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw BuilderDiagnosticException("Expected module instantiation", nodeExpression.span)
+                    throw BuilderDiagnosticException(BuilderDiagnosticKind.ExpectedModuleInstantiation, nodeExpression.span)
                 }
 
                 val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
@@ -396,7 +397,7 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw BuilderDiagnosticException("Expected module instantiation", nodeExpression.span)
+                    throw BuilderDiagnosticException(BuilderDiagnosticKind.ExpectedModuleInstantiation, nodeExpression.span)
                 }
 
                 val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
@@ -412,7 +413,7 @@ class NodeBuilder(
                     netlistNodes[nodeExpression.identifier.value]!!
                 } catch (_: NullPointerException) {
                     throw BuilderDiagnosticException(
-                        "Unable to find node with identifier ${nodeExpression.identifier.value}",
+                        BuilderDiagnosticKind.UnableToFindCircuitNode(nodeExpression.identifier.value),
                         nodeExpression.span,
                     )
                 }

@@ -7,6 +7,7 @@ import com.uabutler.ast.node.GenericInterfaceValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
+import com.uabutler.diagnostics.ResolverDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.DeclaredSymbol
@@ -91,7 +92,7 @@ class GenericParameterValueScope(
                                 span, InterfaceExpressionScope(this, value).ast()
                             ).toParameterValue()
                             else -> {
-                                diagnostics.reportError("Unexpected generic parameter type", span)
+                                diagnostics.reportError(ResolverDiagnosticKind.UnexpectedGenericParameterType, span)
                                 ErrorGenericParameterValueNode(span, "unexpected generic parameter type").toParameterValue()
                             }
                         }
@@ -104,7 +105,7 @@ class GenericParameterValueScope(
                     null -> ErrorGenericParameterValueNode(span, "unresolved symbol '${identifier.text}'").toParameterValue()
 
                     else -> {
-                        diagnostics.reportError("'${identifier.text}' cannot be used as a generic parameter value", span)
+                        diagnostics.reportError(ResolverDiagnosticKind.CannotUseAsGenericParameterValue(identifier.text!!), span)
                         ErrorGenericParameterValueNode(span, "invalid generic parameter value").toParameterValue()
                     }
                 }
@@ -115,7 +116,7 @@ class GenericParameterValueScope(
             ).toParameterValue()
 
             else -> {
-                diagnostics.reportError("Invalid generic parameter value", span)
+                diagnostics.reportError(ResolverDiagnosticKind.InvalidGenericParameterValue, span)
                 ErrorGenericParameterValueNode(span, "invalid generic parameter value").toParameterValue()
             }
         }

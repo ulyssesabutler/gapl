@@ -15,7 +15,7 @@ class ParserErrorListener(private val collector: DiagnosticsCollector) : BaseErr
         e: RecognitionException?,
     ) {
         collector.reportError(
-            message = msg,
+            kind = SyntaxDiagnosticKind.SyntaxError(msg),
             span = SourceSpan(line, charPositionInLine, line, charPositionInLine),
         )
     }

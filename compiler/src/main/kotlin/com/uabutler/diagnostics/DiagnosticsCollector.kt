@@ -8,12 +8,12 @@ class DiagnosticsCollector {
         collected.add(diagnostic)
     }
 
-    fun reportError(message: String, span: SourceSpan) {
-        report(Diagnostic(Diagnostic.Severity.ERROR, message, span))
+    fun reportError(kind: DiagnosticKind, span: SourceSpan) {
+        report(Diagnostic(Diagnostic.Severity.ERROR, span, kind))
     }
 
-    fun reportWarning(message: String, span: SourceSpan) {
-        report(Diagnostic(Diagnostic.Severity.WARNING, message, span))
+    fun reportWarning(kind: DiagnosticKind, span: SourceSpan) {
+        report(Diagnostic(Diagnostic.Severity.WARNING, span, kind))
     }
 
     fun diagnostics(): List<Diagnostic> = collected.toList()

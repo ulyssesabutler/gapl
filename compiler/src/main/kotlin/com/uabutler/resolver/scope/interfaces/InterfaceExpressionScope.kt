@@ -7,6 +7,7 @@ import com.uabutler.ast.node.interfaces.IdentifierInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.VectorInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
+import com.uabutler.diagnostics.ResolverDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.ResolvedSymbol
@@ -29,7 +30,7 @@ class InterfaceExpressionScope(
             is CSTParser.AccessorExpressionContext -> {
                 val accessor = interfaceExpression.accessor()!!
                 if (accessor !is CSTParser.VectorItemAccessorContext) {
-                    diagnostics.reportError("Unexpected accessor in interface expression", span)
+                    diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorInInterfaceExpression, span)
                     return ErrorInterfaceExpressionNode(span, "unexpected accessor")
                 }
 
@@ -47,12 +48,12 @@ class InterfaceExpressionScope(
                 when (val declaration = resolve(identifier)) {
                     is ResolvedSymbol.Parameter -> {
                         if (declaration.ctx.type !is CSTParser.InterfaceParameterDefinitionTypeContext) {
-                            diagnostics.reportError("'${identifier.text}' is not an interface-typed generic parameter", span)
+                            diagnostics.reportError(ResolverDiagnosticKind.NotAnInterfaceTypedGenericParameter(identifier.text!!), span)
                             return ErrorInterfaceExpressionNode(span, "not an interface parameter")
                         }
 
                         if (atom.parameterValues() != null) {
-                            diagnostics.reportError("Unexpected parameters for generic interface '${identifier.text}'", span)
+                            diagnostics.reportError(ResolverDiagnosticKind.UnexpectedGenericInterfaceParameters(identifier.text!!), span)
                             return ErrorInterfaceExpressionNode(span, "unexpected parameters")
                         }
 
@@ -70,14 +71,14 @@ class InterfaceExpressionScope(
                     null -> ErrorInterfaceExpressionNode(span, "unresolved symbol '${identifier.text}'")
 
                     else -> {
-                        diagnostics.reportError("Cannot use '${identifier.text}' in an interface expression", span)
+                        diagnostics.reportError(ResolverDiagnosticKind.CannotUseInInterfaceExpression(identifier.text!!), span)
                         ErrorInterfaceExpressionNode(span, "invalid reference in interface expression")
                     }
                 }
             }
 
             else -> {
-                diagnostics.reportError("Expected an interface expression", span)
+                diagnostics.reportError(ResolverDiagnosticKind.ExpectedInterfaceExpression, span)
                 ErrorInterfaceExpressionNode(span, "expected interface expression")
             }
         }

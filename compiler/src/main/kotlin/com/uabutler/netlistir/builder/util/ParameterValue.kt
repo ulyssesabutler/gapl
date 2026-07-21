@@ -5,6 +5,7 @@ import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
 import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.netlistir.netlist.Module
 import java.math.BigInteger
 
@@ -45,7 +46,7 @@ sealed interface ParameterValue<T> {
                     try {
                         parameterValuesContext[node.functionIdentifier.value]!!
                     } catch (_: NullPointerException) {
-                        throw BuilderDiagnosticException("Unable to find function reference '${node.functionIdentifier.value}'", node.span)
+                        throw BuilderDiagnosticException(BuilderDiagnosticKind.UnableToFindFunctionReference(node.functionIdentifier.value), node.span)
                     }
                 }
 

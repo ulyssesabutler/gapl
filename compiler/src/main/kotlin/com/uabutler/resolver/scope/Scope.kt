@@ -1,6 +1,7 @@
 package com.uabutler.resolver.scope
 
 import com.uabutler.diagnostics.DiagnosticsCollector
+import com.uabutler.diagnostics.ResolverDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.util.PredefinedFunctionNames
 import org.antlr.v4.kotlinruntime.Token
@@ -26,7 +27,7 @@ interface Scope {
         if (name in predefinedFunctionNames) return ResolvedSymbol.Function(ctx = null)
 
         return resolveGlobal(name) ?: run {
-            diagnostics.reportError("Unresolved symbol '$name'", SourceSpan.of(identifier))
+            diagnostics.reportError(ResolverDiagnosticKind.UnresolvedSymbol(name), SourceSpan.of(identifier))
             null
         }
     }
@@ -38,7 +39,7 @@ interface Scope {
 
         symbols().forEach { symbol ->
             if (symbol.name in seen || symbol.name in predefinedFunctionNames) {
-                diagnostics.reportError("Redeclaration of '${symbol.name}'", SourceSpan.of(symbol.token))
+                diagnostics.reportError(ResolverDiagnosticKind.Redeclaration(symbol.name), SourceSpan.of(symbol.token))
             } else {
                 seen.add(symbol.name)
             }

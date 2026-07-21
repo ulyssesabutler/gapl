@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder.util
 
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.diagnostics.Diagnostic
 import com.uabutler.diagnostics.SourceSpan
 
@@ -7,5 +8,5 @@ import com.uabutler.diagnostics.SourceSpan
 // per-instantiation boundary in ModuleBuilder, which records the diagnostic and moves on to
 // the next instantiation instead of aborting the whole compile.
 class BuilderDiagnosticException(val diagnostic: Diagnostic) : Exception(diagnostic.message) {
-    constructor(message: String, span: SourceSpan) : this(Diagnostic(Diagnostic.Severity.ERROR, message, span))
+    constructor(kind: BuilderDiagnosticKind, span: SourceSpan) : this(Diagnostic(Diagnostic.Severity.ERROR, span, kind))
 }

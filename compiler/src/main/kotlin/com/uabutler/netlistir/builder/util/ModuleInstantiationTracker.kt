@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
@@ -42,19 +43,28 @@ class ModuleInstantiationTracker(
         val astNode = try {
             functionNodes[instantiationData.gaplFunctionName]!!
         } catch (e: NullPointerException) {
-            throw BuilderDiagnosticException("Unable to locate function: ${instantiationData.gaplFunctionName}", callSiteSpan)
+            throw BuilderDiagnosticException(
+                BuilderDiagnosticKind.UnableToLocateFunction(instantiationData.gaplFunctionName),
+                callSiteSpan,
+            )
         }
 
         // Match the provided values with the local identifier
         val interfaceValues = try {
             GenericValueMatcher.getInterfaceValues(astNode.genericInterfaces, instantiationData.interfaces)
-        } catch (e: Exception) {
-            throw BuilderDiagnosticException("Unable to match generic interface values for ${instantiationData.gaplFunctionName}: ${e.message}", callSiteSpan)
+        } catch (e: GenericArityMismatchException) {
+            throw BuilderDiagnosticException(
+                BuilderDiagnosticKind.GenericInterfaceArityMismatch(instantiationData.gaplFunctionName, e.expected, e.actual),
+                callSiteSpan,
+            )
         }
         val parameterValues = try {
             GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.parameters)
-        } catch (e: Exception) {
-            throw BuilderDiagnosticException("Unable to match generic parameter values for ${instantiationData.gaplFunctionName}: ${e.message}", callSiteSpan)
+        } catch (e: GenericArityMismatchException) {
+            throw BuilderDiagnosticException(
+                BuilderDiagnosticKind.GenericParameterArityMismatch(instantiationData.gaplFunctionName, e.expected, e.actual),
+                callSiteSpan,
+            )
         }
 
         val input = astNode.inputFunctionIO.map {

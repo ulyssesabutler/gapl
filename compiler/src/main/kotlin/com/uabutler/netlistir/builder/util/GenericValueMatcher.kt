@@ -3,15 +3,15 @@ package com.uabutler.netlistir.builder.util
 import com.uabutler.ast.node.GenericInterfaceDefinitionNode
 import com.uabutler.ast.node.GenericParameterDefinitionNode
 
+class GenericArityMismatchException(val expected: Int, val actual: Int) : Exception("expected $expected, got $actual")
+
 object GenericValueMatcher {
     fun getInterfaceValues(
         genericInterfaceDefinitionNodes: List<GenericInterfaceDefinitionNode>,
         genericInterfaceValues: List<InterfaceStructure>,
     ): Map<String, InterfaceStructure> {
         if (genericInterfaceValues.size != genericInterfaceDefinitionNodes.size) {
-            throw IllegalArgumentException(
-                "expected ${genericInterfaceDefinitionNodes.size} generic interface(s), got ${genericInterfaceValues.size}"
-            )
+            throw GenericArityMismatchException(genericInterfaceDefinitionNodes.size, genericInterfaceValues.size)
         }
 
         return genericInterfaceDefinitionNodes
@@ -24,9 +24,7 @@ object GenericValueMatcher {
         genericParameterValues: List<ParameterValue<*>>,
     ): Map<String, ParameterValue<*>> {
         if (genericParameterValues.size != genericParameterDefinitionNodes.size) {
-            throw IllegalArgumentException(
-                "expected ${genericParameterDefinitionNodes.size} generic parameter(s), got ${genericParameterValues.size}"
-            )
+            throw GenericArityMismatchException(genericParameterDefinitionNodes.size, genericParameterValues.size)
         }
 
         return genericParameterDefinitionNodes

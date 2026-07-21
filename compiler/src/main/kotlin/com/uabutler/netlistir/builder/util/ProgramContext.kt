@@ -3,6 +3,7 @@ package com.uabutler.netlistir.builder.util
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.ProgramNode
 import com.uabutler.ast.node.interfaces.*
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.netlistir.netlist.Module
 
 class ProgramContext(program: ProgramNode) {
@@ -30,7 +31,7 @@ class ProgramContext(program: ProgramNode) {
         val interfaceDefinition = try {
             interfaceDefinitions[definedInterfaceIdentifier]!!.node
         } catch (_: NullPointerException) {
-            throw BuilderDiagnosticException("Cannot find interface: $definedInterfaceIdentifier", node.span)
+            throw BuilderDiagnosticException(BuilderDiagnosticKind.CannotFindInterface(definedInterfaceIdentifier), node.span)
         }
 
         // Match the provided values with the local identifier
@@ -88,7 +89,7 @@ class ProgramContext(program: ProgramNode) {
                 try {
                     interfaceValuesContext[node.interfaceIdentifier.value]!!
                 } catch (_: NullPointerException) {
-                    throw BuilderDiagnosticException("Cannot find interface value: ${node.interfaceIdentifier.value}", node.span)
+                    throw BuilderDiagnosticException(BuilderDiagnosticKind.CannotFindInterfaceValue(node.interfaceIdentifier.value), node.span)
                 }
             }
             is DefinedInterfaceExpressionNode -> buildDefinedInterface(

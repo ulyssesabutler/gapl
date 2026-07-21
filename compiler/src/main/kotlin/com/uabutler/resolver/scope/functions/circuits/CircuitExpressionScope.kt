@@ -23,6 +23,7 @@ import com.uabutler.ast.node.functions.circuits.SingleArrayAccessOperationNode
 import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
 import com.uabutler.ast.node.interfaces.VectorInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
+import com.uabutler.diagnostics.ResolverDiagnosticKind
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.ResolvedSymbol
@@ -77,7 +78,7 @@ class CircuitNodeExpressionScope(
                 val type = body.circuitExpressionType()
 
                 if (type !is CSTParser.BasicCircuitExpressionTypeContext) {
-                    diagnostics.reportError("Transformers are not supported yet", span)
+                    diagnostics.reportError(ResolverDiagnosticKind.UnsupportedTransformer, span)
                     return ErrorCircuitNodeExpressionNode(span, "unsupported transformer")
                 }
 
@@ -93,7 +94,7 @@ class CircuitNodeExpressionScope(
                     )
                     is ErrorCircuitNodeExpressionNode -> circuitExpressionType
                     else -> {
-                        diagnostics.reportError("'${identifier.value}' cannot be declared with this type", span)
+                        diagnostics.reportError(ResolverDiagnosticKind.InvalidDeclarationType(identifier.value), span)
                         ErrorCircuitNodeExpressionNode(span, "invalid declaration type")
                     }
                 }
@@ -120,7 +121,7 @@ class LoneCircuitExpressionScope(
             is CSTParser.MultiplicaitonExpressionContext, is CSTParser.AdditionExpressionContext,
             is CSTParser.RelationalExpressionContext, is CSTParser.EqualityExpressionContext,
             is CSTParser.LogicalAndExpressionContext, is CSTParser.LogicalOrExpressionContext -> {
-                diagnostics.reportError("Expected a circuit expression, got a value expression", span)
+                diagnostics.reportError(ResolverDiagnosticKind.ExpectedCircuitExpressionGotValueExpression, span)
                 ErrorCircuitNodeExpressionNode(span, "expected circuit expression")
             }
 
@@ -135,14 +136,14 @@ class LoneCircuitExpressionScope(
                     is DeclaredInterfaceCircuitExpressionNode,
                     is RecordInterfaceConstructorExpressionNode,
                     is AnonymousGenericFunctionCircuitExpressionNode -> {
-                        diagnostics.reportError("Unexpected accessor on ${accessed::class.simpleName}", span)
+                        diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorOnCircuitExpression(accessed::class.simpleName ?: "expression"), span)
                         ErrorCircuitNodeExpressionNode(span, "unexpected accessor")
                     }
 
                     is AnonymousInterfaceCircuitExpressionNode -> {
                         val accessor = body.accessor()!!
                         if (accessor !is CSTParser.VectorItemAccessorContext) {
-                            diagnostics.reportError("Unexpected accessor on an interface expression", span)
+                            diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorOnAnonymousInterface, span)
                             return ErrorCircuitNodeExpressionNode(span, "unexpected accessor")
                         }
 
@@ -160,7 +161,7 @@ class LoneCircuitExpressionScope(
 
                     is ReferenceCircuitExpressionNode -> {
                         if (accessed.multipleAccess != null) {
-                            diagnostics.reportError("Unexpected access operation on a slice - not yet supported", span)
+                            diagnostics.reportError(ResolverDiagnosticKind.UnsupportedSliceAccess, span)
                             return ErrorCircuitNodeExpressionNode(span, "access on slice not supported")
                         }
 
@@ -192,7 +193,7 @@ class LoneCircuitExpressionScope(
                     }
 
                     is ProtocolAccessorCircuitExpressionNode -> {
-                        diagnostics.reportError("Protocol accessors are not supported yet", span)
+                        diagnostics.reportError(ResolverDiagnosticKind.UnsupportedProtocolAccessor, span)
                         ErrorCircuitNodeExpressionNode(span, "protocol accessors not supported")
                     }
                 }
@@ -205,7 +206,7 @@ class LoneCircuitExpressionScope(
                 when (val referencedNode = resolve(identifier)) {
                     is ResolvedSymbol.CircuitNode, is ResolvedSymbol.FunctionIO -> {
                         if (atom.parameterValues() != null) {
-                            diagnostics.reportError("Unexpected parameters for '${identifier.text}' in circuit node expression", span)
+                            diagnostics.reportError(ResolverDiagnosticKind.UnexpectedCircuitNodeParameters(identifier.text!!), span)
                             return ErrorCircuitNodeExpressionNode(span, "unexpected parameters")
                         }
 
@@ -244,7 +245,7 @@ class LoneCircuitExpressionScope(
                             )
                         } else {
                             if (atom.parameterValues() != null) {
-                                diagnostics.reportError("Unexpected parameters for '${identifier.text}' in circuit node expression", span)
+                                diagnostics.reportError(ResolverDiagnosticKind.UnexpectedCircuitNodeParameters(identifier.text!!), span)
                                 return ErrorCircuitNodeExpressionNode(span, "unexpected parameters")
                             }
 

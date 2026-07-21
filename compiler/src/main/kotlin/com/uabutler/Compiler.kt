@@ -116,7 +116,7 @@ object Compiler {
 
         return diagnostics.map { diagnostic ->
             if (diagnostic.span.startLine - offset <= 0) {
-                diagnostic.copy(message = "${diagnostic.message} (this location is inside the prepended standard library, not your source - if you did not modify the standard library, this is likely a compiler bug; please contact a TA)")
+                diagnostic.copy(note = "this location is inside the prepended standard library, not your source - if you did not modify the standard library, this is likely a compiler bug; please contact a TA")
             } else {
                 diagnostic.shiftedLines(-offset)
             }

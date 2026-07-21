@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.staticexpressions.*
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import java.math.BigInteger
 
 object StaticExpressionEvaluator {
@@ -43,13 +44,16 @@ object StaticExpressionEvaluator {
                 val identifiedValue = try {
                     context[e.identifier.value]!!
                 } catch (_: NullPointerException) {
-                    throw BuilderDiagnosticException("Unable to find value for ${e.identifier.value}", e.span)
+                    throw BuilderDiagnosticException(BuilderDiagnosticKind.UnableToFindStaticExpressionValue(e.identifier.value), e.span)
                 }
 
                 if (identifiedValue is IntegerParameterValue)
                     identifiedValue.value
                 else
-                    throw BuilderDiagnosticException("Parameter ${e.identifier.value} does not have integer type: $identifiedValue", e.span)
+                    throw BuilderDiagnosticException(
+                        BuilderDiagnosticKind.StaticExpressionParameterNotInteger(e.identifier.value, identifiedValue.toString()),
+                        e.span,
+                    )
             }
             is ErrorStaticExpressionNode -> throw IllegalStateException(
                 "Reached NodeBuilder with an error node (${e.message}) that should have been caught by semantic analysis - this is a compiler bug"

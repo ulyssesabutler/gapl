@@ -1,10 +1,12 @@
 package diagnostics
 
+import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.util.Logger
 import diagnostics.DiagnosticsTestUtil.compileExpectingDiagnostics
 import org.junit.jupiter.api.BeforeEach
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 class NetlistBuilderDiagnosticsTest {
 
@@ -28,10 +30,10 @@ class NetlistBuilderDiagnosticsTest {
         val diagnostics = compileExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
-        assertEquals(
-            "Unable to match generic parameter values for double: expected 1 generic parameter(s), got 0",
-            diagnostics.first().message,
-        )
+        val kind = assertIs<BuilderDiagnosticKind.GenericParameterArityMismatch>(diagnostics.first().kind)
+        assertEquals("double", kind.functionName)
+        assertEquals(1, kind.expected)
+        assertEquals(0, kind.actual)
     }
 
     @Test
@@ -49,9 +51,9 @@ class NetlistBuilderDiagnosticsTest {
         val diagnostics = compileExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
-        assertEquals(
-            "Unable to match generic parameter values for double: expected 1 generic parameter(s), got 2",
-            diagnostics.first().message,
-        )
+        val kind = assertIs<BuilderDiagnosticKind.GenericParameterArityMismatch>(diagnostics.first().kind)
+        assertEquals("double", kind.functionName)
+        assertEquals(1, kind.expected)
+        assertEquals(2, kind.actual)
     }
 }
