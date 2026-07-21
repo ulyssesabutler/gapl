@@ -124,7 +124,7 @@ fun main(args : Array<String>) {
             }
         }
     } else {
-        Logger.setLevel(Logger.Level.INFO)
+        Logger.setLevel(Logger.Level.ERROR)
     }
 
     if (parsedArgs.containsKey("-h")) {
