@@ -200,10 +200,10 @@ class NodeBuilder(
      */
     private fun processCircuitConnectionExpressionNode(
         connectionExpression: CircuitConnectionExpressionNode,
-    ) {
-        connectionExpression.connectedExpression
-            .map { processCircuitGroupExpressionNode(it) }
-            .zipWithNext()
+    ): IOGroups {
+        val groups = connectionExpression.connectedExpression.map { processCircuitGroupExpressionNode(it) }
+
+        groups.zipWithNext()
             .map { (previous, current) -> previous.outputs to current.inputs }
             .forEach { (previousOutputs, currentInputs) ->
                 createOutputWireVectorGroupConnections(
@@ -211,6 +211,13 @@ class NodeBuilder(
                     currentInputs = currentInputs,
                 )
             }
+
+        // A grouped (parenthesized) circuit expression is used as a single node elsewhere, so it
+        // needs to expose its own boundary I/O: the first group's inputs and the last group's outputs.
+        return IOGroups(
+            inputs = groups.first().inputs,
+            outputs = groups.last().outputs,
+        )
     }
 
     private fun processCircuitGroupExpressionNode(
@@ -416,7 +423,9 @@ class NodeBuilder(
 
             is RecordInterfaceConstructorExpressionNode -> TODO()
 
-            is CircuitExpressionNodeCircuitExpression -> TODO()
+            is CircuitExpressionNodeCircuitExpression -> {
+                processCircuitConnectionExpressionNode(nodeExpression.expression as CircuitConnectionExpressionNode)
+            }
 
             is ErrorCircuitNodeExpressionNode -> throw IllegalStateException(
                 "Reached NodeBuilder with an error node (${nodeExpression.message}) that should have been caught by semantic analysis - this is a compiler bug"
