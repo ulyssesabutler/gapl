@@ -4,11 +4,7 @@ import com.uabutler.ast.node.*
 
 sealed interface InterfaceExpressionNode: PersistentNode
 
-class WireInterfaceExpressionNode: InterfaceExpressionNode {
-    override fun toString(): String = WireInterfaceExpressionNode::class.java.simpleName
-    override fun equals(other: Any?) = other is WireInterfaceExpressionNode
-    override fun hashCode() = javaClass.hashCode()
-}
+data object WireInterfaceExpressionNode: InterfaceExpressionNode
 
 data class DefinedInterfaceExpressionNode(
     val interfaceIdentifier: IdentifierNode,

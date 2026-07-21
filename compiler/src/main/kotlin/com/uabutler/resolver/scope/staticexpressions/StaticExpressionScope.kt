@@ -55,9 +55,9 @@ class StaticExpressionScope(
                 IdentifierStaticExpressionNode(staticExpression.atom.identifier.toIdentifier())
             }
 
-            is CSTTrueExpression -> TrueStaticExpressionNode()
+            is CSTTrueExpression -> TrueStaticExpressionNode
 
-            is CSTFalseExpression -> FalseStaticExpressionNode()
+            is CSTFalseExpression -> FalseStaticExpressionNode
 
             is CSTIntLiteralExpression -> IntegerLiteralStaticExpressionNode(IntegerLiteralNode(staticExpression.value))
 

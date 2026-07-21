@@ -14,7 +14,7 @@ class FunctionIOScope(
 
     fun ast(): FunctionIONode {
         val identifier = functionIO.declaredIdentifier.toIdentifier()
-        val interfaceType = DefaultInterfaceTypeNode()
+        val interfaceType = DefaultInterfaceTypeNode
         val interfaceExpression = InterfaceExpressionScope(this, functionIO.interfaceType).ast()
 
         return FunctionIONode(identifier, interfaceType, interfaceExpression)

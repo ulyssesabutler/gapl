@@ -6,17 +6,9 @@ import com.uabutler.ast.node.PersistentNode
 
 sealed interface StaticExpressionNode: PersistentNode
 
-class TrueStaticExpressionNode: StaticExpressionNode {
-    override fun toString(): String = TrueStaticExpressionNode::class.java.simpleName
-    override fun equals(other: Any?) = other is TrueStaticExpressionNode
-    override fun hashCode() = javaClass.hashCode()
-}
+data object TrueStaticExpressionNode: StaticExpressionNode
 
-class FalseStaticExpressionNode: StaticExpressionNode {
-    override fun toString(): String = FalseStaticExpressionNode::class.java.simpleName
-    override fun equals(other: Any?) = other is FalseStaticExpressionNode
-    override fun hashCode() = javaClass.hashCode()
-}
+data object FalseStaticExpressionNode: StaticExpressionNode
 
 data class IntegerLiteralStaticExpressionNode(
     val integer: IntegerLiteralNode,

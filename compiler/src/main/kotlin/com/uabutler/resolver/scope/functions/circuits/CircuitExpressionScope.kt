@@ -239,7 +239,7 @@ class LoneCircuitExpressionScope(
                     }
                     is CSTInterfaceDefinition -> {
                         AnonymousInterfaceCircuitExpressionNode(
-                            interfaceType = DefaultInterfaceTypeNode(),
+                            interfaceType = DefaultInterfaceTypeNode,
                             type = InterfaceExpressionScope(this, body).ast(),
                         )
                     }
@@ -256,7 +256,7 @@ class LoneCircuitExpressionScope(
                     is CSTParameterDefinition -> {
                         if (referencedNode.type is CSTInterfaceParameterDefinitionType) {
                             AnonymousInterfaceCircuitExpressionNode(
-                                interfaceType = DefaultInterfaceTypeNode(),
+                                interfaceType = DefaultInterfaceTypeNode,
                                 type = InterfaceExpressionScope(this, body).ast(),
                             )
                         } else {
@@ -277,8 +277,8 @@ class LoneCircuitExpressionScope(
 
             CSTWireExpression -> {
                 return AnonymousInterfaceCircuitExpressionNode(
-                    interfaceType = DefaultInterfaceTypeNode(),
-                    type = WireInterfaceExpressionNode(),
+                    interfaceType = DefaultInterfaceTypeNode,
+                    type = WireInterfaceExpressionNode,
                 )
             }
         }

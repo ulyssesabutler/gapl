@@ -43,7 +43,7 @@ class InterfaceExpressionScope(
 
     fun ast(): InterfaceExpressionNode {
         return when (interfaceExpression) {
-            is CSTWireExpression -> WireInterfaceExpressionNode()
+            is CSTWireExpression -> WireInterfaceExpressionNode
 
             is CSTAccessorExpression -> {
                 val vector = interfaceExpression.accessor
