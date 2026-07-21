@@ -6,11 +6,8 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
         override val message get() = "Unable to find value for $identifierText"
     }
 
-    data class StaticExpressionParameterNotInteger(
-        val identifierText: String,
-        val actualValueDescription: String,
-    ) : BuilderDiagnosticKind {
-        override val message get() = "Parameter $identifierText does not have integer type: $actualValueDescription"
+    data class StaticExpressionParameterNotInteger(val identifierText: String) : BuilderDiagnosticKind {
+        override val message get() = "Parameter '$identifierText' is a function, not an integer, and cannot be used in a static expression"
     }
 
     data class WireCountMismatch(

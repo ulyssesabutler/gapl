@@ -50,8 +50,9 @@ sealed interface ResolverDiagnosticKind : DiagnosticKind {
         override val message get() = "Expected a circuit expression, got a value expression"
     }
 
-    data class UnexpectedAccessorOnCircuitExpression(val kindDescription: String) : ResolverDiagnosticKind {
-        override val message get() = "Unexpected accessor on $kindDescription"
+    data object UnexpectedAccessorOnCircuitExpression : ResolverDiagnosticKind {
+        override val message get() =
+            "Cannot use an accessor ('.', '[i]', or '[a:b]') here - accessors can only be applied to a circuit node reference or an interface expression"
     }
 
     data object UnexpectedAccessorOnAnonymousInterface : ResolverDiagnosticKind {

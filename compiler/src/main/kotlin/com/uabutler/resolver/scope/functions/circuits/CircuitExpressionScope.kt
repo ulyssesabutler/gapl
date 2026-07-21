@@ -136,7 +136,7 @@ class LoneCircuitExpressionScope(
                     is DeclaredInterfaceCircuitExpressionNode,
                     is RecordInterfaceConstructorExpressionNode,
                     is AnonymousGenericFunctionCircuitExpressionNode -> {
-                        diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorOnCircuitExpression(accessed::class.simpleName ?: "expression"), span)
+                        diagnostics.reportError(ResolverDiagnosticKind.UnexpectedAccessorOnCircuitExpression, span)
                         ErrorCircuitNodeExpressionNode(span, "unexpected accessor")
                     }
 

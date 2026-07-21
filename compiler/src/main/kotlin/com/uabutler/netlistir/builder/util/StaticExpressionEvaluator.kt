@@ -51,7 +51,7 @@ object StaticExpressionEvaluator {
                     identifiedValue.value
                 else
                     throw BuilderDiagnosticException(
-                        BuilderDiagnosticKind.StaticExpressionParameterNotInteger(e.identifier.value, identifiedValue.toString()),
+                        BuilderDiagnosticKind.StaticExpressionParameterNotInteger(e.identifier.value),
                         e.span,
                     )
             }

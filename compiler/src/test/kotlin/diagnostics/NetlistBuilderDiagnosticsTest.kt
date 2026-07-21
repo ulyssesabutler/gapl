@@ -56,4 +56,23 @@ class NetlistBuilderDiagnosticsTest {
         assertEquals(1, kind.expected)
         assertEquals(2, kind.actual)
     }
+
+    @Test
+    fun `function-typed generic parameter used as a vector bound reports a diagnostic`() {
+        val gapl = """
+            function bad(op: wire => wire) i: wire[op] => o: wire {
+                i[0] => o;
+            }
+
+            function top() i: wire => o: wire {
+                i => bad(register(wire)) => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.StaticExpressionParameterNotInteger>(diagnostics.first().kind)
+        assertEquals("op", kind.identifierText)
+    }
 }
