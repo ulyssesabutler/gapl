@@ -8,6 +8,12 @@ object GenericValueMatcher {
         genericInterfaceDefinitionNodes: List<GenericInterfaceDefinitionNode>,
         genericInterfaceValues: List<InterfaceStructure>,
     ): Map<String, InterfaceStructure> {
+        if (genericInterfaceValues.size != genericInterfaceDefinitionNodes.size) {
+            throw IllegalArgumentException(
+                "expected ${genericInterfaceDefinitionNodes.size} generic interface(s), got ${genericInterfaceValues.size}"
+            )
+        }
+
         return genericInterfaceDefinitionNodes
             .mapIndexed { index, it -> it.identifier.value to genericInterfaceValues[index] }
             .associate { it }
@@ -17,6 +23,12 @@ object GenericValueMatcher {
         genericParameterDefinitionNodes: List<GenericParameterDefinitionNode>,
         genericParameterValues: List<ParameterValue<*>>,
     ): Map<String, ParameterValue<*>> {
+        if (genericParameterValues.size != genericParameterDefinitionNodes.size) {
+            throw IllegalArgumentException(
+                "expected ${genericParameterDefinitionNodes.size} generic parameter(s), got ${genericParameterValues.size}"
+            )
+        }
+
         return genericParameterDefinitionNodes
             .mapIndexed { index, it -> it.identifier.value to genericParameterValues[index] }
             .associate { it }
