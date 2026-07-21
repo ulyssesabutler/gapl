@@ -42,7 +42,11 @@ sealed interface ParameterValue<T> {
                 }
 
                 is FunctionReferenceGenericParameterValueNode -> {
-                    parameterValuesContext[node.functionIdentifier.value]!!
+                    try {
+                        parameterValuesContext[node.functionIdentifier.value]!!
+                    } catch (_: NullPointerException) {
+                        throw BuilderDiagnosticException("Unable to find function reference '${node.functionIdentifier.value}'", node.span)
+                    }
                 }
 
                 is ErrorGenericParameterValueNode -> throw IllegalStateException(

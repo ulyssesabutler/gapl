@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
+import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.util.InterfaceType
@@ -28,31 +29,32 @@ class ModuleInstantiationTracker(
         val genericParameterValues: Map<String, ParameterValue<*>>,
 
         var module: MutableModule?,
+        var failed: Boolean = false,
     )
 
     // This is the main map we use to store all the modules while they're being built
     private val modules = mutableMapOf<Module.Invocation, ModuleInstantiation>()
 
     // Given a module instantiation, add that module to the set of modules
-    fun visitModule(instantiationData: Module.Invocation): ModuleInstantiation {
+    fun visitModule(instantiationData: Module.Invocation, callSiteSpan: SourceSpan): ModuleInstantiation {
         modules[instantiationData]?.let { return it }
 
         val astNode = try {
             functionNodes[instantiationData.gaplFunctionName]!!
         } catch (e: NullPointerException) {
-            throw Exception("Unable to locate function: ${instantiationData.gaplFunctionName}")
+            throw BuilderDiagnosticException("Unable to locate function: ${instantiationData.gaplFunctionName}", callSiteSpan)
         }
 
         // Match the provided values with the local identifier
         val interfaceValues = try {
             GenericValueMatcher.getInterfaceValues(astNode.genericInterfaces, instantiationData.interfaces)
         } catch (e: Exception) {
-            throw Exception("Unable to match generic interface values for ${instantiationData.gaplFunctionName}: ${e.message}")
+            throw BuilderDiagnosticException("Unable to match generic interface values for ${instantiationData.gaplFunctionName}: ${e.message}", callSiteSpan)
         }
         val parameterValues = try {
             GenericValueMatcher.getParameterValues(astNode.genericParameters, instantiationData.parameters)
         } catch (e: Exception) {
-            throw Exception("Unable to match generic parameter values for ${instantiationData.gaplFunctionName}: ${e.message}")
+            throw BuilderDiagnosticException("Unable to match generic parameter values for ${instantiationData.gaplFunctionName}: ${e.message}", callSiteSpan)
         }
 
         val input = astNode.inputFunctionIO.map {
@@ -86,10 +88,14 @@ class ModuleInstantiationTracker(
         return moduleInstantiation
     }
 
-    fun getUnbuiltModules() = modules.filter { it.value.module == null }.values
+    fun getUnbuiltModules() = modules.filter { it.value.module == null && !it.value.failed }.values
 
     fun addBuiltModule(instantiation: Module.Invocation, module: MutableModule) {
         modules[instantiation]!!.module = module
+    }
+
+    fun markFailed(instantiation: Module.Invocation) {
+        modules[instantiation]!!.failed = true
     }
 
     fun getModules() = modules.values.mapNotNull { it.module }.toList()

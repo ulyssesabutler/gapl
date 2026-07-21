@@ -138,7 +138,13 @@ object Compiler {
             throw DiagnosticsException(forUserSource(analysis.diagnostics, options))
         }
 
-        val initialNetlistModules = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
+        val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
+
+        if (netlistResult.diagnostics.isNotEmpty()) {
+            throw DiagnosticsException(forUserSource(netlistResult.diagnostics, options))
+        }
+
+        val initialNetlistModules = netlistResult.modules
 
         val transformedModules = Logger.run("Transformers", Logger.Level.INFO) { runNetlistTransformers(initialNetlistModules, options) }
 

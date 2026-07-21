@@ -21,6 +21,7 @@ class ProgramContext(program: ProgramNode) {
      */
 
     private fun buildDefinedInterface(
+        node: InterfaceExpressionNode,
         definedInterfaceIdentifier: String,
 
         genericInterfaceValues: List<InterfaceStructure>,
@@ -29,7 +30,7 @@ class ProgramContext(program: ProgramNode) {
         val interfaceDefinition = try {
             interfaceDefinitions[definedInterfaceIdentifier]!!.node
         } catch (_: NullPointerException) {
-            throw Exception("Cannot find interface:  $definedInterfaceIdentifier")
+            throw BuilderDiagnosticException("Cannot find interface: $definedInterfaceIdentifier", node.span)
         }
 
         // Match the provided values with the local identifier
@@ -87,10 +88,11 @@ class ProgramContext(program: ProgramNode) {
                 try {
                     interfaceValuesContext[node.interfaceIdentifier.value]!!
                 } catch (_: NullPointerException) {
-                    throw Exception("Cannot find interface value: ${node.interfaceIdentifier.value}")
+                    throw BuilderDiagnosticException("Cannot find interface value: ${node.interfaceIdentifier.value}", node.span)
                 }
             }
             is DefinedInterfaceExpressionNode -> buildDefinedInterface(
+                node = node,
                 definedInterfaceIdentifier = node.interfaceIdentifier.value,
                 genericInterfaceValues = node.genericInterfaces.map {
                     buildInterfaceWithContext(

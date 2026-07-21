@@ -2,6 +2,7 @@ package com.uabutler.netlistir.builder
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.circuits.*
+import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.netlistir.util.PredefinedFunction
@@ -209,6 +210,7 @@ class NodeBuilder(
                 createOutputWireVectorGroupConnections(
                     previousOutputs = previousOutputs,
                     currentInputs = currentInputs,
+                    connectionExpression = connectionExpression,
                 )
             }
 
@@ -235,6 +237,7 @@ class NodeBuilder(
     private fun createOutputWireVectorGroupConnections(
         previousOutputs: List<WireVectorGroup.Projection<OutputWireVector>>,
         currentInputs: List<WireVectorGroup.Projection<InputWireVector>>,
+        connectionExpression: CircuitConnectionExpressionNode,
     ) {
         // TODO: This is a very lazy, overly simplistic validation.
         //   There are definition interface structures that will match here that shouldn't actually match.
@@ -247,7 +250,10 @@ class NodeBuilder(
                 val previousOutputNodeName = previousOutputs.first().sourceGroup.parentNode.name()
                 val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.name()
 
-                throw Exception("Mismatch in $gaplModuleName of $previousOutputNodeName ($s1) to $currentInputNodeName ($s2)")
+                throw BuilderDiagnosticException(
+                    "Mismatch in $gaplModuleName of $previousOutputNodeName ($s1) to $currentInputNodeName ($s2)",
+                    connectionExpression.span,
+                )
             }
         }
 
@@ -344,7 +350,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
+                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -358,10 +364,10 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw Exception("Expected module instantiation")
+                    throw BuilderDiagnosticException("Expected module instantiation", nodeExpression.span)
                 }
 
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData)
+                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -376,7 +382,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
+                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -390,10 +396,10 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw Exception("Expected module instantiation")
+                    throw BuilderDiagnosticException("Expected module instantiation", nodeExpression.span)
                 }
 
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData)
+                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -405,7 +411,10 @@ class NodeBuilder(
                 val referencedNode = try {
                     netlistNodes[nodeExpression.identifier.value]!!
                 } catch (_: NullPointerException) {
-                    throw Exception("Unable to find node with identifier ${nodeExpression.identifier.value}")
+                    throw BuilderDiagnosticException(
+                        "Unable to find node with identifier ${nodeExpression.identifier.value}",
+                        nodeExpression.span,
+                    )
                 }
 
                 val projectionInformation = getProjectionValues(nodeExpression.singleAccesses, nodeExpression.multipleAccess)
@@ -508,6 +517,7 @@ class NodeBuilder(
     private fun createNodeFromFunctionInvocation(
         invocationName: String,
         invocation: Module.Invocation,
+        callSiteSpan: SourceSpan,
     ): BodyNode {
         // Step 1: Search predefined functions. If there is no predefined function with this name, search defined functions
         val matchingPredefinedFunction = PredefinedFunction.search(invocation)
@@ -526,7 +536,7 @@ class NodeBuilder(
             )
         } else {
             // Find the matching defined function. This will also add it to the queue of modules to be built, if it hasn't been built yet.
-            val instantiation = moduleInstantiationTracker.visitModule(invocation)
+            val instantiation = moduleInstantiationTracker.visitModule(invocation, callSiteSpan)
 
             createModuleInvocationNode(
                 identifier = invocationName,

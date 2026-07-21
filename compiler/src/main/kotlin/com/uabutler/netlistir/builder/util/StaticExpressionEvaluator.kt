@@ -43,13 +43,13 @@ object StaticExpressionEvaluator {
                 val identifiedValue = try {
                     context[e.identifier.value]!!
                 } catch (_: NullPointerException) {
-                    throw Exception("Unable to find value for ${e.identifier.value}")
+                    throw BuilderDiagnosticException("Unable to find value for ${e.identifier.value}", e.span)
                 }
 
                 if (identifiedValue is IntegerParameterValue)
                     identifiedValue.value
                 else
-                    throw Exception("Parameter ${e.identifier.value} does not have integer type: $identifiedValue")
+                    throw BuilderDiagnosticException("Parameter ${e.identifier.value} does not have integer type: $identifiedValue", e.span)
             }
             is ErrorStaticExpressionNode -> throw IllegalStateException(
                 "Reached NodeBuilder with an error node (${e.message}) that should have been caught by semantic analysis - this is a compiler bug"

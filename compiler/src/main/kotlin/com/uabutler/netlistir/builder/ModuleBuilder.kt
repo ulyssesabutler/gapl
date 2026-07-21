@@ -1,6 +1,9 @@
 package com.uabutler.netlistir.builder
 
 import com.uabutler.ast.node.ProgramNode
+import com.uabutler.diagnostics.Diagnostic
+import com.uabutler.diagnostics.DiagnosticsCollector
+import com.uabutler.netlistir.builder.util.BuilderDiagnosticException
 import com.uabutler.netlistir.builder.util.ModuleInstantiationTracker
 import com.uabutler.netlistir.builder.util.ProgramContext
 import com.uabutler.netlistir.netlist.Module
@@ -17,8 +20,14 @@ class ModuleBuilder(val program: ProgramNode) {
         functionNodes = functionNodes,
     )
 
+    private val diagnosticsCollector = DiagnosticsCollector()
 
-    fun buildAllModules(): List<MutableModule> {
+    data class Result(
+        val modules: List<MutableModule>,
+        val diagnostics: List<Diagnostic>,
+    )
+
+    fun buildAllModules(): Result {
         /* First, add all concrete modules to the set of modules. These are modules that don't have any
          * generic parameters. These modules can be built without any additional information or context. To build
          * any other module, we need to know the actual parameter values.
@@ -26,13 +35,18 @@ class ModuleBuilder(val program: ProgramNode) {
         program.functions
             .filter { it.genericInterfaces.isEmpty() && it.genericParameters.isEmpty() }
             .forEach {
-                moduleInstantiationTracker.visitModule(
-                    Module.Invocation(
-                        gaplFunctionName = it.identifier.value,
-                        interfaces = emptyList(),
-                        parameters = emptyList(),
+                try {
+                    moduleInstantiationTracker.visitModule(
+                        Module.Invocation(
+                            gaplFunctionName = it.identifier.value,
+                            interfaces = emptyList(),
+                            parameters = emptyList(),
+                        ),
+                        it.span,
                     )
-                )
+                } catch (e: BuilderDiagnosticException) {
+                    diagnosticsCollector.report(e.diagnostic)
+                }
             }
 
         /* This loop just builds any unbuilt modules. While building those modules, we might add additional module
@@ -42,18 +56,26 @@ class ModuleBuilder(val program: ProgramNode) {
             val preLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
 
             preLoopIncompleteModules.forEach {
-                val module = buildModule(it)
+                try {
+                    val module = buildModule(it)
 
-                moduleInstantiationTracker.addBuiltModule(
-                    instantiation = it.moduleInvocation,
-                    module = module
-                )
+                    moduleInstantiationTracker.addBuiltModule(
+                        instantiation = it.moduleInvocation,
+                        module = module
+                    )
+                } catch (e: BuilderDiagnosticException) {
+                    diagnosticsCollector.report(e.diagnostic)
+                    moduleInstantiationTracker.markFailed(it.moduleInvocation)
+                }
             }
 
             val postLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
         } while (postLoopIncompleteModules.isNotEmpty())
 
-        return moduleInstantiationTracker.getModules()
+        return Result(
+            modules = moduleInstantiationTracker.getModules(),
+            diagnostics = diagnosticsCollector.diagnostics(),
+        )
     }
 
     private fun buildModule(
