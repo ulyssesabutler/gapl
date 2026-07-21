@@ -18,7 +18,7 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
         val currentCount: Int,
     ) : BuilderDiagnosticKind {
         override val message get() =
-            "Mismatch in $gaplModuleName of $previousOutputNodeName ($previousCount) to $currentInputNodeName ($currentCount)"
+            "Bit width mismatch in $gaplModuleName of $previousOutputNodeName (width of $previousCount) to $currentInputNodeName (width of $currentCount)"
     }
 
     data class ExpectedModuleInstantiation(val identifierText: String) : BuilderDiagnosticKind {
