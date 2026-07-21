@@ -102,9 +102,11 @@ object Compiler {
     }
 
     fun compile(gapl: String, options: Options): String {
-        val initialNetlistModules = gapl
-            .let { Logger.run("Preprocessing", Logger.Level.INFO) { preprocessor(it, options) } }
-            .let { Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(it).program() } }
+        val preprocessed = Logger.run("Preprocessing", Logger.Level.INFO) { preprocessor(gapl, options) }
+
+        val program = Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(preprocessed).program() }
+
+        val initialNetlistModules = program
             .let { Logger.run("Resolver", Logger.Level.INFO) { Resolver.cstToAst(it) } }
             .let { Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(it).buildAllModules() } }
 

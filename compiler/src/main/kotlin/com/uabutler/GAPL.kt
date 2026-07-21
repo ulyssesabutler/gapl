@@ -1,5 +1,6 @@
 package com.uabutler
 
+import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.transformer.Flattener.Mode
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
@@ -17,7 +18,13 @@ fun parseArgs(args: Array<String>): Map<String, List<String>> {
 
 fun compile(inputFiles: List<String>, outputFile: String, options: Compiler.Options) {
     val gapl = inputFiles.joinToString("\n") { File(it).readText() }
-    val verilog = Compiler.compile(gapl, options)
+
+    val verilog = try {
+        Compiler.compile(gapl, options)
+    } catch (e: DiagnosticsException) {
+        e.diagnostics.forEach { println(it) }
+        exitProcess(1)
+    }
 
     File(outputFile).writeText(verilog)
 }

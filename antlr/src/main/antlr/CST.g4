@@ -101,7 +101,7 @@ circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Com
 circuitNodeExpression:
       expression #loneCircuitExpression
     | Declare declaredIdentifier=Id Colon circuitExpressionType #declaredCircuitExpression
-    | ParenL circuitExpression ParenL #parenCircuitExpression
+    | ParenL circuitExpression ParenR #parenCircuitExpression
 ;
 
 parameterValues: ParenL (expression Comma)* expression? ParenR;
