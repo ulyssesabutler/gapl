@@ -166,10 +166,10 @@ function mix_column() column: aes_block_column => o: aes_block_column
 
 function mix_columns() i: aes_block => o: aes_block
 {
-    i[0] => mix_column(0) => o[0];
-    i[1] => mix_column(1) => o[1];
-    i[2] => mix_column(2) => o[2];
-    i[3] => mix_column(3) => o[3];
+    i[0] => mix_column() => o[0];
+    i[1] => mix_column() => o[1];
+    i[2] => mix_column() => o[2];
+    i[3] => mix_column() => o[3];
 }
 
 function aes_encrypt_round(round_number: integer) i: aes_block, previous_round_key: aes_block => o: aes_block, current_round_key: aes_block
