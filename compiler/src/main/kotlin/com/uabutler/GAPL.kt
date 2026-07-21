@@ -25,6 +25,15 @@ fun compile(inputFiles: List<String>, outputFile: String, options: Compiler.Opti
     } catch (e: DiagnosticsException) {
         e.diagnostics.forEach { println(DiagnosticFormatter.format(it, gapl)) }
         exitProcess(1)
+    } catch (e: Throwable) {
+        // Anything reaching here escaped the diagnostics pipeline entirely - a bug in the
+        // compiler (including unimplemented features, which throw NotImplementedError - a
+        // kotlin.Error, not an Exception), not a mistake in the student's source. The stack
+        // trace goes to the log (always visible - ERROR is the highest level) rather than
+        // the primary message.
+        println("Internal compiler error: this is a bug in the compiler, not your code. Please contact a TA.")
+        Logger.error { e.stackTraceToString() }
+        exitProcess(1)
     }
 
     File(outputFile).writeText(verilog)
