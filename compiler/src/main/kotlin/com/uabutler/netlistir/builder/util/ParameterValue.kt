@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder.util
 
+import com.uabutler.ast.node.ErrorGenericParameterValueNode
 import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
 import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
@@ -43,6 +44,10 @@ sealed interface ParameterValue<T> {
                 is FunctionReferenceGenericParameterValueNode -> {
                     parameterValuesContext[node.functionIdentifier.value]!!
                 }
+
+                is ErrorGenericParameterValueNode -> throw IllegalStateException(
+                    "Reached NodeBuilder with an error node (${node.message}) that should have been caught by semantic analysis - this is a compiler bug"
+                )
             }
         }
     }

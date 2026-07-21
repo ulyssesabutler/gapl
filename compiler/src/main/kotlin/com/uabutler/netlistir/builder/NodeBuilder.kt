@@ -417,6 +417,10 @@ class NodeBuilder(
             is RecordInterfaceConstructorExpressionNode -> TODO()
 
             is CircuitExpressionNodeCircuitExpression -> TODO()
+
+            is ErrorCircuitNodeExpressionNode -> throw IllegalStateException(
+                "Reached NodeBuilder with an error node (${nodeExpression.message}) that should have been caught by semantic analysis - this is a compiler bug"
+            )
         }
     }
 

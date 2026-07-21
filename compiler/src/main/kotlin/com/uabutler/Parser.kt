@@ -1,8 +1,5 @@
 package com.uabutler
 
-import com.uabutler.cst.visitor.CSTProgramVisitor
-import com.uabutler.cst.visitor.functions.CSTFunctionDefinitionVisitor
-import com.uabutler.cst.visitor.interfaces.CSTInterfaceDefinitionVisitor
 import com.uabutler.diagnostics.DiagnosticsCollector
 import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.diagnostics.ParserErrorListener
@@ -34,19 +31,19 @@ class Parser private constructor(private val characterStream: CharStream) {
         fun fromString(input: String) = Parser(CharStreams.fromString(input))
     }
 
-    // The hand-rolled CST visitors assume a well-formed parse tree, so they must never run
-    // on a tree ANTLR's error recovery produced from invalid input - guard on diagnostics
-    // right after each raw parse, before handing the tree off to the visitor.
+    // The analyzer assumes a well-formed parse tree, so it must never run on a tree ANTLR's
+    // error recovery produced from invalid input - guard on diagnostics right after each raw
+    // parse, before handing the tree off for analysis.
     private fun <T> guarded(parse: () -> T): T {
         val tree = parse()
         if (diagnostics.hasErrors()) throw DiagnosticsException(diagnostics.diagnostics())
         return tree
     }
 
-    fun program() = CSTProgramVisitor.visitProgram(guarded { parseTree.value.program() })
+    fun program() = guarded { parseTree.value.program() }
 
-    fun functionDefinition() = CSTFunctionDefinitionVisitor.visitFunctionDefinition(guarded { parseTree.value.functionDefinition() })
+    fun functionDefinition() = guarded { parseTree.value.functionDefinition() }
 
-    fun interfaceDefinition() = CSTInterfaceDefinitionVisitor.visitInterfaceDefinition(guarded { parseTree.value.interfaceDefinition() })
+    fun interfaceDefinition() = guarded { parseTree.value.interfaceDefinition() }
 
 }

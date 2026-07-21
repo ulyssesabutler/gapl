@@ -101,6 +101,9 @@ class ProgramContext(program: ProgramNode) {
                 },
                 genericParameterValues = node.genericParameters.map { ParameterValue.fromNode(it, this, interfaceValuesContext, parameterValuesContext) },
             )
+            is ErrorInterfaceExpressionNode -> throw IllegalStateException(
+                "Reached NodeBuilder with an error node (${node.message}) that should have been caught by semantic analysis - this is a compiler bug"
+            )
         }
     }
 

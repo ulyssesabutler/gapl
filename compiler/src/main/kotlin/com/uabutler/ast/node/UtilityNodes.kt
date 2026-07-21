@@ -3,57 +3,67 @@ package com.uabutler.ast.node
 import com.uabutler.ast.node.functions.AbstractFunctionIONode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
+import com.uabutler.diagnostics.SourceSpan
 
 data class InstantiationNode(
+    override val span: SourceSpan,
     val definitionIdentifier: IdentifierNode,
     val genericInterfaces: List<GenericInterfaceValueNode>,
     val genericParameters: List<GenericParameterValueNode>,
-): PersistentNode
+): GAPLNode
 
 data class GenericInterfaceDefinitionNode(
+    override val span: SourceSpan,
     val identifier: IdentifierNode,
-): PersistentNode
+): GAPLNode
 
 data class GenericParameterDefinitionNode(
+    override val span: SourceSpan,
     val identifier: IdentifierNode,
     val type: GenericParameterTypeNode,
-): PersistentNode
-
-data class GenericInterfaceDefinitionListNode(val interfaces: List<GenericInterfaceDefinitionNode>): TemporaryNode
-data class GenericParameterDefinitionListNode(val parameters: List<GenericParameterDefinitionNode>): TemporaryNode
+): GAPLNode
 
 data class GenericInterfaceValueNode(
+    override val span: SourceSpan,
     val value: InterfaceExpressionNode,
-): PersistentNode
+): GAPLNode
 
-sealed interface GenericParameterValueNode: PersistentNode
+sealed interface GenericParameterValueNode: GAPLNode
 
 data class StaticExpressionGenericParameterValueNode(
+    override val span: SourceSpan,
     val value: StaticExpressionNode,
 ): GenericParameterValueNode
 
 data class FunctionInstantiationGenericParameterValueNode(
+    override val span: SourceSpan,
     val instantiation: InstantiationNode,
 ): GenericParameterValueNode
 
 data class FunctionReferenceGenericParameterValueNode(
+    override val span: SourceSpan,
     val functionIdentifier: IdentifierNode,
 ): GenericParameterValueNode
 
-data class GenericInterfaceValueListNode(val interfaces: List<GenericInterfaceValueNode>): TemporaryNode
-data class GenericParameterValueListNode(val parameters: List<GenericParameterValueNode>): TemporaryNode
+data class ErrorGenericParameterValueNode(
+    override val span: SourceSpan,
+    val message: String,
+): GenericParameterValueNode
 
-sealed interface GenericParameterTypeNode: PersistentNode
+sealed interface GenericParameterTypeNode: GAPLNode
 
 data class IdentifierGenericParameterTypeNode(
+    override val span: SourceSpan,
     val identifier: IdentifierNode,
 ): GenericParameterTypeNode
 
 data class FunctionGenericParameterTypeNode(
+    override val span: SourceSpan,
     val inputFunctionIO: List<AbstractFunctionIONode>,
     val outputFunctionIO: List<AbstractFunctionIONode>,
 ): GenericParameterTypeNode
 
 data class VectorBoundsNode(
+    override val span: SourceSpan,
     val boundSpecifier: StaticExpressionNode,
-): PersistentNode
+): GAPLNode

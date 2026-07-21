@@ -1,47 +1,41 @@
 package com.uabutler.resolver.scope
 
 import com.uabutler.ast.node.ProgramNode
-import com.uabutler.cst.node.CSTPersistent
-import com.uabutler.cst.node.CSTProgram
+import com.uabutler.diagnostics.DiagnosticsCollector
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.functions.FunctionDefinitionScope
 import com.uabutler.resolver.scope.interfaces.InterfaceDefinitionScope
+import com.uabutler.resolver.scope.util.declaredIdentifierToken
 
-class ProgramScope(val program: CSTProgram): Scope {
+class ProgramScope(
+    val program: CSTParser.ProgramContext,
+    override val diagnostics: DiagnosticsCollector,
+): Scope {
 
     override val parentScope: Scope? = null
 
-    private val interfaces = program.interfaceDefinitions.associateBy { it.declaredIdentifier }
-    private val functions = program.functionDefinitions.associateBy { it.declaredIdentifier }
+    private val interfaces = program.interfaceDefinition().associateBy { it.declaredIdentifierToken.text!! }
+    private val functions = program.functionDefinition().associateBy { it.declaredIdentifier!!.text!! }
 
-    private val localSymbolTable = interfaces + functions
-
-    override fun resolveLocal(name: String): CSTPersistent? {
-        return localSymbolTable[name]
+    override fun resolveLocal(name: String): ResolvedSymbol? {
+        interfaces[name]?.let { return ResolvedSymbol.Interface(it) }
+        functions[name]?.let { return ResolvedSymbol.Function(it) }
+        return null
     }
 
-    override fun resolveGlobal(name: String): CSTPersistent? {
-        return resolveLocal(name)
-    }
-
-    override fun symbols(): List<String> {
-        return buildList {
-            program.interfaceDefinitions.mapTo(this) { it.declaredIdentifier }
-            program.functionDefinitions.mapTo(this) { it.declaredIdentifier }
-        }
+    override fun symbols(): List<DeclaredSymbol> {
+        return interfaces.values.map { DeclaredSymbol(it.declaredIdentifierToken.text!!, it.declaredIdentifierToken) } +
+            functions.values.map { DeclaredSymbol(it.declaredIdentifier!!.text!!, it.declaredIdentifier!!) }
     }
 
     fun ast(): ProgramNode {
         validateSymbols()
 
-        val interfaces = program.interfaceDefinitions
-            .map { InterfaceDefinitionScope(this, it) }
-            .map { it.ast() }
+        val interfaceNodes = program.interfaceDefinition().map { InterfaceDefinitionScope(this, it).ast() }
+        val functionNodes = program.functionDefinition().map { FunctionDefinitionScope(this, it).ast() }
 
-        val functions = program.functionDefinitions
-            .map { FunctionDefinitionScope(this, it) }
-            .map { it.ast() }
-
-        return ProgramNode(interfaces, functions)
+        return ProgramNode(SourceSpan.of(program), interfaceNodes, functionNodes)
     }
 
 }

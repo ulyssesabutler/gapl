@@ -1,12 +1,12 @@
 package com.uabutler.ast.node.functions.interfaces
 
-import com.uabutler.ast.node.PersistentNode
+import com.uabutler.ast.node.GAPLNode
+import com.uabutler.diagnostics.SourceSpan
 
-sealed interface InterfaceTypeNode: PersistentNode
+sealed interface InterfaceTypeNode: GAPLNode
 
-data object DefaultInterfaceTypeNode: InterfaceTypeNode
+data class DefaultInterfaceTypeNode(override val span: SourceSpan): InterfaceTypeNode
 
-data object StreamInterfaceTypeNode: InterfaceTypeNode
+data class StreamInterfaceTypeNode(override val span: SourceSpan): InterfaceTypeNode
 
-data object SignalInterfaceTypeNode: InterfaceTypeNode
-
+data class SignalInterfaceTypeNode(override val span: SourceSpan): InterfaceTypeNode

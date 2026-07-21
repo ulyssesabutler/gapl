@@ -4,6 +4,7 @@ import com.uabutler.ast.node.IntegerLiteralNode
 import com.uabutler.ast.node.staticexpressions.AdditionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.DivisionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.EqualsStaticExpressionNode
+import com.uabutler.ast.node.staticexpressions.ErrorStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.FalseStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.GreaterThanEqualsStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.GreaterThanStaticExpressionNode
@@ -17,113 +18,89 @@ import com.uabutler.ast.node.staticexpressions.RemainderStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.SubtractionStaticExpressionNode
 import com.uabutler.ast.node.staticexpressions.TrueStaticExpressionNode
-import com.uabutler.cst.node.expression.CSTAccessorExpression
-import com.uabutler.cst.node.expression.CSTAdditionExpression
-import com.uabutler.cst.node.expression.CSTAtomExpression
-import com.uabutler.cst.node.expression.CSTDivisionExpression
-import com.uabutler.cst.node.expression.CSTEqualsExpression
-import com.uabutler.cst.node.expression.CSTExpression
-import com.uabutler.cst.node.expression.CSTFalseExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTIntLiteralExpression
-import com.uabutler.cst.node.expression.CSTLessThanExpression
-import com.uabutler.cst.node.expression.CSTLessThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTLogicalAndExpression
-import com.uabutler.cst.node.expression.CSTLogicalOrExpression
-import com.uabutler.cst.node.expression.CSTMultiplicationExpression
-import com.uabutler.cst.node.expression.CSTNotEqualsExpression
-import com.uabutler.cst.node.expression.CSTParenthesizedExpression
-import com.uabutler.cst.node.expression.CSTRemainderExpression
-import com.uabutler.cst.node.expression.CSTSubtractionExpression
-import com.uabutler.cst.node.expression.CSTTrueExpression
-import com.uabutler.cst.node.expression.CSTWireExpression
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTLexer
+import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
+import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class StaticExpressionScope(
     parentScope: Scope,
-    val staticExpression: CSTExpression,
+    val staticExpression: CSTParser.ExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): StaticExpressionNode {
-        return when (staticExpression) {
-            is CSTAtomExpression -> {
-                if (staticExpression.atom.parameterValues.isNotEmpty())
-                    throw IllegalArgumentException("Unexpected use of ${staticExpression.atom.identifier} in static expression")
+        val span = SourceSpan.of(staticExpression)
 
-                IdentifierStaticExpressionNode(staticExpression.atom.identifier.toIdentifier())
+        fun lhs(ctx: CSTParser.ExpressionContext) = StaticExpressionScope(this, ctx).ast()
+        fun rhs(ctx: CSTParser.ExpressionContext) = StaticExpressionScope(this, ctx).ast()
+
+        return when (staticExpression) {
+            is CSTParser.AtomExpressionContext -> {
+                val atom = staticExpression.atom()!!
+
+                if (atom.parameterValues() != null) {
+                    diagnostics.reportError("Unexpected parameters for '${atom.identifier!!.text}' in static expression", span)
+                    return ErrorStaticExpressionNode(span, "unexpected parameters")
+                }
+
+                IdentifierStaticExpressionNode(span, atom.identifier!!.toIdentifierNode())
             }
 
-            is CSTTrueExpression -> TrueStaticExpressionNode
+            is CSTParser.TrueExpressionContext -> TrueStaticExpressionNode(span)
 
-            is CSTFalseExpression -> FalseStaticExpressionNode
+            is CSTParser.FalseExpressionContext -> FalseStaticExpressionNode(span)
 
-            is CSTIntLiteralExpression -> IntegerLiteralStaticExpressionNode(IntegerLiteralNode(staticExpression.value))
-
-            is CSTParenthesizedExpression -> StaticExpressionScope(this, staticExpression.expression).ast()
-
-            is CSTMultiplicationExpression -> MultiplicationStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
+            is CSTParser.LiteralExpressionContext -> IntegerLiteralStaticExpressionNode(
+                span,
+                IntegerLiteralNode(span, staticExpression.value!!.text!!.toBigInteger()),
             )
 
-            is CSTDivisionExpression -> DivisionStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.ParenExpressionContext -> StaticExpressionScope(this, staticExpression.expression()!!).ast()
 
-            is CSTRemainderExpression -> RemainderStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.MultiplicaitonExpressionContext -> when (staticExpression.op?.type) {
+                CSTLexer.Tokens.Multiply -> MultiplicationStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.Divide -> DivisionStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.Remainder -> RemainderStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                else -> throw IllegalStateException("Unexpected operator ${staticExpression.op}")
+            }
 
-            is CSTAdditionExpression -> AdditionStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.AdditionExpressionContext -> when (staticExpression.op?.type) {
+                CSTLexer.Tokens.Add -> AdditionStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.Subtract -> SubtractionStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                else -> throw IllegalStateException("Unexpected operator ${staticExpression.op}")
+            }
 
-            is CSTSubtractionExpression -> SubtractionStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.RelationalExpressionContext -> when (staticExpression.op?.type) {
+                CSTLexer.Tokens.AngleL -> LessThanStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.AngleR -> GreaterThanStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.LessThanEquals -> LessThanEqualsStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.GreaterThanEquals -> GreaterThanEqualsStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                else -> throw IllegalStateException("Unexpected operator ${staticExpression.op}")
+            }
 
-            is CSTLessThanExpression -> LessThanStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.EqualityExpressionContext -> when (staticExpression.op?.type) {
+                CSTLexer.Tokens.Equals -> EqualsStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                CSTLexer.Tokens.NotEquals -> NotEqualsStaticExpressionNode(span, lhs(staticExpression.lhs!!), rhs(staticExpression.rhs!!))
+                else -> throw IllegalStateException("Unexpected operator ${staticExpression.op}")
+            }
 
-            is CSTGreaterThanExpression -> GreaterThanStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.LogicalAndExpressionContext, is CSTParser.LogicalOrExpressionContext -> {
+                diagnostics.reportError("Logical && / || are not supported in static expressions yet", span)
+                ErrorStaticExpressionNode(span, "unsupported logical operator")
+            }
 
-            is CSTLessThanOrEqualsExpression -> LessThanEqualsStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.AccessorExpressionContext -> {
+                diagnostics.reportError("Unexpected accessor expression in static expression", span)
+                ErrorStaticExpressionNode(span, "unexpected accessor")
+            }
 
-            is CSTGreaterThanOrEqualsExpression -> GreaterThanEqualsStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
+            is CSTParser.WireExpressionContext -> {
+                diagnostics.reportError("Unexpected use of 'wire' in static expression", span)
+                ErrorStaticExpressionNode(span, "unexpected wire")
+            }
 
-            is CSTEqualsExpression -> EqualsStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
-
-            is CSTNotEqualsExpression -> NotEqualsStaticExpressionNode(
-                lhs = StaticExpressionScope(this, staticExpression.lhs).ast(),
-                rhs = StaticExpressionScope(this, staticExpression.rhs).ast(),
-            )
-
-            is CSTLogicalAndExpression -> TODO()
-
-            is CSTLogicalOrExpression -> TODO()
-
-            is CSTAccessorExpression -> throw Exception("Unexpected accessor expression in static expression")
-            CSTWireExpression -> throw Exception("Unexpected use of wire in static expression")
+            else -> throw IllegalStateException("Unexpected static expression context $staticExpression")
         }
     }
 }

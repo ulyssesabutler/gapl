@@ -51,6 +51,9 @@ object StaticExpressionEvaluator {
                 else
                     throw Exception("Parameter ${e.identifier.value} does not have integer type: $identifiedValue")
             }
+            is ErrorStaticExpressionNode -> throw IllegalStateException(
+                "Reached NodeBuilder with an error node (${e.message}) that should have been caught by semantic analysis - this is a compiler bug"
+            )
         }
     }
 }

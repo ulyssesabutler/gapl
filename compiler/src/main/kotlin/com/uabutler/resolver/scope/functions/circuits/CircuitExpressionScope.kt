@@ -13,6 +13,7 @@ import com.uabutler.ast.node.functions.circuits.CircuitNodeExpressionNode
 import com.uabutler.ast.node.functions.circuits.DeclaredFunctionCircuitExpressionNode
 import com.uabutler.ast.node.functions.circuits.DeclaredGenericFunctionCircuitExpressionNode
 import com.uabutler.ast.node.functions.circuits.DeclaredInterfaceCircuitExpressionNode
+import com.uabutler.ast.node.functions.circuits.ErrorCircuitNodeExpressionNode
 import com.uabutler.ast.node.functions.circuits.MemberAccessOperationNode
 import com.uabutler.ast.node.functions.circuits.MultipleAccessOperationNode
 import com.uabutler.ast.node.functions.circuits.ProtocolAccessorCircuitExpressionNode
@@ -22,56 +23,24 @@ import com.uabutler.ast.node.functions.circuits.SingleArrayAccessOperationNode
 import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
 import com.uabutler.ast.node.interfaces.VectorInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
-import com.uabutler.cst.node.expression.CSTAccessorExpression
-import com.uabutler.cst.node.expression.CSTAdditionExpression
-import com.uabutler.cst.node.expression.CSTAtomExpression
-import com.uabutler.cst.node.expression.CSTCircuitExpression
-import com.uabutler.cst.node.expression.CSTCircuitGroupExpression
-import com.uabutler.cst.node.expression.CSTCircuitNodeExpression
-import com.uabutler.cst.node.expression.CSTDeclaredCircuitNodeExpression
-import com.uabutler.cst.node.expression.CSTDivisionExpression
-import com.uabutler.cst.node.expression.CSTEqualsExpression
-import com.uabutler.cst.node.expression.CSTExpression
-import com.uabutler.cst.node.expression.CSTFalseExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTIntLiteralExpression
-import com.uabutler.cst.node.expression.CSTLessThanExpression
-import com.uabutler.cst.node.expression.CSTLessThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTLogicalAndExpression
-import com.uabutler.cst.node.expression.CSTLogicalOrExpression
-import com.uabutler.cst.node.expression.CSTLoneCircuitNodeExpression
-import com.uabutler.cst.node.expression.CSTMultiplicationExpression
-import com.uabutler.cst.node.expression.CSTNotEqualsExpression
-import com.uabutler.cst.node.expression.CSTParenthesesCircuitNodeExpression
-import com.uabutler.cst.node.expression.CSTParenthesizedExpression
-import com.uabutler.cst.node.expression.CSTRemainderExpression
-import com.uabutler.cst.node.expression.CSTSubtractionExpression
-import com.uabutler.cst.node.expression.CSTTrueExpression
-import com.uabutler.cst.node.expression.CSTWireExpression
-import com.uabutler.cst.node.expression.util.CSTBasicCircuitExpressionType
-import com.uabutler.cst.node.expression.util.CSTMemberAccessor
-import com.uabutler.cst.node.expression.util.CSTVectorItemAccessor
-import com.uabutler.cst.node.expression.util.CSTVectorSliceAccessor
-import com.uabutler.cst.node.functions.CSTFunctionDefinition
-import com.uabutler.cst.node.functions.CSTFunctionIO
-import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
-import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
-import com.uabutler.cst.node.util.CSTParameterDefinition
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
+import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
+import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class CircuitExpressionScope(
     parentScope: Scope,
-    val circuitExpression: CSTCircuitExpression,
+    val circuitExpression: CSTParser.CircuitExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): CircuitExpressionNode {
         return CircuitConnectionExpressionNode(
-            connectedExpression = circuitExpression.connectedGroups.map { CircuitGroupExpressionScope(this, it).ast() }
+            span = SourceSpan.of(circuitExpression),
+            connectedExpression = circuitExpression.circuitGroupExpression().map { CircuitGroupExpressionScope(this, it).ast() }
         )
     }
 
@@ -79,12 +48,13 @@ class CircuitExpressionScope(
 
 class CircuitGroupExpressionScope(
     parentScope: Scope,
-    val circuitGroupExpression: CSTCircuitGroupExpression,
+    val circuitGroupExpression: CSTParser.CircuitGroupExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): CircuitGroupExpressionNode {
         return CircuitGroupExpressionNode(
-            expressions = circuitGroupExpression.groupedNodes.map { CircuitNodeExpressionScope(this, it).ast() }
+            span = SourceSpan.of(circuitGroupExpression),
+            expressions = circuitGroupExpression.circuitNodeExpression().map { CircuitNodeExpressionScope(this, it).ast() }
         )
     }
 
@@ -92,46 +62,46 @@ class CircuitGroupExpressionScope(
 
 class CircuitNodeExpressionScope(
     parentScope: Scope,
-    val body: CSTCircuitNodeExpression,
+    val body: CSTParser.CircuitNodeExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): CircuitNodeExpressionNode {
+        val span = SourceSpan.of(body)
+
         return when (body) {
-            is CSTLoneCircuitNodeExpression -> {
-                LoneCircuitExpressionScope(this, body.expression).ast()
+            is CSTParser.LoneCircuitExpressionContext -> {
+                LoneCircuitExpressionScope(this, body.expression()!!).ast()
             }
-            is CSTDeclaredCircuitNodeExpression -> {
-                if (body.type !is CSTBasicCircuitExpressionType) TODO("Transformers unsupported")
+            is CSTParser.DeclaredCircuitExpressionContext -> {
+                val identifier = body.declaredIdentifier!!.toIdentifierNode()
+                val type = body.circuitExpressionType()
 
-                val identifier = body.declaredIdentifier.toIdentifier()
-                val circuitExpressionType = LoneCircuitExpressionScope(this, body.type.nodeType).ast()
+                if (type !is CSTParser.BasicCircuitExpressionTypeContext) {
+                    diagnostics.reportError("Transformers are not supported yet", span)
+                    return ErrorCircuitNodeExpressionNode(span, "unsupported transformer")
+                }
 
-                when (circuitExpressionType) {
+                when (val circuitExpressionType = LoneCircuitExpressionScope(this, type.expression()!!).ast()) {
                     is AnonymousFunctionCircuitExpressionNode -> DeclaredFunctionCircuitExpressionNode(
-                        identifier = identifier,
-                        instantiation = circuitExpressionType.instantiation,
+                        span, identifier, circuitExpressionType.instantiation,
                     )
                     is AnonymousGenericFunctionCircuitExpressionNode -> DeclaredGenericFunctionCircuitExpressionNode(
-                        identifier = identifier,
-                        functionIdentifier = circuitExpressionType.functionIdentifier,
+                        span, identifier, circuitExpressionType.functionIdentifier,
                     )
                     is AnonymousInterfaceCircuitExpressionNode -> DeclaredInterfaceCircuitExpressionNode(
-                        identifier = identifier,
-                        type = circuitExpressionType.type,
-                        interfaceType = circuitExpressionType.interfaceType,
+                        span, identifier, circuitExpressionType.interfaceType, circuitExpressionType.type,
                     )
-                    is CircuitExpressionNodeCircuitExpression -> TODO()
-                    is ProtocolAccessorCircuitExpressionNode -> TODO()
-                    is RecordInterfaceConstructorExpressionNode -> TODO()
-                    is ReferenceCircuitExpressionNode -> throw Exception("Attempted redeclaration of ${body.declaredIdentifier}")
-                    is DeclaredFunctionCircuitExpressionNode,
-                    is DeclaredGenericFunctionCircuitExpressionNode,
-                    is DeclaredInterfaceCircuitExpressionNode -> throw Exception("Unexpected ${circuitExpressionType::class.simpleName}")
+                    is ErrorCircuitNodeExpressionNode -> circuitExpressionType
+                    else -> {
+                        diagnostics.reportError("'${identifier.value}' cannot be declared with this type", span)
+                        ErrorCircuitNodeExpressionNode(span, "invalid declaration type")
+                    }
                 }
             }
-            is CSTParenthesesCircuitNodeExpression -> {
-                CircuitExpressionNodeCircuitExpression(CircuitExpressionScope(this, body.expression).ast())
+            is CSTParser.ParenCircuitExpressionContext -> {
+                CircuitExpressionNodeCircuitExpression(span, CircuitExpressionScope(this, body.circuitExpression()!!).ast())
             }
+            else -> throw IllegalStateException("Unexpected circuit node expression context $body")
         }
     }
 
@@ -139,148 +109,162 @@ class CircuitNodeExpressionScope(
 
 class LoneCircuitExpressionScope(
     parentScope: Scope,
-    val body: CSTExpression,
+    val body: CSTParser.ExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): CircuitNodeExpressionNode {
-        return when (body) {
-            is CSTTrueExpression, is CSTFalseExpression, is CSTIntLiteralExpression,
-            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTRemainderExpression,
-            is CSTAdditionExpression, is CSTSubtractionExpression,
-            is CSTLessThanExpression, is CSTGreaterThanExpression,
-            is CSTLessThanOrEqualsExpression, is CSTGreaterThanOrEqualsExpression,
-            is CSTEqualsExpression, is CSTNotEqualsExpression,
-            is CSTLogicalAndExpression, is CSTLogicalOrExpression -> throw Exception("Expected circuit expression, got ${body::class.simpleName}")
+        val span = SourceSpan.of(body)
 
-            is CSTAccessorExpression -> { // This is either a reference or an interface expression
-                when (val accessed = LoneCircuitExpressionScope(this, body.accessed).ast()) {
+        return when (body) {
+            is CSTParser.TrueExpressionContext, is CSTParser.FalseExpressionContext, is CSTParser.LiteralExpressionContext,
+            is CSTParser.MultiplicaitonExpressionContext, is CSTParser.AdditionExpressionContext,
+            is CSTParser.RelationalExpressionContext, is CSTParser.EqualityExpressionContext,
+            is CSTParser.LogicalAndExpressionContext, is CSTParser.LogicalOrExpressionContext -> {
+                diagnostics.reportError("Expected a circuit expression, got a value expression", span)
+                ErrorCircuitNodeExpressionNode(span, "expected circuit expression")
+            }
+
+            is CSTParser.AccessorExpressionContext -> { // This is either a reference or an interface expression
+                when (val accessed = LoneCircuitExpressionScope(this, body.expression()!!).ast()) {
+                    is ErrorCircuitNodeExpressionNode -> accessed
+
                     is AnonymousFunctionCircuitExpressionNode,
                     is CircuitExpressionNodeCircuitExpression,
                     is DeclaredFunctionCircuitExpressionNode,
                     is DeclaredGenericFunctionCircuitExpressionNode,
-                    is DeclaredInterfaceCircuitExpressionNode, // I'm pretty sure this is impossible, but I wonder if something like declare i: wire[0] would be ambiguous?
+                    is DeclaredInterfaceCircuitExpressionNode,
                     is RecordInterfaceConstructorExpressionNode,
-                    is AnonymousGenericFunctionCircuitExpressionNode -> throw Exception("Unexpected accessor on ${accessed::class.simpleName}")
+                    is AnonymousGenericFunctionCircuitExpressionNode -> {
+                        diagnostics.reportError("Unexpected accessor on ${accessed::class.simpleName}", span)
+                        ErrorCircuitNodeExpressionNode(span, "unexpected accessor")
+                    }
 
                     is AnonymousInterfaceCircuitExpressionNode -> {
-                        if (body.accessor !is CSTVectorItemAccessor) throw Exception("Unexpected accessor ${body.accessor::class.simpleName}")
+                        val accessor = body.accessor()!!
+                        if (accessor !is CSTParser.VectorItemAccessorContext) {
+                            diagnostics.reportError("Unexpected accessor on an interface expression", span)
+                            return ErrorCircuitNodeExpressionNode(span, "unexpected accessor")
+                        }
 
                         val bounds = VectorBoundsNode(
-                            boundSpecifier = StaticExpressionScope(this, body.accessor.index).ast()
+                            span = SourceSpan.of(accessor),
+                            boundSpecifier = StaticExpressionScope(this, accessor.expression()!!).ast(),
                         )
 
                         AnonymousInterfaceCircuitExpressionNode(
+                            span = span,
                             interfaceType = accessed.interfaceType,
-                            type = VectorInterfaceExpressionNode(
-                                vectoredInterface = accessed.type,
-                                boundsSpecifier = bounds,
-                            ),
+                            type = VectorInterfaceExpressionNode(span, accessed.type, bounds),
                         )
                     }
 
                     is ReferenceCircuitExpressionNode -> {
-                        if (accessed.multipleAccess != null) throw Exception("Unexpected access operation on slice, operation not yet supported")
+                        if (accessed.multipleAccess != null) {
+                            diagnostics.reportError("Unexpected access operation on a slice - not yet supported", span)
+                            return ErrorCircuitNodeExpressionNode(span, "access on slice not supported")
+                        }
 
-                        when (body.accessor) {
-                            is CSTMemberAccessor -> {
-                                val newAccessor = MemberAccessOperationNode(body.accessor.portIdentifier.toIdentifier())
-
-                                ReferenceCircuitExpressionNode(
-                                    identifier = accessed.identifier,
-                                    singleAccesses = accessed.singleAccesses + newAccessor,
-                                    multipleAccess = null,
-                                )
+                        when (val accessor = body.accessor()!!) {
+                            is CSTParser.MemberAccessorContext -> {
+                                val newAccessor = MemberAccessOperationNode(SourceSpan.of(accessor), accessor.portIdentifier!!.toIdentifierNode())
+                                ReferenceCircuitExpressionNode(span, accessed.identifier, accessed.singleAccesses + newAccessor, null)
                             }
 
-                            is CSTVectorItemAccessor -> {
+                            is CSTParser.VectorItemAccessorContext -> {
                                 val newAccessor = SingleArrayAccessOperationNode(
-                                    index = StaticExpressionScope(this, body.accessor.index).ast(),
+                                    SourceSpan.of(accessor),
+                                    StaticExpressionScope(this, accessor.expression()!!).ast(),
                                 )
-
-                                ReferenceCircuitExpressionNode(
-                                    identifier = accessed.identifier,
-                                    singleAccesses = accessed.singleAccesses + newAccessor,
-                                    multipleAccess = null,
-                                )
+                                ReferenceCircuitExpressionNode(span, accessed.identifier, accessed.singleAccesses + newAccessor, null)
                             }
 
-                            is CSTVectorSliceAccessor -> {
+                            is CSTParser.VectorSliceAccessorContext -> {
                                 val newAccessor = MultipleAccessOperationNode(
-                                    startIndex = StaticExpressionScope(this, body.accessor.start).ast(),
-                                    endIndex = StaticExpressionScope(this, body.accessor.end).ast(),
+                                    SourceSpan.of(accessor),
+                                    StaticExpressionScope(this, accessor.startIndex!!).ast(),
+                                    StaticExpressionScope(this, accessor.endIndex!!).ast(),
                                 )
-
-                                ReferenceCircuitExpressionNode(
-                                    identifier = accessed.identifier,
-                                    singleAccesses = accessed.singleAccesses,
-                                    multipleAccess = newAccessor,
-                                )
+                                ReferenceCircuitExpressionNode(span, accessed.identifier, accessed.singleAccesses, newAccessor)
                             }
+
+                            else -> throw IllegalStateException("Unexpected accessor context $accessor")
                         }
                     }
 
-                    is ProtocolAccessorCircuitExpressionNode -> TODO("Protocol accessors are not supported yet")
+                    is ProtocolAccessorCircuitExpressionNode -> {
+                        diagnostics.reportError("Protocol accessors are not supported yet", span)
+                        ErrorCircuitNodeExpressionNode(span, "protocol accessors not supported")
+                    }
                 }
             }
 
-            is CSTAtomExpression -> {
-                val referencedNode = resolve(body.atom.identifier)
+            is CSTParser.AtomExpressionContext -> {
+                val atom = body.atom()!!
+                val identifier = atom.identifier!!
 
-                when (referencedNode) {
-                    is CSTDeclaredCircuitNodeExpression, is CSTFunctionIO -> {
-                        if (body.atom.parameterValues.isNotEmpty())
-                            throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
+                when (val referencedNode = resolve(identifier)) {
+                    is ResolvedSymbol.CircuitNode, is ResolvedSymbol.FunctionIO -> {
+                        if (atom.parameterValues() != null) {
+                            diagnostics.reportError("Unexpected parameters for '${identifier.text}' in circuit node expression", span)
+                            return ErrorCircuitNodeExpressionNode(span, "unexpected parameters")
+                        }
 
-                        ReferenceCircuitExpressionNode(
-                            identifier = body.atom.identifier.toIdentifier(),
-                            singleAccesses = emptyList(),
-                            multipleAccess = null,
-                        )
+                        ReferenceCircuitExpressionNode(span, identifier.toIdentifierNode(), emptyList(), null)
                     }
-                    is CSTInterfaceDefinition -> {
+
+                    is ResolvedSymbol.Interface -> {
                         AnonymousInterfaceCircuitExpressionNode(
-                            interfaceType = DefaultInterfaceTypeNode,
+                            span = span,
+                            interfaceType = DefaultInterfaceTypeNode(span),
                             type = InterfaceExpressionScope(this, body).ast(),
                         )
                     }
-                    is CSTFunctionDefinition -> {
-                        val parameters = GenericParameterValueScope(this, body.atom.parameterValues).ast()
+
+                    is ResolvedSymbol.Function -> {
+                        val parameterValues = atom.parameterValues()?.expression() ?: emptyList()
+                        val parameters = GenericParameterValueScope(this, parameterValues).ast()
+
                         AnonymousFunctionCircuitExpressionNode(
+                            span = span,
                             instantiation = InstantiationNode(
-                                definitionIdentifier = body.atom.identifier.toIdentifier(),
+                                span = span,
+                                definitionIdentifier = identifier.toIdentifierNode(),
                                 genericInterfaces = parameters.interfaces,
                                 genericParameters = parameters.parameters,
                             )
                         )
                     }
-                    is CSTParameterDefinition -> {
-                        if (referencedNode.type is CSTInterfaceParameterDefinitionType) {
+
+                    is ResolvedSymbol.Parameter -> {
+                        if (referencedNode.ctx.type is CSTParser.InterfaceParameterDefinitionTypeContext) {
                             AnonymousInterfaceCircuitExpressionNode(
-                                interfaceType = DefaultInterfaceTypeNode,
+                                span = span,
+                                interfaceType = DefaultInterfaceTypeNode(span),
                                 type = InterfaceExpressionScope(this, body).ast(),
                             )
                         } else {
-                            if (body.atom.parameterValues.isNotEmpty())
-                                throw IllegalArgumentException("Unexpected use of parameters for ${body.atom.identifier} in circuit node expression")
+                            if (atom.parameterValues() != null) {
+                                diagnostics.reportError("Unexpected parameters for '${identifier.text}' in circuit node expression", span)
+                                return ErrorCircuitNodeExpressionNode(span, "unexpected parameters")
+                            }
 
-                            AnonymousGenericFunctionCircuitExpressionNode(
-                                functionIdentifier = body.atom.identifier.toIdentifier()
-                            )
+                            AnonymousGenericFunctionCircuitExpressionNode(span, identifier.toIdentifierNode())
                         }
-
                     }
-                    else -> throw Exception("Unexpected identifier ${body.atom.identifier} as circuit node expression, ${referencedNode::class.simpleName} found")
+
+                    null -> ErrorCircuitNodeExpressionNode(span, "unresolved symbol '${identifier.text}'")
                 }
             }
 
-            is CSTParenthesizedExpression -> LoneCircuitExpressionScope(this, body.expression).ast()
+            is CSTParser.ParenExpressionContext -> LoneCircuitExpressionScope(this, body.expression()!!).ast()
 
-            CSTWireExpression -> {
-                return AnonymousInterfaceCircuitExpressionNode(
-                    interfaceType = DefaultInterfaceTypeNode,
-                    type = WireInterfaceExpressionNode,
-                )
-            }
+            is CSTParser.WireExpressionContext -> AnonymousInterfaceCircuitExpressionNode(
+                span = span,
+                interfaceType = DefaultInterfaceTypeNode(span),
+                type = WireInterfaceExpressionNode(span),
+            )
+
+            else -> throw IllegalStateException("Unexpected expression context $body")
         }
     }
 

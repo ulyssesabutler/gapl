@@ -1,6 +1,7 @@
 package com.uabutler.ast.node
 
-sealed interface GAPLNode
+import com.uabutler.diagnostics.SourceSpan
 
-interface TemporaryNode: GAPLNode
-interface PersistentNode: GAPLNode
+interface GAPLNode {
+    val span: SourceSpan
+}

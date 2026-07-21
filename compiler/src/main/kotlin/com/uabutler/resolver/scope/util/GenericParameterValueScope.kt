@@ -1,53 +1,29 @@
 package com.uabutler.resolver.scope.util
 
+import com.uabutler.ast.node.ErrorGenericParameterValueNode
 import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
 import com.uabutler.ast.node.FunctionReferenceGenericParameterValueNode
 import com.uabutler.ast.node.GenericInterfaceValueNode
 import com.uabutler.ast.node.GenericParameterValueNode
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.StaticExpressionGenericParameterValueNode
-import com.uabutler.cst.node.CSTPersistent
-import com.uabutler.cst.node.expression.CSTAccessorExpression
-import com.uabutler.cst.node.expression.CSTAdditionExpression
-import com.uabutler.cst.node.expression.CSTAtomExpression
-import com.uabutler.cst.node.expression.CSTDivisionExpression
-import com.uabutler.cst.node.expression.CSTEqualsExpression
-import com.uabutler.cst.node.expression.CSTExpression
-import com.uabutler.cst.node.expression.CSTFalseExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTIntLiteralExpression
-import com.uabutler.cst.node.expression.CSTLessThanExpression
-import com.uabutler.cst.node.expression.CSTLessThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTLogicalAndExpression
-import com.uabutler.cst.node.expression.CSTLogicalOrExpression
-import com.uabutler.cst.node.expression.CSTMultiplicationExpression
-import com.uabutler.cst.node.expression.CSTNotEqualsExpression
-import com.uabutler.cst.node.expression.CSTParenthesizedExpression
-import com.uabutler.cst.node.expression.CSTRemainderExpression
-import com.uabutler.cst.node.expression.CSTSubtractionExpression
-import com.uabutler.cst.node.expression.CSTTrueExpression
-import com.uabutler.cst.node.expression.CSTWireExpression
-import com.uabutler.cst.node.functions.CSTFunctionDefinition
-import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
-import com.uabutler.cst.node.util.CSTFunctionParameterDefinitionType
-import com.uabutler.cst.node.util.CSTIntegerParameterDefinitionType
-import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
-import com.uabutler.cst.node.util.CSTParameterDefinition
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
+import com.uabutler.resolver.scope.DeclaredSymbol
+import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
 
 class GenericParameterValueScope(
     override val parentScope: Scope,
-    val genericParameterValues: List<CSTExpression>,
+    val genericParameterValues: List<CSTParser.ExpressionContext>,
 ): Scope {
-    override fun resolveLocal(name: String): CSTPersistent? = null
+    override fun resolveLocal(name: String): ResolvedSymbol? = null
 
-    override fun symbols(): List<String> = emptyList()
+    override fun symbols(): List<DeclaredSymbol> = emptyList()
 
-    // Horrible, hacky bridge between the CST's lack of caring about a parameter type and the AST very much caring.
+    // Horrible, hacky bridge between the grammar's lack of caring about a parameter type and the AST very much caring.
     data class ParameterValues(
         val interfaces: List<GenericInterfaceValueNode>,
         val parameters: List<GenericParameterValueNode>,
@@ -67,72 +43,81 @@ class GenericParameterValueScope(
         val singleParameter: GenericParameterValueNode? = null,
     )
 
-    private fun GenericInterfaceValueNode.toParameterValue(): ParameterValue {
-        return ParameterValue(singleInterface = this)
-    }
+    private fun GenericInterfaceValueNode.toParameterValue(): ParameterValue = ParameterValue(singleInterface = this)
 
-    private fun GenericParameterValueNode.toParameterValue(): ParameterValue {
-        return ParameterValue(singleParameter = this)
-    }
+    private fun GenericParameterValueNode.toParameterValue(): ParameterValue = ParameterValue(singleParameter = this)
 
-    private fun singleParameter(value: CSTExpression): ParameterValue {
-       return when (value) {
-            is CSTTrueExpression, is CSTFalseExpression,
-            is CSTIntLiteralExpression,
-            is CSTParenthesizedExpression,
-            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTRemainderExpression, is CSTAdditionExpression, is CSTSubtractionExpression,
-            is CSTLessThanExpression, is CSTGreaterThanExpression, is CSTLessThanOrEqualsExpression, is CSTGreaterThanOrEqualsExpression,
-            is CSTEqualsExpression, is CSTNotEqualsExpression,
-            is CSTLogicalAndExpression, is CSTLogicalOrExpression -> {
-                StaticExpressionGenericParameterValueNode(
-                    value = StaticExpressionScope(parentScope, value).ast()
-                ).toParameterValue()
+    private fun singleParameter(value: CSTParser.ExpressionContext): ParameterValue {
+        val span = SourceSpan.of(value)
+
+        return when (value) {
+            is CSTParser.TrueExpressionContext, is CSTParser.FalseExpressionContext,
+            is CSTParser.LiteralExpressionContext, is CSTParser.ParenExpressionContext,
+            is CSTParser.MultiplicaitonExpressionContext, is CSTParser.AdditionExpressionContext,
+            is CSTParser.RelationalExpressionContext, is CSTParser.EqualityExpressionContext,
+            is CSTParser.LogicalAndExpressionContext, is CSTParser.LogicalOrExpressionContext -> {
+                StaticExpressionGenericParameterValueNode(span, StaticExpressionScope(parentScope, value).ast()).toParameterValue()
             }
 
-            is CSTAtomExpression -> { // This can be a function, or a static expression.
-                val atom = value.atom
-                when (val declaration = resolve(atom.identifier)) {
-                    is CSTFunctionDefinition -> {
-                        val parameters = GenericParameterValueScope(this, atom.parameterValues).ast()
+            is CSTParser.AtomExpressionContext -> { // This can be a function, or a static expression.
+                val atom = value.atom()!!
+                val identifier = atom.identifier!!
+
+                when (val declaration = resolve(identifier)) {
+                    is ResolvedSymbol.Function -> {
+                        val parameterValues = atom.parameterValues()?.expression() ?: emptyList()
+                        val parameters = GenericParameterValueScope(this, parameterValues).ast()
+
                         FunctionInstantiationGenericParameterValueNode(
+                            span = span,
                             instantiation = InstantiationNode(
-                                definitionIdentifier = atom.identifier.toIdentifier(),
+                                span = span,
+                                definitionIdentifier = identifier.toIdentifierNode(),
                                 genericInterfaces = parameters.interfaces,
                                 genericParameters = parameters.parameters,
                             )
                         ).toParameterValue()
                     }
 
-                    is CSTParameterDefinition -> {
-                        when (declaration.type) {
-                            is CSTIntegerParameterDefinitionType -> {
-                                StaticExpressionGenericParameterValueNode(
-                                    value = StaticExpressionScope(parentScope, value).ast()
-                                ).toParameterValue()
+                    is ResolvedSymbol.Parameter -> {
+                        when (declaration.ctx.type) {
+                            is CSTParser.IntegerParameterDefinitionTypeContext -> {
+                                StaticExpressionGenericParameterValueNode(span, StaticExpressionScope(parentScope, value).ast()).toParameterValue()
                             }
-                            is CSTFunctionParameterDefinitionType -> {
-                                FunctionReferenceGenericParameterValueNode(
-                                    functionIdentifier = atom.identifier.toIdentifier()
-                                ).toParameterValue()
+                            is CSTParser.FunctionParameterDefinitionTypeContext -> {
+                                FunctionReferenceGenericParameterValueNode(span, identifier.toIdentifierNode()).toParameterValue()
                             }
-                            is CSTInterfaceParameterDefinitionType -> GenericInterfaceValueNode(
-                                value = InterfaceExpressionScope(this, value).ast()
+                            is CSTParser.InterfaceParameterDefinitionTypeContext -> GenericInterfaceValueNode(
+                                span, InterfaceExpressionScope(this, value).ast()
                             ).toParameterValue()
+                            else -> {
+                                diagnostics.reportError("Unexpected generic parameter type", span)
+                                ErrorGenericParameterValueNode(span, "unexpected generic parameter type").toParameterValue()
+                            }
                         }
                     }
 
-                    is CSTInterfaceDefinition -> GenericInterfaceValueNode(
-                        value = InterfaceExpressionScope(this, value).ast()
+                    is ResolvedSymbol.Interface -> GenericInterfaceValueNode(
+                        span, InterfaceExpressionScope(this, value).ast()
                     ).toParameterValue()
 
-                    else -> throw Exception("Declaration of type ${declaration.let { it::class.simpleName }} not allowed in generic parameter values")
-                }
+                    null -> ErrorGenericParameterValueNode(span, "unresolved symbol '${identifier.text}'").toParameterValue()
 
+                    else -> {
+                        diagnostics.reportError("'${identifier.text}' cannot be used as a generic parameter value", span)
+                        ErrorGenericParameterValueNode(span, "invalid generic parameter value").toParameterValue()
+                    }
+                }
             }
 
-            is CSTAccessorExpression, is CSTWireExpression -> GenericInterfaceValueNode(
-                value = InterfaceExpressionScope(this, value).ast()
+            is CSTParser.AccessorExpressionContext, is CSTParser.WireExpressionContext -> GenericInterfaceValueNode(
+                span, InterfaceExpressionScope(this, value).ast()
             ).toParameterValue()
+
+            else -> {
+                diagnostics.reportError("Invalid generic parameter value", span)
+                ErrorGenericParameterValueNode(span, "invalid generic parameter value").toParameterValue()
+            }
         }
     }
 }

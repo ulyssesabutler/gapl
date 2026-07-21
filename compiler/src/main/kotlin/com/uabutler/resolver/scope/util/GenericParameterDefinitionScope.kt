@@ -4,16 +4,14 @@ import com.uabutler.ast.node.FunctionGenericParameterTypeNode
 import com.uabutler.ast.node.GenericInterfaceDefinitionNode
 import com.uabutler.ast.node.GenericParameterDefinitionNode
 import com.uabutler.ast.node.IdentifierGenericParameterTypeNode
-import com.uabutler.cst.node.util.CSTFunctionParameterDefinitionType
-import com.uabutler.cst.node.util.CSTIntegerParameterDefinitionType
-import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
-import com.uabutler.cst.node.util.CSTParameterDefinition
+import com.uabutler.ast.node.IdentifierNode
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 
 class GenericParameterDefinitionScope(
     parentScope: Scope,
-    val genericParameterDefinition: List<CSTParameterDefinition>,
+    val genericParameterDefinition: List<CSTParser.ParameterDefinitionContext>,
 ): Scope by parentScope {
 
     data class Definitions(
@@ -43,24 +41,32 @@ class GenericParameterDefinitionScope(
         return Definitions(parameterDefinitions, interfaceDefinitions)
     }
 
-    private fun singleDefinition(definition: CSTParameterDefinition): Definition {
-        val identifier = definition.declaredIdentifier.toIdentifier()
+    private fun singleDefinition(definition: CSTParser.ParameterDefinitionContext): Definition {
+        val span = SourceSpan.of(definition)
+        val identifier = definition.declaredIdenfier!!.toIdentifierNode()
+        val type = definition.type!!
+        val typeSpan = SourceSpan.of(type)
 
-        return when (definition.type) {
-            is CSTIntegerParameterDefinitionType -> GenericParameterDefinitionNode(
+        return when (type) {
+            is CSTParser.IntegerParameterDefinitionTypeContext -> GenericParameterDefinitionNode(
+                span = span,
                 identifier = identifier,
-                type = IdentifierGenericParameterTypeNode("integer".toIdentifier()),
+                type = IdentifierGenericParameterTypeNode(typeSpan, IdentifierNode(typeSpan, "integer")),
             ).toDefinition()
 
-            is CSTFunctionParameterDefinitionType -> GenericParameterDefinitionNode(
+            is CSTParser.FunctionParameterDefinitionTypeContext -> GenericParameterDefinitionNode(
+                span = span,
                 identifier = identifier,
                 type = FunctionGenericParameterTypeNode(
+                    span = typeSpan,
                     inputFunctionIO = emptyList(), // TODO: Needed for type validation
                     outputFunctionIO = emptyList(), // TODO: Needed for type validation
                 ),
             ).toDefinition()
 
-            is CSTInterfaceParameterDefinitionType -> GenericInterfaceDefinitionNode(identifier).toDefinition()
+            is CSTParser.InterfaceParameterDefinitionTypeContext -> GenericInterfaceDefinitionNode(span, identifier).toDefinition()
+
+            else -> throw IllegalStateException("Unexpected parameter definition type $type")
         }
     }
 

@@ -2,95 +2,84 @@ package com.uabutler.resolver.scope.interfaces
 
 import com.uabutler.ast.node.VectorBoundsNode
 import com.uabutler.ast.node.interfaces.DefinedInterfaceExpressionNode
+import com.uabutler.ast.node.interfaces.ErrorInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.IdentifierInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.VectorInterfaceExpressionNode
 import com.uabutler.ast.node.interfaces.WireInterfaceExpressionNode
-import com.uabutler.cst.node.expression.CSTAccessorExpression
-import com.uabutler.cst.node.expression.CSTAdditionExpression
-import com.uabutler.cst.node.expression.CSTAtomExpression
-import com.uabutler.cst.node.expression.CSTDivisionExpression
-import com.uabutler.cst.node.expression.CSTEqualsExpression
-import com.uabutler.cst.node.expression.CSTExpression
-import com.uabutler.cst.node.expression.CSTFalseExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanExpression
-import com.uabutler.cst.node.expression.CSTGreaterThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTIntLiteralExpression
-import com.uabutler.cst.node.expression.CSTLessThanExpression
-import com.uabutler.cst.node.expression.CSTLessThanOrEqualsExpression
-import com.uabutler.cst.node.expression.CSTLogicalAndExpression
-import com.uabutler.cst.node.expression.CSTLogicalOrExpression
-import com.uabutler.cst.node.expression.CSTMultiplicationExpression
-import com.uabutler.cst.node.expression.CSTNotEqualsExpression
-import com.uabutler.cst.node.expression.CSTParenthesizedExpression
-import com.uabutler.cst.node.expression.CSTRemainderExpression
-import com.uabutler.cst.node.expression.CSTSubtractionExpression
-import com.uabutler.cst.node.expression.CSTTrueExpression
-import com.uabutler.cst.node.expression.CSTWireExpression
-import com.uabutler.cst.node.expression.util.CSTVectorItemAccessor
-import com.uabutler.cst.node.interfaces.CSTInterfaceDefinition
-import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
-import com.uabutler.cst.node.util.CSTParameterDefinition
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
+import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
+import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class InterfaceExpressionScope(
     override val parentScope: Scope,
-    val interfaceExpression: CSTExpression
+    val interfaceExpression: CSTParser.ExpressionContext,
 ): Scope by parentScope {
 
     fun ast(): InterfaceExpressionNode {
+        val span = SourceSpan.of(interfaceExpression)
+
         return when (interfaceExpression) {
-            is CSTWireExpression -> WireInterfaceExpressionNode
+            is CSTParser.WireExpressionContext -> WireInterfaceExpressionNode(span)
 
-            is CSTAccessorExpression -> {
-                val vector = interfaceExpression.accessor
-                if (vector !is CSTVectorItemAccessor) throw IllegalArgumentException("Unexpected accessor $vector")
+            is CSTParser.AccessorExpressionContext -> {
+                val accessor = interfaceExpression.accessor()!!
+                if (accessor !is CSTParser.VectorItemAccessorContext) {
+                    diagnostics.reportError("Unexpected accessor in interface expression", span)
+                    return ErrorInterfaceExpressionNode(span, "unexpected accessor")
+                }
 
-                val vectorSizeExpression = StaticExpressionScope(this, interfaceExpression.accessor.index).ast()
+                val vectorSizeExpression = StaticExpressionScope(this, accessor.expression()!!).ast()
+                val vectoredInterface = InterfaceExpressionScope(parentScope, interfaceExpression.expression()!!).ast()
+                val boundsSpecifier = VectorBoundsNode(SourceSpan.of(accessor), vectorSizeExpression)
 
-                val vectoredInterface = InterfaceExpressionScope(parentScope, interfaceExpression.accessed).ast()
-                val boundsSpecifier = VectorBoundsNode(vectorSizeExpression)
-
-                VectorInterfaceExpressionNode(vectoredInterface, boundsSpecifier)
+                VectorInterfaceExpressionNode(span, vectoredInterface, boundsSpecifier)
             }
 
-            is CSTAtomExpression -> {
-                val atom = interfaceExpression.atom
+            is CSTParser.AtomExpressionContext -> {
+                val atom = interfaceExpression.atom()!!
+                val identifier = atom.identifier!!
 
-                when (val declarationNode = resolve(atom.identifier)) {
+                when (val declaration = resolve(identifier)) {
+                    is ResolvedSymbol.Parameter -> {
+                        if (declaration.ctx.type !is CSTParser.InterfaceParameterDefinitionTypeContext) {
+                            diagnostics.reportError("'${identifier.text}' is not an interface-typed generic parameter", span)
+                            return ErrorInterfaceExpressionNode(span, "not an interface parameter")
+                        }
 
-                    is CSTParameterDefinition -> {
-                        if (declarationNode.type !is CSTInterfaceParameterDefinitionType)
-                            throw Exception("Unexpected type for interface expression, got ${declarationNode.type::class.simpleName}")
+                        if (atom.parameterValues() != null) {
+                            diagnostics.reportError("Unexpected parameters for generic interface '${identifier.text}'", span)
+                            return ErrorInterfaceExpressionNode(span, "unexpected parameters")
+                        }
 
-                        if (atom.parameterValues.isNotEmpty())
-                            throw Exception("Unexpected parameters for generic interface")
-
-                        IdentifierInterfaceExpressionNode(atom.identifier.toIdentifier())
+                        IdentifierInterfaceExpressionNode(span, identifier.toIdentifierNode())
                     }
 
-                    is CSTInterfaceDefinition -> {
-                        val interfaceIdentifier = atom.identifier.toIdentifier()
-                        val parameters = GenericParameterValueScope(parentScope, atom.parameterValues).ast()
+                    is ResolvedSymbol.Interface -> {
+                        val interfaceIdentifier = identifier.toIdentifierNode()
+                        val parameterValues = atom.parameterValues()?.expression() ?: emptyList()
+                        val parameters = GenericParameterValueScope(parentScope, parameterValues).ast()
 
-                        DefinedInterfaceExpressionNode(interfaceIdentifier, parameters.interfaces, parameters.parameters)
+                        DefinedInterfaceExpressionNode(span, interfaceIdentifier, parameters.interfaces, parameters.parameters)
                     }
 
-                    else -> throw Exception("Cannot use identifier for ${declarationNode::class.simpleName} in interface expression")
+                    null -> ErrorInterfaceExpressionNode(span, "unresolved symbol '${identifier.text}'")
+
+                    else -> {
+                        diagnostics.reportError("Cannot use '${identifier.text}' in an interface expression", span)
+                        ErrorInterfaceExpressionNode(span, "invalid reference in interface expression")
+                    }
                 }
             }
 
-            is CSTTrueExpression, is CSTFalseExpression,
-            is CSTIntLiteralExpression,
-            is CSTMultiplicationExpression, is CSTDivisionExpression, is CSTRemainderExpression, is CSTAdditionExpression, is CSTSubtractionExpression,
-            is CSTLessThanExpression, is CSTGreaterThanExpression,
-            is CSTLessThanOrEqualsExpression, is CSTGreaterThanOrEqualsExpression,
-            is CSTEqualsExpression, is CSTNotEqualsExpression,
-            is CSTLogicalAndExpression, is CSTLogicalOrExpression,
-            is CSTParenthesizedExpression -> throw Exception("Expected interface expression, got ${interfaceExpression::class.simpleName}")
+            else -> {
+                diagnostics.reportError("Expected an interface expression", span)
+                ErrorInterfaceExpressionNode(span, "expected interface expression")
+            }
         }
     }
 }

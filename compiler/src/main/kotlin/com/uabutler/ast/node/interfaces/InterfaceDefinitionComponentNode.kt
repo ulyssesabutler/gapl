@@ -1,13 +1,11 @@
 package com.uabutler.ast.node.interfaces
 
+import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.IdentifierNode
-import com.uabutler.ast.node.PersistentNode
-import com.uabutler.ast.node.TemporaryNode
+import com.uabutler.diagnostics.SourceSpan
 
 data class RecordInterfacePortNode(
+    override val span: SourceSpan,
     val identifier: IdentifierNode,
     val type: InterfaceExpressionNode,
-): PersistentNode
-
-data class RecordInterfaceInheritListNode(val inherits: List<DefinedInterfaceExpressionNode>): TemporaryNode
-data class RecordInterfacePortListNode(val ports: List<RecordInterfacePortNode>): TemporaryNode
+): GAPLNode

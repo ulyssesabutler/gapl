@@ -1,76 +1,77 @@
 package com.uabutler.resolver.scope.functions
 
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
-import com.uabutler.cst.node.CSTPersistent
-import com.uabutler.cst.node.expression.CSTCircuitExpression
-import com.uabutler.cst.node.expression.CSTDeclaredCircuitNodeExpression
-import com.uabutler.cst.node.functions.CSTFunctionDefinition
-import com.uabutler.cst.node.functions.CSTNonConditionalCircuitStatement
-import com.uabutler.cst.node.util.CSTInterfaceParameterDefinitionType
+import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.parsers.generated.CSTParser
+import com.uabutler.resolver.scope.DeclaredSymbol
 import com.uabutler.resolver.scope.ProgramScope
+import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
-import com.uabutler.resolver.scope.Scope.Companion.toIdentifier
 import com.uabutler.resolver.scope.functions.circuits.CircuitStatementScope
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
+import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class FunctionDefinitionScope(
     override val parentScope: ProgramScope,
-    val functionDefinition: CSTFunctionDefinition,
+    val functionDefinition: CSTParser.FunctionDefinitionContext,
 ): Scope {
 
     companion object {
-        fun declarationsFromCircuitExpression(expression: CSTCircuitExpression): List<CSTDeclaredCircuitNodeExpression> {
-            return expression.connectedGroups.flatMap { it.groupedNodes }
-                .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
+        fun declarationsFromCircuitExpression(expression: CSTParser.CircuitExpressionContext): List<CSTParser.DeclaredCircuitExpressionContext> {
+            return expression.circuitGroupExpression()
+                .flatMap { it.circuitNodeExpression() }
+                .filterIsInstance<CSTParser.DeclaredCircuitExpressionContext>()
         }
     }
 
-    private val parameters = functionDefinition.parameterDefinitions.associateBy { it.declaredIdentifier }
-    // TODO: Conditional statements will need their own scope
-    private val inputNodes = functionDefinition.inputs
-    private val outputNodes = functionDefinition.outputs
-    private val bodyNodes = functionDefinition.statements
-        .filterIsInstance<CSTNonConditionalCircuitStatement>()
-        .map { it.statement }
-        .flatMap { it.connectedGroups }
-        .flatMap { it.groupedNodes }
-        .filterIsInstance<CSTDeclaredCircuitNodeExpression>()
-    private val nodes = bodyNodes.associateBy { it.declaredIdentifier } + inputNodes.associateBy { it.declaredIdentifier } + outputNodes.associateBy { it.declaredIdentifier }
+    private val parameterDefinitions = functionDefinition.parameterDefinitionList()?.parameterDefinition() ?: emptyList()
+    private val parameters = parameterDefinitions.associateBy { it.declaredIdenfier!!.text!! }
 
-    val localSymbolTable = parameters + nodes
+    private val inputNodes = functionDefinition.input?.functionIO() ?: emptyList()
+    private val outputNodes = functionDefinition.output?.functionIO() ?: emptyList()
 
-    override fun resolveLocal(name: String): CSTPersistent? {
-        return localSymbolTable[name]
+    private val bodyNodes = functionDefinition.circuitStatement()
+        .filterIsInstance<CSTParser.NonConditionalCircuitStatementContext>()
+        .map { it.circuitExpression()!! }
+        .flatMap { declarationsFromCircuitExpression(it) }
+
+    private val nodesByIdentifier = bodyNodes.associateBy { it.declaredIdentifier!!.text!! } +
+        inputNodes.associateBy { it.declaredIdentifier!!.text!! } +
+        outputNodes.associateBy { it.declaredIdentifier!!.text!! }
+
+    override fun resolveLocal(name: String): ResolvedSymbol? {
+        parameters[name]?.let { return ResolvedSymbol.Parameter(it) }
+
+        return when (val node = nodesByIdentifier[name]) {
+            is CSTParser.DeclaredCircuitExpressionContext -> ResolvedSymbol.CircuitNode(node)
+            is CSTParser.FunctionIOContext -> ResolvedSymbol.FunctionIO(node)
+            else -> null
+        }
     }
 
-    override fun resolveGlobal(name: String): CSTPersistent? {
-        return resolveLocal(name) ?: parentScope.resolveGlobal(name)
-    }
-
-    override fun symbols(): List<String> {
+    override fun symbols(): List<DeclaredSymbol> {
         return buildList {
-            functionDefinition.parameterDefinitions.mapTo(this) { it.declaredIdentifier }
-            inputNodes.mapTo(this) { it.declaredIdentifier }
-            outputNodes.mapTo(this) { it.declaredIdentifier }
-            bodyNodes.mapTo(this) { it.declaredIdentifier }
+            parameterDefinitions.mapTo(this) { DeclaredSymbol(it.declaredIdenfier!!.text!!, it.declaredIdenfier!!) }
+            inputNodes.mapTo(this) { DeclaredSymbol(it.declaredIdentifier!!.text!!, it.declaredIdentifier!!) }
+            outputNodes.mapTo(this) { DeclaredSymbol(it.declaredIdentifier!!.text!!, it.declaredIdentifier!!) }
+            bodyNodes.mapTo(this) { DeclaredSymbol(it.declaredIdentifier!!.text!!, it.declaredIdentifier!!) }
         }
     }
 
     fun ast(): FunctionDefinitionNode {
         validateSymbols()
 
-        val definitions = GenericParameterDefinitionScope(this, functionDefinition.parameterDefinitions).ast()
+        val span = SourceSpan.of(functionDefinition)
+        val definitions = GenericParameterDefinitionScope(this, parameterDefinitions).ast()
 
         return FunctionDefinitionNode(
-            identifier = functionDefinition.declaredIdentifier.toIdentifier(),
+            span = span,
+            identifier = functionDefinition.declaredIdentifier!!.toIdentifierNode(),
             genericInterfaces = definitions.interfaceDefinitions,
             genericParameters = definitions.parameterDefinitions,
-            inputFunctionIO = functionDefinition.inputs
-                .map { FunctionIOScope(this, it).ast() },
-            outputFunctionIO = functionDefinition.outputs
-                .map { FunctionIOScope(this, it).ast() },
-            statements = functionDefinition.statements
-                .map { CircuitStatementScope(this, it).ast() },
+            inputFunctionIO = inputNodes.map { FunctionIOScope(this, it).ast() },
+            outputFunctionIO = outputNodes.map { FunctionIOScope(this, it).ast() },
+            statements = functionDefinition.circuitStatement().map { CircuitStatementScope(this, it).ast() },
         )
     }
 }
