@@ -91,10 +91,10 @@ class GenericParameterValueScope(
                             is CSTParser.InterfaceParameterDefinitionTypeContext -> GenericInterfaceValueNode(
                                 span, InterfaceExpressionScope(this, value).ast()
                             ).toParameterValue()
-                            else -> {
-                                diagnostics.reportError(ResolverDiagnosticKind.UnexpectedGenericParameterType, span)
-                                ErrorGenericParameterValueNode(span, "unexpected generic parameter type").toParameterValue()
-                            }
+                            // parameterDefinitionType only has these 3 grammar alternatives - unreachable for valid syntax.
+                            else -> throw IllegalStateException(
+                                "Unexpected parameter definition type ${declaration.ctx.type} - this is a compiler bug"
+                            )
                         }
                     }
 
@@ -115,10 +115,8 @@ class GenericParameterValueScope(
                 span, InterfaceExpressionScope(this, value).ast()
             ).toParameterValue()
 
-            else -> {
-                diagnostics.reportError(ResolverDiagnosticKind.InvalidGenericParameterValue, span)
-                ErrorGenericParameterValueNode(span, "invalid generic parameter value").toParameterValue()
-            }
+            // expression only has these 13 grammar alternatives - unreachable for valid syntax.
+            else -> throw IllegalStateException("Unexpected expression context $value - this is a compiler bug")
         }
     }
 }

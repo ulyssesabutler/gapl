@@ -365,7 +365,10 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw BuilderDiagnosticException(BuilderDiagnosticKind.ExpectedModuleInstantiation, nodeExpression.span)
+                    throw BuilderDiagnosticException(
+                        BuilderDiagnosticKind.ExpectedModuleInstantiation(nodeExpression.functionIdentifier.value),
+                        nodeExpression.span,
+                    )
                 }
 
                 val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
@@ -397,7 +400,10 @@ class NodeBuilder(
                 val instantiationData = if (parameterValue is FunctionInstantiationParameterValue) {
                     parameterValue.value
                 } else {
-                    throw BuilderDiagnosticException(BuilderDiagnosticKind.ExpectedModuleInstantiation, nodeExpression.span)
+                    throw BuilderDiagnosticException(
+                        BuilderDiagnosticKind.ExpectedModuleInstantiation(nodeExpression.functionIdentifier.value),
+                        nodeExpression.span,
+                    )
                 }
 
                 val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)

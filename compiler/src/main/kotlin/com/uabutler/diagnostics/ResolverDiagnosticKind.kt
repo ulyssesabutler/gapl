@@ -10,16 +10,8 @@ sealed interface ResolverDiagnosticKind : DiagnosticKind {
         override val message get() = "Redeclaration of '$name'"
     }
 
-    data object UnexpectedGenericParameterType : ResolverDiagnosticKind {
-        override val message get() = "Unexpected generic parameter type"
-    }
-
     data class CannotUseAsGenericParameterValue(val identifierText: String) : ResolverDiagnosticKind {
         override val message get() = "'$identifierText' cannot be used as a generic parameter value"
-    }
-
-    data object InvalidGenericParameterValue : ResolverDiagnosticKind {
-        override val message get() = "Invalid generic parameter value"
     }
 
     data class UnexpectedStaticExpressionParameters(val identifierText: String) : ResolverDiagnosticKind {
@@ -47,7 +39,8 @@ sealed interface ResolverDiagnosticKind : DiagnosticKind {
     }
 
     data object ExpectedCircuitExpressionGotValueExpression : ResolverDiagnosticKind {
-        override val message get() = "Expected a circuit expression, got a value expression"
+        override val message get() =
+            "This looks like a value expression (an integer, boolean, or arithmetic/comparison expression) - circuit expressions must reference a wire, an interface, or a function call instead"
     }
 
     data object UnexpectedAccessorOnCircuitExpression : ResolverDiagnosticKind {

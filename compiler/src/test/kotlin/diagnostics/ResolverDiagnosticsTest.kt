@@ -28,4 +28,18 @@ class ResolverDiagnosticsTest {
         assertEquals(1, diagnostics.size)
         assertIs<ResolverDiagnosticKind.UnexpectedAccessorOnCircuitExpression>(diagnostics.first().kind)
     }
+
+    @Test
+    fun `value expression used as a circuit expression reports a diagnostic`() {
+        val gapl = """
+            function bad() i: wire => o: wire {
+                i => 5 => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        assertIs<ResolverDiagnosticKind.ExpectedCircuitExpressionGotValueExpression>(diagnostics.first().kind)
+    }
 }

@@ -21,8 +21,9 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             "Mismatch in $gaplModuleName of $previousOutputNodeName ($previousCount) to $currentInputNodeName ($currentCount)"
     }
 
-    data object ExpectedModuleInstantiation : BuilderDiagnosticKind {
-        override val message get() = "Expected module instantiation"
+    data class ExpectedModuleInstantiation(val identifierText: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "Generic parameter '$identifierText' is an integer, not a function, and cannot be used as a circuit node"
     }
 
     data class UnableToFindCircuitNode(val identifierText: String) : BuilderDiagnosticKind {
