@@ -90,6 +90,7 @@ class ModuleBuilder(val program: ProgramNode) {
             functionDefinitionAstNode = instantiation.astNode,
             interfaceValuesContext = instantiation.genericInterfaceValues,
             parameterValuesContext = instantiation.genericParameterValues,
+            diagnosticsCollector = diagnosticsCollector,
         ).buildNodesIntoModule()
     }
 

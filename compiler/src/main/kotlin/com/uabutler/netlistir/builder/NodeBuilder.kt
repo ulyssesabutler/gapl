@@ -3,6 +3,7 @@ package com.uabutler.netlistir.builder
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.diagnostics.BuilderDiagnosticKind
+import com.uabutler.diagnostics.DiagnosticsCollector
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
@@ -17,12 +18,18 @@ class NodeBuilder(
     val functionDefinitionAstNode: FunctionDefinitionNode,
     val interfaceValuesContext: Map<String, InterfaceStructure>,
     val parameterValuesContext: Map<String, ParameterValue<*>>,
+    val diagnosticsCollector: DiagnosticsCollector,
 ) {
     val inputAstNodes = functionDefinitionAstNode.inputFunctionIO
     val outputAstNodes = functionDefinitionAstNode.outputFunctionIO
     val bodyAstNodes = functionDefinitionAstNode.statements
 
     val netlistNodes = mutableMapOf<String, Node>()
+
+    // Declaration span of each node, recorded at creation time - used to give undriven-wire
+    // diagnostics a precise location without storing anything on the Node/Module IR types
+    // themselves (which would go stale once transformers start relocating nodes across modules).
+    private val nodeSpans = mutableMapOf<Node, SourceSpan>()
 
     private fun createInputNode(
         identifier: String,
@@ -103,6 +110,37 @@ class NodeBuilder(
         buildInputNodes()
         buildOutputNodes()
         buildBodyNodes()
+        validateWiresConnected()
+    }
+
+    // A module's own input ports are driven by the caller, so only OutputNodes and body nodes
+    // (whose input wires all need a source from within this module) can be undriven.
+    private fun validateWiresConnected() {
+        module.getNodes().forEach { node ->
+            val undrivenGroup = node.inputWireVectorGroups.firstOrNull { group ->
+                group.wires().any { module.getConnectionForInputWireOrNull(it) == null }
+            } ?: return@forEach
+
+            val span = nodeSpans[node]!!
+            val functionName = functionDefinitionAstNode.identifier.value
+
+            when (node) {
+                is OutputNode -> diagnosticsCollector.reportError(
+                    BuilderDiagnosticKind.UndrivenOutputPort(node.name(), functionName),
+                    span,
+                )
+                is BodyNode -> diagnosticsCollector.reportError(
+                    BuilderDiagnosticKind.UndrivenNodeInput(
+                        nodeName = node.name(),
+                        nodeType = node.nodeType(),
+                        inputName = undrivenGroup.identifier.takeIf { it != "only" },
+                        functionName = functionName,
+                    ),
+                    span,
+                )
+                else -> {} // InputNode never has input wires - driven by the caller.
+            }
+        }
     }
 
     private fun buildInputNodes() {
@@ -113,7 +151,7 @@ class NodeBuilder(
                 parameterValuesContext = parameterValuesContext,
             )
 
-            createInputNode(
+            val node = createInputNode(
                 identifier = astNode.identifier.value,
                 outputWireVectorGroupsBuilder = { node ->
                     listOf(
@@ -124,6 +162,7 @@ class NodeBuilder(
                     )
                 }
             )
+            nodeSpans[node] = astNode.span
         }
     }
 
@@ -135,7 +174,7 @@ class NodeBuilder(
                 parameterValuesContext = parameterValuesContext,
             )
 
-            createOutputNode(
+            val node = createOutputNode(
                 identifier = astNode.identifier.value,
                 inputWireVectorGroupsBuilder = { node ->
                     listOf(
@@ -146,6 +185,7 @@ class NodeBuilder(
                     )
                 }
             )
+            nodeSpans[node] = astNode.span
         }
     }
 
@@ -304,6 +344,7 @@ class NodeBuilder(
                         )
                     },
                 )
+                nodeSpans[node] = nodeExpression.span
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -337,6 +378,7 @@ class NodeBuilder(
                         )
                     },
                 )
+                nodeSpans[node] = nodeExpression.span
 
                 IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
@@ -530,7 +572,7 @@ class NodeBuilder(
         val matchingPredefinedFunction = PredefinedFunction.search(invocation)
 
         // Step 2: Create the node
-        return if (matchingPredefinedFunction != null) {
+        return (if (matchingPredefinedFunction != null) {
             createPredefinedFunctionNode(
                 identifier = invocationName,
                 inputWireVectorGroupsBuilder = { node ->
@@ -567,7 +609,7 @@ class NodeBuilder(
                 },
                 invocation = invocation,
             )
-        }
+        }).also { nodeSpans[it] = callSiteSpan }
     }
 
 }

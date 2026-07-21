@@ -63,4 +63,22 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
     data class UnableToFindFunctionReference(val identifierText: String) : BuilderDiagnosticKind {
         override val message get() = "Unable to find function reference '$identifierText'"
     }
+
+    data class UndrivenOutputPort(val portName: String, val functionName: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "Output '$portName' of function '$functionName' is never driven by anything inside the function"
+    }
+
+    data class UndrivenNodeInput(
+        val nodeName: String,
+        val nodeType: String,
+        val inputName: String?,
+        val functionName: String,
+    ) : BuilderDiagnosticKind {
+        override val message get() = buildString {
+            append("Input ")
+            if (inputName != null) append("'$inputName' ")
+            append("of $nodeType '$nodeName' in function '$functionName' is never connected to anything")
+        }
+    }
 }

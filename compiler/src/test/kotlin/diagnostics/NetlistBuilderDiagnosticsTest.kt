@@ -94,4 +94,57 @@ class NetlistBuilderDiagnosticsTest {
         val kind = assertIs<BuilderDiagnosticKind.ExpectedModuleInstantiation>(diagnostics.first().kind)
         assertEquals("n", kind.identifierText)
     }
+
+    @Test
+    fun `undriven output port reports a diagnostic`() {
+        val gapl = """
+            function test() i: wire => o: wire {
+                i => declare x: wire;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.UndrivenOutputPort>(diagnostics.first().kind)
+        assertEquals("o", kind.portName)
+        assertEquals("test", kind.functionName)
+    }
+
+    @Test
+    fun `undriven body node input reports a diagnostic`() {
+        val gapl = """
+            function test() i: wire => o: wire {
+                declare reg1: register(wire) => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.UndrivenNodeInput>(diagnostics.first().kind)
+        assertEquals("reg1", kind.nodeName)
+        assertEquals("test", kind.functionName)
+    }
+
+    @Test
+    fun `undriven wires in two independent functions are both reported in one compile`() {
+        val gapl = """
+            function first() i: wire => o: wire {
+                i => declare x: wire;
+            }
+
+            function second() i: wire => o: wire {
+                declare reg1: register(wire) => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileExpectingDiagnostics(gapl)
+
+        assertEquals(2, diagnostics.size)
+        val outputKind = assertIs<BuilderDiagnosticKind.UndrivenOutputPort>(diagnostics[0].kind)
+        assertEquals("first", outputKind.functionName)
+        val inputKind = assertIs<BuilderDiagnosticKind.UndrivenNodeInput>(diagnostics[1].kind)
+        assertEquals("second", inputKind.functionName)
+    }
 }
