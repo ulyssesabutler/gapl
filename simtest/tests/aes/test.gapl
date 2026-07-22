@@ -65,14 +65,23 @@ function round_key(round_number: integer) previous_key: aes_block => current_key
 
         transformed_last_column, current_round_constant => word_addition() => declare last_column_with_round_constant: aes_block_column;
 
+        declare updated_key_0: aes_block_column;
+        declare updated_key_1: aes_block_column;
+        declare updated_key_2: aes_block_column;
+        declare updated_key_3: aes_block_column;
+
         declare updated_key: aes_block;
 
-        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key[3];
+        updated_key_0 => updated_key[0];
+        updated_key_1 => updated_key[1];
+        updated_key_2 => updated_key[2];
+        updated_key_3 => updated_key[3];
 
-        updated_key[1:3], previous_key[0:2]
-            => vector_zip(aes_block_column, aes_block_column, 3)
-            => vector_map(pair(aes_block_column, aes_block_column), aes_block_column, 3, unpair(aes_block_column, aes_block_column, aes_block_column, word_addition()))
-            => updated_key[0:2];
+        last_column_with_round_constant, previous_key[3] => word_addition() => updated_key_3;
+
+        updated_key_1, previous_key[0] => word_addition() => updated_key_0;
+        updated_key_2, previous_key[1] => word_addition() => updated_key_1;
+        updated_key_3, previous_key[2] => word_addition() => updated_key_2;
 
         updated_key => current_key;
     }
