@@ -24,22 +24,24 @@ the extension needs to opt into.
 
 - `./gradlew :vscode-extension:build` (from the repo root) — the normal way to build this now.
   Downloads a pinned Node/npm (20.18.1) into the project if needed (no system Node required),
-  runs `npm install`, then `npm run compile`. Also included automatically in a plain
-  `./gradlew build`/`./gradlew clean` from the repo root, alongside every Kotlin subproject.
-  `clean` here removes both `out/` and `node_modules/` (not just build output) - a full clean
-  means the next build re-runs `npm install` from scratch.
-- Direct npm commands still work if you're iterating quickly and don't want Gradle's overhead:
-  `npm install`, `npm run compile` (type-check, emit `out/*.js`), `npm run watch`.
+  runs `npm install`, then `npm run compile` - and also depends on `:lsp:installDist`, so building
+  the extension always guarantees the server binary its default `gapl.serverPath` points at
+  actually exists. Also included automatically in a plain `./gradlew build`/`./gradlew clean` from
+  the repo root, alongside every Kotlin subproject. `clean` here removes both `out/` and
+  `node_modules/` (not just build output) - a full clean means the next build re-runs
+  `npm install` from scratch, and does *not* clean `:lsp` (run `./gradlew clean` at the repo root
+  for that).
+- Direct npm commands still work if you're iterating quickly and don't want Gradle's overhead,
+  but skip the `:lsp:installDist` guarantee above: `npm install`, `npm run compile` (type-check,
+  emit `out/*.js`), `npm run watch`.
 - **To actually run it**: open *this directory* (`vscode-extension/`) as the VSCode workspace
   root — not the whole `gapl` repo — then press F5. `.vscode/launch.json` is workspace-relative,
   so VSCode won't find it (and will prompt for a generic debugger instead) unless this folder is
-  the open workspace. F5 runs the `compile` task first (`.vscode/tasks.json`), then launches an
-  Extension Development Host window with this extension loaded.
-- Before F5 will do anything useful, the server itself needs to exist: run
-  `./gradlew :lsp:installDist` from the repo root. The extension's default `gapl.serverPath`
-  (when the setting is left empty) points at `../lsp/build/install/gapl-lsp/bin/gapl-lsp` relative
-  to this extension — a dev-only convenience, not something a real install should rely on (see
-  Future TODOs).
+  the open workspace. F5's pre-launch task (`.vscode/tasks.json`) runs
+  `./gradlew :vscode-extension:assemble` from the repo root - i.e. the same guarantee as above,
+  both the TypeScript and the language server are current - then launches an Extension Development
+  Host window with this extension loaded. No separate manual `:lsp:installDist` step needed
+  anymore before F5.
 
 ## Architecture
 
