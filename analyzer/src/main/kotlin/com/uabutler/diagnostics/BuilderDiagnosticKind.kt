@@ -81,4 +81,22 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             append("of $nodeType '$nodeName' in function '$functionName' is never connected to anything")
         }
     }
+
+    data class MultiplyDrivenOutputPort(val portName: String, val functionName: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "Output '$portName' of function '$functionName' is driven by more than one connection"
+    }
+
+    data class MultiplyDrivenNodeInput(
+        val nodeName: String,
+        val nodeType: String,
+        val inputName: String?,
+        val functionName: String,
+    ) : BuilderDiagnosticKind {
+        override val message get() = buildString {
+            append("Input ")
+            if (inputName != null) append("'$inputName' ")
+            append("of $nodeType '$nodeName' in function '$functionName' is connected more than once")
+        }
+    }
 }

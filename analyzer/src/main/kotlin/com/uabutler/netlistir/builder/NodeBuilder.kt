@@ -143,6 +143,32 @@ class NodeBuilder(
         }
     }
 
+    // MutableModule.connect() throws if the input wire already has a connection - checking first
+    // lets us report a diagnostic and keep processing (first connection wins, like the rest of the
+    // diagnostics pipeline) instead of crashing the whole compile on the second driver.
+    private fun reportMultiplyDrivenInput(inputWire: InputWire, span: SourceSpan) {
+        val group = inputWire.parentWireVector.parentGroup
+        val node = group.parentNode
+        val functionName = functionDefinitionAstNode.identifier.value
+
+        when (node) {
+            is OutputNode -> diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.MultiplyDrivenOutputPort(node.name(), functionName),
+                span,
+            )
+            is BodyNode -> diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.MultiplyDrivenNodeInput(
+                    nodeName = node.name(),
+                    nodeType = node.nodeType(),
+                    inputName = group.identifier.takeIf { it != "only" },
+                    functionName = functionName,
+                ),
+                span,
+            )
+            else -> {} // InputNode never has input wires - driven by the caller.
+        }
+    }
+
     private fun buildInputNodes() {
         inputAstNodes.map { astNode ->
             val interfaceStructure = programContext.buildInterfaceWithContext(
@@ -309,7 +335,14 @@ class NodeBuilder(
         }
 
         wirePairs.forEach { (previousOutput, currentInput) ->
-            module.connect(currentInput as InputWire, previousOutput as OutputWire)
+            val inputWire = currentInput as InputWire
+            val outputWire = previousOutput as OutputWire
+
+            if (module.getConnectionForInputWireOrNull(inputWire) != null) {
+                reportMultiplyDrivenInput(inputWire, connectionExpression.span)
+            } else {
+                module.connect(inputWire, outputWire)
+            }
         }
     }
 

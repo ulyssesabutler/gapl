@@ -147,4 +147,63 @@ class NetlistBuilderDiagnosticsTest {
         val inputKind = assertIs<BuilderDiagnosticKind.UndrivenNodeInput>(diagnostics[1].kind)
         assertEquals("second", inputKind.functionName)
     }
+
+    @Test
+    fun `an output port driven by two connections reports a diagnostic instead of crashing`() {
+        val gapl = """
+            function test() i: wire, i2: wire => o: wire {
+                i => o;
+                i2 => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.MultiplyDrivenOutputPort>(diagnostics.first().kind)
+        assertEquals("o", kind.portName)
+        assertEquals("test", kind.functionName)
+    }
+
+    @Test
+    fun `a body node input driven by two connections reports a diagnostic`() {
+        val gapl = """
+            function test() i: wire, i2: wire => o: wire {
+                i => declare reg1: register(wire);
+                i2 => reg1;
+                reg1 => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.MultiplyDrivenNodeInput>(diagnostics.first().kind)
+        assertEquals("reg1", kind.nodeName)
+        assertEquals("test", kind.functionName)
+    }
+
+    @Test
+    fun `multiply-driven wires in two independent functions are both reported in one compile`() {
+        val gapl = """
+            function first() i: wire, i2: wire => o: wire {
+                i => o;
+                i2 => o;
+            }
+
+            function second() i: wire, i2: wire => o: wire {
+                i => declare reg1: register(wire);
+                i2 => reg1;
+                reg1 => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(2, diagnostics.size)
+        val outputKind = assertIs<BuilderDiagnosticKind.MultiplyDrivenOutputPort>(diagnostics[0].kind)
+        assertEquals("first", outputKind.functionName)
+        val inputKind = assertIs<BuilderDiagnosticKind.MultiplyDrivenNodeInput>(diagnostics[1].kind)
+        assertEquals("second", inputKind.functionName)
+    }
 }
