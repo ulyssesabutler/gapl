@@ -26,6 +26,7 @@
             <option value="$PROJECT_DIR$/buildSrc" />
             <option value="$PROJECT_DIR$/compiler" />
             <option value="$PROJECT_DIR$/gapl-example" />
+            <option value="$PROJECT_DIR$/intellij-plugin" />
             <option value="$PROJECT_DIR$/latency-finder" />
             <option value="$PROJECT_DIR$/lsp" />
             <option value="$PROJECT_DIR$/netfpga" />

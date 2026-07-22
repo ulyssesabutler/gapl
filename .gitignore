@@ -99,3 +99,5 @@ vivado*.debug
 vivado*.zip
 
 latency-finder-logs
+
+.claude/worktrees
