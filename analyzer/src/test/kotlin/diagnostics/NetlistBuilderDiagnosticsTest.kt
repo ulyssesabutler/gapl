@@ -216,6 +216,36 @@ class NetlistBuilderDiagnosticsTest {
     }
 
     @Test
+    fun `a function's own output port used as a source reports a diagnostic instead of crashing`() {
+        val gapl = """
+            function test() i: wire[2] => o: wire[2] {
+                o => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.WireCountMismatch>(diagnostics.first().kind)
+        assertEquals("test", kind.gaplModuleName)
+    }
+
+    @Test
+    fun `a function's own input port used as a target reports a diagnostic instead of crashing`() {
+        val gapl = """
+            function test() i: wire[2] => o: wire[2] {
+                i => i;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.WireCountMismatch>(diagnostics.first().kind)
+        assertEquals("test", kind.gaplModuleName)
+    }
+
+    @Test
     fun `multiply-driven wires in two independent functions are both reported in one compile`() {
         val gapl = """
             function first() i: wire, i2: wire => o: wire {

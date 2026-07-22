@@ -313,9 +313,14 @@ class NodeBuilder(
         fun checkForMismatch(s1: Int, s2: Int) {
             if (s1 != s2) {
                 // TODO: Also, this error handling is shit. Ideally, we would show the user which connection is mismatched.
-                val gaplModuleName = currentInputs.first().sourceGroup.parentNode.parentModule.invocation.gaplFunctionName
-                val previousOutputNodeName = previousOutputs.first().sourceGroup.parentNode.name()
-                val currentInputNodeName = currentInputs.first().sourceGroup.parentNode.name()
+                // previousOutputs/currentInputs can each be empty - not just a different size - when
+                // one side is a function's own port referenced backwards (e.g. its output port used
+                // as a source, or its input port used as a target): OutputNode/InputNode always
+                // report zero wire vector groups on that side by construction (see Node.kt). Fall
+                // back to a placeholder name instead of crashing on .first() of an empty list.
+                val gaplModuleName = functionDefinitionAstNode.identifier.value
+                val previousOutputNodeName = previousOutputs.firstOrNull()?.sourceGroup?.parentNode?.name() ?: "(nothing)"
+                val currentInputNodeName = currentInputs.firstOrNull()?.sourceGroup?.parentNode?.name() ?: "(nothing)"
 
                 throw BuilderDiagnosticException(
                     BuilderDiagnosticKind.WireCountMismatch(gaplModuleName, previousOutputNodeName, s1, currentInputNodeName, s2),
