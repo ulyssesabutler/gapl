@@ -21,6 +21,7 @@ include(
     "antlr", // Parser / Lexer
     "analyzer", // Use generated parser to build a semantic AST + diagnostics
     "compiler", // Use analyzer to build gapl compiler
+    "lsp", // Language server wrapping analyzer for editor integrations
     "simtest",
     "gapl-example", // Use compiler to convert this gapl code into verilog
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
