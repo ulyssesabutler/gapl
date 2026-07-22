@@ -82,16 +82,25 @@ the extension needs to opt into.
 
 ## Future TODOs
 
-- **Server distribution.** `gapl.serverPath` currently has no good default for a real install —
-  it either requires the user to build `../lsp` themselves via Gradle and set the path manually,
-  or relies on a relative dev-path guess that only works if this extension and the repo are
-  checked out side by side. Before this is usable by anyone other than someone hacking on the
-  compiler itself, decide on and implement one of: bundling a prebuilt server JAR inside the
-  `.vsix` (and shelling out to a bundled/system `java`), auto-downloading a release artifact on
-  first activation, or requiring a separately-installed `gapl` CLI package (see the Debian/RPM
-  packaging already set up in `../compiler/build.gradle.kts`) and locating it on `PATH`.
-- **Packaging/publishing.** No `vsce package`/`vsce publish` setup yet — this only runs via the
-  Extension Development Host today.
+- **Server distribution — done.** `:lsp` now produces a self-contained fat jar via the Gradle
+  Shadow plugin (`:lsp:shadowJar`, pinned to `com.gradleup.shadow` 8.3.6 — the latest stable
+  release; the `9.0.0-beta*` line targets Gradle 9, which this repo doesn't use yet). The
+  `copyServerJar` task in `build.gradle.kts` stages that jar at `server/gapl-lsp.jar` inside this
+  extension before packaging. `resolveServerOptions` in `src/extension.ts` checks, in order: the
+  `gapl.serverPath` setting (advanced override, runs a script/executable directly), the bundled
+  `server/gapl-lsp.jar` (real installs, run via `java -jar`), then the sibling `../lsp` project's
+  dev-mode shadow-jar build output (local development). A friend installing the `.vsix` still
+  needs a JDK 17+ on `PATH` (or `JAVA_HOME`) — VSCode doesn't ship its own JVM the way IntelliJ
+  does (see `intellij-plugin/CLAUDE.md`) — `activate()` now shows a clear error notification if
+  spawning `java` fails with ENOENT, rather than failing silently.
+- **Packaging/publishing — packaging done, publishing not started.** `npm run package` (or
+  `./gradlew :vscode-extension:packageVsix`) runs `vsce package`, producing a `.vsix` for manual
+  install (`code --install-extension <file>.vsix` or the Extensions view's "Install from VSIX...")
+  — no marketplace involved. `.vscodeignore` excludes dev-only files; verified the packaged
+  `.vsix` is lean (a few hundred KB of production `node_modules` plus the ~4MB server jar, not the
+  multi-hundred-MB `.gradle/nodejs` download that landed in it on the first attempt before
+  `.vscodeignore` excluded it) and that `vsce` automatically prunes `devDependencies` from
+  `node_modules` on its own. `vsce publish`/Marketplace listing still not set up.
 - **Syntax highlighting quality.** `../lsp` now implements `textDocument/semanticTokens/full`
   (keywords, operators, numbers, identifiers classified by resolved kind), which VSCode's built-in
   LSP client layers automatically on top of the TextMate grammar below — no extension-side code
@@ -114,7 +123,7 @@ the extension needs to opt into.
 - **No extension-level tests.** Verification so far has been manual (F5 + a real `.gapl` file).
   If this extension grows beyond "spawn the client and get out of the way," consider
   `@vscode/test-electron` for automated integration tests.
-- **IntelliJ.** Not started. The plan discussed earlier in this project is to lean on IntelliJ's
-  built-in generic LSP client support (or the community LSP4IJ plugin) rather than a bespoke
-  PSI-based plugin, so the same `gapl-lsp` server would serve both editors — a second thin client
-  directory analogous to this one, not a rewrite of `../lsp`.
+- **IntelliJ.** Done — see `../intellij-plugin`. Leans on IntelliJ's built-in first-party LSP
+  client support (`LspServerSupportProvider`) rather than a bespoke PSI-based plugin or the
+  community LSP4IJ plugin, so the same `gapl-lsp` server serves both editors — a second thin
+  client directory analogous to this one, not a rewrite of `../lsp`.

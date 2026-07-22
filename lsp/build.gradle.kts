@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.0.21"
     application
+    id("com.gradleup.shadow") version "8.3.6"
 }
 
 application {
@@ -29,4 +30,13 @@ tasks.test {
 
 kotlin {
     jvmToolchain(17)
+}
+
+tasks.shadowJar {
+    // Fixed, predictable name/no version suffix - both editor plugins bundle and invoke this
+    // exact path directly (`java -jar gapl-lsp.jar`), so it can't shift between builds.
+    archiveBaseName.set("gapl-lsp")
+    archiveClassifier.set("")
+    archiveVersion.set("")
+    mergeServiceFiles()
 }

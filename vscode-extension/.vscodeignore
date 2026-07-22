@@ -1,0 +1,10 @@
+.vscode/**
+.gradle/**
+src/**
+out/**/*.map
+tsconfig.json
+build.gradle.kts
+CLAUDE.md
+**/*.ts
+**/.gitkeep
+*.vsix

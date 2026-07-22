@@ -40,14 +40,15 @@
         "gapl.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the gapl-lsp executable. Leave empty during development to use the build in ../lsp/build/install/gapl-lsp/bin/gapl-lsp relative to this extension."
+          "description": "Advanced: path to a gapl-lsp executable/script to run directly instead of the bundled server jar. Leave empty to use the server bundled with this extension (or, during development, the sibling ../lsp project's build output)."
         }
       }
     }
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.0"
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "@types/node": "^20.0.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.4.0"
   }
 }

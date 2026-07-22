@@ -30,16 +30,29 @@ kotlin {
     jvmToolchain(17)
 }
 
+val copyServerJar by tasks.registering(Copy::class) {
+    // Bundles the server jar as a plugin resource so buildPlugin's zip is self-contained - a
+    // friend installing it "from disk" gets a working plugin with no repo clone, no Gradle, and
+    // (since the IDE always ships its own JVM) no separate Java install either. See
+    // GaplLspServerDescriptor.kt, which extracts this resource to disk before running it.
+    dependsOn(":lsp:shadowJar")
+    from(rootProject.file("lsp/build/libs/gapl-lsp.jar"))
+    into("src/main/resources/server")
+}
+
+tasks.named("processResources") {
+    dependsOn(copyServerJar)
+}
+
 tasks.named("assemble") {
-    // gapl-lsp's dev-mode server path fallback points straight at ../lsp's install output, so
-    // building this plugin should guarantee that actually exists - same rationale as vscode-extension.
-    dependsOn(":lsp:installDist")
+    dependsOn(":lsp:shadowJar")
 }
 
 tasks.named<JavaExec>("runIde") {
     // Mirrors vscode-extension's dev-mode server path resolution: for local runIde testing,
-    // point GaplLspServerDescriptor straight at the sibling :lsp subproject's install output
-    // rather than requiring gapl-lsp to be on PATH (which a real, packaged install would provide).
-    dependsOn(":lsp:installDist")
-    systemProperty("gapl.lsp.path", rootProject.file("lsp/build/install/gapl-lsp/bin/gapl-lsp").absolutePath)
+    // point GaplLspServerDescriptor straight at the sibling :lsp subproject's shadow-jar output
+    // rather than relying on the bundled-resource extraction path (which needs a real packaged
+    // plugin jar to extract from).
+    dependsOn(":lsp:shadowJar")
+    systemProperty("gapl.lsp.jar", rootProject.file("lsp/build/libs/gapl-lsp.jar").absolutePath)
 }

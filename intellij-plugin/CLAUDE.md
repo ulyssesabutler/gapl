@@ -23,8 +23,8 @@ highlighting (not implemented yet - see Future TODOs).
 ## Build & dev commands
 
 - `./gradlew :intellij-plugin:build` (from the repo root) - compiles, packages, and depends on
-  `:lsp:installDist`, so building this plugin always guarantees the server binary its dev-mode
-  path resolution needs actually exists (same pattern as `vscode-extension`).
+  `:lsp:shadowJar`, so building this plugin always guarantees the server jar its bundling and
+  dev-mode path resolution both need actually exists (same pattern as `vscode-extension`).
 - `./gradlew :intellij-plugin:buildPlugin` - packages a distributable zip
   (`build/distributions/intellij-plugin-<version>.zip`) and, critically, actually boots a headless
   sandboxed IDE instance as part of `buildSearchableOptions` - this is the only way to catch
@@ -33,9 +33,10 @@ highlighting (not implemented yet - see Future TODOs).
 - `./gradlew :intellij-plugin:runIde` - launches a real sandboxed IDE with this plugin installed,
   for actually trying it against a `.gapl` file. **Needs a GUI** - couldn't be run in the sandbox
   this plugin was originally built in, only confirmed working (server spawns correctly, no
-  plugin-loading errors) once tried on a real machine. Depends on `:lsp:installDist` and passes
-  the resulting binary's path via the `gapl.lsp.path` system property, so the sandboxed IDE finds
-  the server without needing it on `PATH` - no manual setup needed before running this task.
+  plugin-loading errors) once tried on a real machine. Depends on `:lsp:shadowJar` and passes the
+  resulting jar's path via the `gapl.lsp.jar` system property, so the sandboxed IDE runs that
+  directly (`java -jar ...`) instead of extracting the bundled-resource copy described below - no
+  manual setup needed before running this task.
 - The `intellijIdea("2024.3")` target in `build.gradle.kts` determines which IDE Platform version
   gets downloaded to build/test against. This is independent of the plugin's own `sinceBuild`
   compatibility declaration and independent of which Gradle version builds it - see Known gotchas.
@@ -52,7 +53,16 @@ highlighting (not implemented yet - see Future TODOs).
 - `src/main/kotlin/com/uabutler/intellij/GaplLspServerSupportProvider.kt` - `LspServerSupportProvider.fileOpened`:
   starts the server descriptor below when a `.gapl` file is opened.
 - `src/main/kotlin/com/uabutler/intellij/GaplLspServerDescriptor.kt` - `ProjectWideLspServerDescriptor`:
-  `isSupportedFile` (extension check) and `createCommandLine()` (server path resolution).
+  `isSupportedFile` (extension check) and `createCommandLine()` (server path resolution). Resolves
+  the server jar via `gapl.lsp.jar` system property (dev/testing override) or else extracts the
+  bundled `server/gapl-lsp.jar` resource (see `copyServerJar` below) to a content-addressed cache
+  file under `PathManager.getSystemPath()`, and resolves `java` via the IDE's own bundled JVM
+  (`java.home`) before falling back to `PATH`.
+- `build.gradle.kts`'s `copyServerJar` task copies `:lsp:shadowJar`'s output into
+  `src/main/resources/server/gapl-lsp.jar` before `processResources`, so it rides along as a
+  resource inside this plugin's own compiled jar (and therefore inside `buildPlugin`'s zip) - see
+  Future TODOs. That generated file is gitignored (`.gitignore`'s
+  `intellij-plugin/src/main/resources/server/` rule) - don't hand-edit or commit it.
 
 ## Known gotchas (learned the hard way this session)
 
@@ -96,11 +106,14 @@ highlighting (not implemented yet - see Future TODOs).
 
 ## Future TODOs
 
-- **Server distribution.** Same open item as `vscode-extension/CLAUDE.md`'s: `createCommandLine()`
-  currently resolves a `gapl.lsp.path` system property (settable for dev/testing) or falls back to
-  a bare `gapl-lsp` command name resolved against `PATH` - no bundling, no settings UI, no real
-  install story yet. Decide this the same way for both clients when it's tackled, rather than
-  independently.
+- **Server distribution - done.** `:lsp:shadowJar` (Gradle Shadow plugin, pinned to
+  `com.gradleup.shadow` 8.3.6) produces a self-contained `gapl-lsp.jar`; `copyServerJar` bundles it
+  as a plugin resource; `GaplLspServerDescriptor.kt` extracts it to a stable cache location and
+  runs it with the IDE's own bundled JVM. Unlike `vscode-extension` (which still needs a friend to
+  have a JDK on `PATH`), this plugin is genuinely zero-setup - the IDE always ships its own JVM,
+  so `buildPlugin`'s zip works standalone with nothing else installed. Verified end-to-end: built
+  `buildPlugin`, confirmed no plugin-loading errors in the log, unzipped the distribution to
+  confirm `server/gapl-lsp.jar` survives inside the packaged plugin jar.
 - **Syntax highlighting - done, server-side.** `../lsp` now implements `textDocument/semanticTokens/full`
   (keywords, operators, numbers, and identifiers classified by resolved kind - function, interface,
   parameter, variable, type parameter). Per JetBrains' docs this plugin needs zero code for it - the
@@ -110,7 +123,9 @@ highlighting (not implemented yet - see Future TODOs).
   was built in) - worth a look next time `runIde` is used. If it's missing/wrong, the bug is almost
   certainly in `../lsp` or `../analyzer`'s `SemanticTokensCollector`, not here.
 - **Packaging/publishing.** No JetBrains Marketplace publishing set up - `buildPlugin`'s zip output
-  is dev/manual-install only today.
+  (`build/distributions/intellij-plugin-<version>.zip`) is manual-install only today (Settings ->
+  Plugins -> gear icon -> "Install Plugin from Disk..."), which is exactly what's needed for
+  handing this to someone for review without going through the Marketplace.
 - **Gradle 9 / newer plugin tooling.** A deliberate follow-up if wanted, not something to bundle
   into unrelated work - see the gotchas above for what broke last time and needs re-checking
   (`antlr-kotlin`, `com.netflix.nebula.ospackage` in `../compiler`, `com.github.node-gradle.node`
