@@ -40,6 +40,10 @@ bin/
 
 ### VS Code ###
 .vscode/
+# The vscode-extension subproject needs its launch/task config checked in - F5 doesn't work without it.
+!vscode-extension/.vscode/
+!vscode-extension/.vscode/launch.json
+!vscode-extension/.vscode/tasks.json
 
 ### npm/TypeScript ###
 node_modules/
