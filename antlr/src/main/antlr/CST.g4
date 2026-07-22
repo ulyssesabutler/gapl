@@ -48,8 +48,8 @@ Dot: '.';
 LogicalAnd: '&&';
 LogicalOr: '||';
 
-LineComment: '//' ~[\r\n]* -> skip;
-BlockComment: '/*' .*? '*/' -> skip;
+LineComment: '//' ~[\r\n]* -> channel(HIDDEN);
+BlockComment: '/*' .*? '*/' -> channel(HIDDEN);
 
 WhiteSpace: [ \t\r\n]+ -> skip;
 IntLiteral: [0-9]+;

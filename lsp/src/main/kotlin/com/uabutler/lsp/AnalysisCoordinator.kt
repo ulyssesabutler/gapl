@@ -51,6 +51,7 @@ val semanticTokenTypesLegend: List<String> = listOf(
     SemanticTokenTypes.Parameter,
     SemanticTokenTypes.Variable,
     SemanticTokenTypes.TypeParameter,
+    SemanticTokenTypes.Comment,
 )
 
 private val SemanticTokenKind.lspTokenTypeIndex: Int
@@ -63,6 +64,7 @@ private val SemanticTokenKind.lspTokenTypeIndex: Int
         SemanticTokenKind.PARAMETER -> 5
         SemanticTokenKind.VARIABLE -> 6
         SemanticTokenKind.TYPE_PARAMETER -> 7
+        SemanticTokenKind.COMMENT -> 8
     }
 
 // LSP's semantic tokens wire format: a flat array, 5 ints per token, each token's position

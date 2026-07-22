@@ -14,6 +14,7 @@ import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.util.Logger
 import com.uabutler.util.standardLibary
 import org.antlr.v4.kotlinruntime.CharStreams
+import org.antlr.v4.kotlinruntime.Token
 
 object Analyzer {
 
@@ -73,29 +74,51 @@ object Analyzer {
         }
     }
 
-    // Keywords/operators/numbers never make it into the AST (only identifier spans do), so they
-    // need their own lex pass - Parser doesn't expose its internal lexer/token stream, and this is
-    // cheap enough that re-lexing independently is simpler than threading one through.
+    // Keywords/operators/numbers/comments never make it into the AST (only identifier spans do,
+    // and comments aren't in the AST at all), so they need their own lex pass - Parser doesn't
+    // expose its internal lexer/token stream, and this is cheap enough that re-lexing independently
+    // is simpler than threading one through. Comments are on the ANTLR hidden channel (see CST.g4),
+    // not skipped, specifically so they still show up in allTokens here.
     private fun lexicalTokens(text: String): List<SemanticToken> {
         val lexer = CSTLexer(CharStreams.fromString(text))
 
-        return lexer.allTokens.mapNotNull { token ->
-            val kind = when (token.type) {
+        return lexer.allTokens.flatMap { token ->
+            when (token.type) {
                 CSTLexer.Tokens.Interface, CSTLexer.Tokens.Wire, CSTLexer.Tokens.Function, CSTLexer.Tokens.Declare,
                 CSTLexer.Tokens.If, CSTLexer.Tokens.Else, CSTLexer.Tokens.Null, CSTLexer.Tokens.True, CSTLexer.Tokens.False,
-                CSTLexer.Tokens.In, CSTLexer.Tokens.Out, CSTLexer.Tokens.Inout, CSTLexer.Tokens.Integer -> SemanticTokenKind.KEYWORD
+                CSTLexer.Tokens.In, CSTLexer.Tokens.Out, CSTLexer.Tokens.Inout, CSTLexer.Tokens.Integer ->
+                    listOf(SemanticToken(SourceSpan.of(token), SemanticTokenKind.KEYWORD))
 
                 CSTLexer.Tokens.Add, CSTLexer.Tokens.Subtract, CSTLexer.Tokens.Multiply, CSTLexer.Tokens.Divide,
                 CSTLexer.Tokens.Remainder, CSTLexer.Tokens.Equals, CSTLexer.Tokens.NotEquals,
                 CSTLexer.Tokens.GreaterThanEquals, CSTLexer.Tokens.LessThanEquals, CSTLexer.Tokens.Connector,
-                CSTLexer.Tokens.LogicalAnd, CSTLexer.Tokens.LogicalOr -> SemanticTokenKind.OPERATOR
+                CSTLexer.Tokens.LogicalAnd, CSTLexer.Tokens.LogicalOr ->
+                    listOf(SemanticToken(SourceSpan.of(token), SemanticTokenKind.OPERATOR))
 
-                CSTLexer.Tokens.IntLiteral -> SemanticTokenKind.NUMBER
+                CSTLexer.Tokens.IntLiteral -> listOf(SemanticToken(SourceSpan.of(token), SemanticTokenKind.NUMBER))
 
-                else -> null
+                CSTLexer.Tokens.LineComment, CSTLexer.Tokens.BlockComment -> commentTokens(token)
+
+                else -> emptyList()
             }
+        }
+    }
 
-            kind?.let { SemanticToken(SourceSpan.of(token), it) }
+    // SourceSpan.of(token) assumes a token never wraps a line (its endLine/endColumn math is
+    // start-line-relative), which is wrong for a multi-line /* */ block comment - and the LSP
+    // semantic-tokens wire format requires every token to sit on a single line regardless. Split
+    // the comment's raw text into one token per physical line it occupies instead.
+    private fun commentTokens(token: Token): List<SemanticToken> {
+        val lines = (token.text ?: "").split("\n")
+
+        return lines.mapIndexedNotNull { index, line ->
+            val lineNumber = token.line + index
+            val startColumn = if (index == 0) token.charPositionInLine else 0
+            val endColumn = startColumn + line.length
+
+            if (endColumn == startColumn) return@mapIndexedNotNull null // empty line inside the comment
+
+            SemanticToken(SourceSpan(lineNumber, startColumn, lineNumber, endColumn), SemanticTokenKind.COMMENT)
         }
     }
 

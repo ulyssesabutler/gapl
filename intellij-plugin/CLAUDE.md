@@ -115,8 +115,8 @@ highlighting (not implemented yet - see Future TODOs).
   `buildPlugin`, confirmed no plugin-loading errors in the log, unzipped the distribution to
   confirm `server/gapl-lsp.jar` survives inside the packaged plugin jar.
 - **Syntax highlighting - done, server-side.** `../lsp` now implements `textDocument/semanticTokens/full`
-  (keywords, operators, numbers, and identifiers classified by resolved kind - function, interface,
-  parameter, variable, type parameter). Per JetBrains' docs this plugin needs zero code for it - the
+  (keywords, operators, numbers, comments, and identifiers classified by resolved kind - function,
+  interface, parameter, variable, type parameter). Per JetBrains' docs this plugin needs zero code for it - the
   platform's LSP client picks up semantic tokens automatically once the server advertises the
   capability, verified server-side via a protocol test and a manual run against a real `.gapl` file.
   Not yet visually confirmed rendering correctly in a real running IDE (no GUI in the sandbox this

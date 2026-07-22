@@ -259,7 +259,7 @@ class GaplLanguageServerProtocolTest {
         withServer { server, _ ->
             val result = server.initialize(InitializeParams()).get(5, TimeUnit.SECONDS)
             val legend = result.capabilities.semanticTokensProvider.legend
-            assertTrue(legend.tokenTypes.containsAll(listOf("keyword", "function", "variable", "parameter")))
+            assertTrue(legend.tokenTypes.containsAll(listOf("keyword", "function", "variable", "parameter", "comment")))
         }
     }
 
@@ -295,6 +295,33 @@ class GaplLanguageServerProtocolTest {
             assertTrue(hasTokenAt("function", 0, "keyword"))
             assertTrue(hasTokenAt("x:", 0, "variable"))
             assertTrue(hasTokenAt("=>", 0, "operator"))
+        }
+    }
+
+    @Test
+    fun `semantic tokens classify a comment without disrupting parsing`() {
+        withServer { server, client ->
+            val gapl = """
+                // a comment
+                function top() i: wire => o: wire {
+                    i => o;
+                }
+            """.trimIndent()
+
+            server.textDocumentService.didOpen(
+                DidOpenTextDocumentParams(TextDocumentItem("file:///comment.gapl", "gapl", 1, gapl))
+            )
+            nextDiagnostics(client.publishedDiagnostics)
+
+            val tokens = server.textDocumentService.semanticTokensFull(
+                SemanticTokensParams(TextDocumentIdentifier("file:///comment.gapl"))
+            ).get(5, TimeUnit.SECONDS)
+
+            val decoded = decodeSemanticTokens(tokens.data)
+            val position = positionOf(gapl, "// a comment")
+
+            assertTrue(decoded.any { it.line == position.line && it.startChar == position.character && it.tokenType == "comment" })
+            assertTrue(decoded.any { it.tokenType == "function" }) // parsing still succeeded past the comment
         }
     }
 }
