@@ -23,6 +23,7 @@ include(
     "compiler", // Use analyzer to build gapl compiler
     "lsp", // Language server wrapping analyzer for editor integrations
     "vscode-extension", // VSCode client for lsp
+    "intellij-plugin", // IntelliJ-family client for lsp
     "simtest",
     "gapl-example", // Use compiler to convert this gapl code into verilog
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3

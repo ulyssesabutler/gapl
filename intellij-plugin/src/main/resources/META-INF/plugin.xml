@@ -1,0 +1,12 @@
+<idea-plugin>
+    <id>com.uabutler.gapl</id>
+    <name>GAPL</name>
+    <vendor>uabutler</vendor>
+    <description>Language support for GAPL (gate array programming language), backed by the gapl-lsp language server.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider implementation="com.uabutler.intellij.GaplLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>
