@@ -35,3 +35,11 @@ tasks.named("assemble") {
     // building this plugin should guarantee that actually exists - same rationale as vscode-extension.
     dependsOn(":lsp:installDist")
 }
+
+tasks.named<JavaExec>("runIde") {
+    // Mirrors vscode-extension's dev-mode server path resolution: for local runIde testing,
+    // point GaplLspServerDescriptor straight at the sibling :lsp subproject's install output
+    // rather than requiring gapl-lsp to be on PATH (which a real, packaged install would provide).
+    dependsOn(":lsp:installDist")
+    systemProperty("gapl.lsp.path", rootProject.file("lsp/build/install/gapl-lsp/bin/gapl-lsp").absolutePath)
+}
