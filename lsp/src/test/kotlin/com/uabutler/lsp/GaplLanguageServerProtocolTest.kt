@@ -9,6 +9,7 @@ import org.eclipse.lsp4j.MessageActionItem
 import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent
 import org.eclipse.lsp4j.TextDocumentIdentifier
@@ -41,6 +42,32 @@ private fun positionOf(text: String, needle: String, occurrence: Int = 0): Posit
         }
     }
     error("'$needle' occurrence $occurrence not found in text")
+}
+
+// Client-side inverse of AnalysisCoordinator.encodeSemanticTokens, for asserting on decoded
+// positions/types rather than hand-computing deltas in every test.
+private data class DecodedSemanticToken(val line: Int, val startChar: Int, val length: Int, val tokenType: String)
+
+private fun decodeSemanticTokens(data: List<Int>): List<DecodedSemanticToken> {
+    val decoded = mutableListOf<DecodedSemanticToken>()
+    var line = 0
+    var startChar = 0
+
+    var i = 0
+    while (i < data.size) {
+        val deltaLine = data[i]
+        val deltaStartChar = data[i + 1]
+        val length = data[i + 2]
+        val tokenTypeIndex = data[i + 3]
+
+        line += deltaLine
+        startChar = if (deltaLine == 0) startChar + deltaStartChar else deltaStartChar
+
+        decoded.add(DecodedSemanticToken(line, startChar, length, semanticTokenTypesLegend[tokenTypeIndex]))
+        i += 5
+    }
+
+    return decoded
 }
 
 // A minimal recording LanguageClient - captures every publishDiagnostics call on a queue so
@@ -224,6 +251,50 @@ class GaplLanguageServerProtocolTest {
             ).get(5, TimeUnit.SECONDS)
 
             assertTrue(result.left.isEmpty())
+        }
+    }
+
+    @Test
+    fun `initialize advertises a semantic tokens legend`() {
+        withServer { server, _ ->
+            val result = server.initialize(InitializeParams()).get(5, TimeUnit.SECONDS)
+            val legend = result.capabilities.semanticTokensProvider.legend
+            assertTrue(legend.tokenTypes.containsAll(listOf("keyword", "function", "variable", "parameter")))
+        }
+    }
+
+    @Test
+    fun `semantic tokens classify a declared function, a keyword, and a declared variable`() {
+        withServer { server, client ->
+            // "top" is never referenced elsewhere in the file - this is exactly the case that
+            // proves declarations are classified independently, not only riding along on usages.
+            val gapl = """
+                function top() i: wire => o: wire {
+                    i => declare x: wire;
+                    x => o;
+                }
+            """.trimIndent()
+
+            server.textDocumentService.didOpen(
+                DidOpenTextDocumentParams(TextDocumentItem("file:///tokens.gapl", "gapl", 1, gapl))
+            )
+            nextDiagnostics(client.publishedDiagnostics)
+
+            val tokens = server.textDocumentService.semanticTokensFull(
+                SemanticTokensParams(TextDocumentIdentifier("file:///tokens.gapl"))
+            ).get(5, TimeUnit.SECONDS)
+
+            val decoded = decodeSemanticTokens(tokens.data)
+
+            fun hasTokenAt(needle: String, occurrence: Int, tokenType: String): Boolean {
+                val position = positionOf(gapl, needle, occurrence)
+                return decoded.any { it.line == position.line && it.startChar == position.character && it.tokenType == tokenType }
+            }
+
+            assertTrue(hasTokenAt("top", 0, "function"))
+            assertTrue(hasTokenAt("function", 0, "keyword"))
+            assertTrue(hasTokenAt("x:", 0, "variable"))
+            assertTrue(hasTokenAt("=>", 0, "operator"))
         }
     }
 }

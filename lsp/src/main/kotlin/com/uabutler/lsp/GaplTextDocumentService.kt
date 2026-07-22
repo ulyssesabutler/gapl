@@ -224,8 +224,10 @@ class GaplTextDocumentService : TextDocumentService {
     override fun selectionRange(params: SelectionRangeParams): CompletableFuture<List<SelectionRange>> =
         CompletableFuture.completedFuture(emptyList())
 
-    override fun semanticTokensFull(params: SemanticTokensParams): CompletableFuture<SemanticTokens?> =
-        CompletableFuture.completedFuture(null)
+    override fun semanticTokensFull(params: SemanticTokensParams): CompletableFuture<SemanticTokens?> {
+        val data = AnalysisCoordinator.semanticTokensFor(params.textDocument.uri).encodeSemanticTokens()
+        return CompletableFuture.completedFuture(SemanticTokens(data))
+    }
 
     override fun semanticTokensFullDelta(
         params: SemanticTokensDeltaParams,

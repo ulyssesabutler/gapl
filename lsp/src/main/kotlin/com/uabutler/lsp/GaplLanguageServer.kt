@@ -2,6 +2,9 @@ package com.uabutler.lsp
 
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
+import org.eclipse.lsp4j.SemanticTokensLegend
+import org.eclipse.lsp4j.SemanticTokensServerFull
+import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions
 import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.TextDocumentSyncKind
 import org.eclipse.lsp4j.services.LanguageClient
@@ -24,6 +27,10 @@ class GaplLanguageServer : LanguageServer, LanguageClientAware {
         val capabilities = ServerCapabilities().apply {
             setTextDocumentSync(TextDocumentSyncKind.Full)
             setDefinitionProvider(true)
+            semanticTokensProvider = SemanticTokensWithRegistrationOptions(
+                SemanticTokensLegend(semanticTokenTypesLegend, emptyList()),
+                SemanticTokensServerFull(false), // full-document only, no delta support
+            )
         }
 
         return CompletableFuture.completedFuture(InitializeResult(capabilities))
