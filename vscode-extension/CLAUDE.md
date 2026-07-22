@@ -6,10 +6,11 @@ This file provides guidance to Claude Code when working in this directory.
 
 A minimal VSCode extension that provides editor support for GAPL (`.gapl` files) by spawning
 and talking to the `gapl-lsp` language server — a separate Kotlin/JVM subproject (`../lsp`) in
-this same repo. This directory is npm/TypeScript, **not** part of the Gradle multi-project build
-(it's not in the root `settings.gradle.kts`), and is only loosely coupled to the rest of the
-monorepo: it doesn't build or depend on Kotlin code directly, it just launches a server binary
-that Gradle produces elsewhere.
+this same repo. This directory is npm/TypeScript, but it *is* wired into the root Gradle build
+(via the `com.github.node-gradle.node` plugin, included in `settings.gradle.kts`) so the whole
+monorepo can be driven from one build system - see Build & dev commands. It's still only loosely
+coupled to the rest of the repo at the code level: it doesn't build or depend on Kotlin code
+directly, it just launches a server binary that Gradle produces elsewhere.
 
 This extension is intentionally a thin client. All real logic — parsing, diagnostics, netlist
 validation, go-to-definition — lives in `../lsp` and `../analyzer`. If you're debugging something
@@ -21,9 +22,14 @@ the extension needs to opt into.
 
 ## Build & dev commands
 
-- `npm install` — install dependencies (`vscode-languageclient` + TS/VSCode type devDeps).
-- `npm run compile` — type-check and emit `out/*.js` from `src/*.ts` (`tsc -p ./`).
-- `npm run watch` — same, in watch mode.
+- `./gradlew :vscode-extension:build` (from the repo root) — the normal way to build this now.
+  Downloads a pinned Node/npm (20.18.1) into the project if needed (no system Node required),
+  runs `npm install`, then `npm run compile`. Also included automatically in a plain
+  `./gradlew build`/`./gradlew clean` from the repo root, alongside every Kotlin subproject.
+  `clean` here removes both `out/` and `node_modules/` (not just build output) - a full clean
+  means the next build re-runs `npm install` from scratch.
+- Direct npm commands still work if you're iterating quickly and don't want Gradle's overhead:
+  `npm install`, `npm run compile` (type-check, emit `out/*.js`), `npm run watch`.
 - **To actually run it**: open *this directory* (`vscode-extension/`) as the VSCode workspace
   root — not the whole `gapl` repo — then press F5. `.vscode/launch.json` is workspace-relative,
   so VSCode won't find it (and will prompt for a generic debugger instead) unless this folder is
