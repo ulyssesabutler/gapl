@@ -84,6 +84,15 @@ highlighting (not implemented yet - see Future TODOs).
   depends on transitively) used an internal Gradle worker API that was removed between 8.10 and
   8.14.5, breaking the *entire* build, not just this plugin, until it was bumped from 1.0.0 to
   1.0.3. If a future Gradle bump breaks things again, check `../antlr/build.gradle.kts` first.
+- **A working `runIde` session can still log SEVERE "Internal error" responses that look alarming
+  but aren't - or were, and now are fixed.** IntelliJ's LSP client proactively probes several
+  optional capabilities (hover, documentSymbol, foldingRange, codeLens, inlayHint) on file open for
+  editor decoration, regardless of what `initialize()` advertises. LSP4J's `TextDocumentService`
+  default implementations for these `throw UnsupportedOperationException` rather than returning
+  gracefully, which used to surface as exactly this error, once per capability, on every file open.
+  Fixed server-side in `../lsp/src/main/kotlin/com/uabutler/lsp/GaplTextDocumentService.kt` (all
+  five now return empty/null results explicitly) - if you see this pattern again for a *different*
+  method name in the log, that method needs the same treatment added there, not here.
 
 ## Future TODOs
 
