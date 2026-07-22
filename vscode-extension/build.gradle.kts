@@ -23,7 +23,10 @@ val npmCompile by tasks.registering(NpmTask::class) {
 }
 
 tasks.named("assemble") {
-    dependsOn(npmCompile)
+    // gapl.serverPath's dev-mode default points straight at ../lsp's install output, so building
+    // this extension should guarantee that actually exists rather than silently succeeding with
+    // a broken extension if :lsp was never built.
+    dependsOn(npmCompile, ":lsp:installDist")
 }
 
 tasks.named<Delete>("clean") {
