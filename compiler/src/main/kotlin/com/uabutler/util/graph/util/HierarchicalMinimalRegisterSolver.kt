@@ -253,6 +253,8 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
             value = graph.value,
             nodes = graph.nodes.map { retimedNodeFor(it) },
             edges = retimedHierarchicalEdges,
+            rootAttachment = retimedNodeFor(graph.rootAttachment),
+            leafAttachment = retimedNodeFor(graph.leafAttachment),
         )
 
         // Step 6: Retimed timing properties

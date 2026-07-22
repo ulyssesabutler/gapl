@@ -4,6 +4,15 @@ class HierarchicalLeisersonCircuitGraph<G, N, E>(
     val value: G,
     nodes: Collection<Node<N>>,
     edges: Collection<Edge<N, E>>,
+    // The node to attach a caller's incoming/outgoing edges to when this graph is inlined as a
+    // ChildGraphNode - explicit rather than inferred from rootNodes()/leafNodes() after flattening,
+    // since a function can have more than one graph-theoretic leaf (e.g. an internal value that's
+    // legitimately never consumed, like an unused last-round key in a recursive round function) -
+    // inferring "the" leaf from degree alone picks the wrong one whenever that happens. By
+    // convention (see HierarchicalNetlistLeisersonCircuitConverter.fromModule) these are always the
+    // graph's own super-input/super-output VirtualNode, but nothing here requires that.
+    val rootAttachment: Node<N>,
+    val leafAttachment: Node<N>,
 ) : Graph<N, E,
     HierarchicalLeisersonCircuitGraph.Node<N>,
     HierarchicalLeisersonCircuitGraph.Edge<N, E>,
@@ -26,19 +35,38 @@ class HierarchicalLeisersonCircuitGraph<G, N, E>(
     override fun newGraph(
         nodes: Collection<Node<N>>,
         edges: Collection<Edge<N, E>>,
-    ): HierarchicalLeisersonCircuitGraph<G, N, E> = HierarchicalLeisersonCircuitGraph(value, nodes, edges)
+    ): HierarchicalLeisersonCircuitGraph<G, N, E> = HierarchicalLeisersonCircuitGraph(value, nodes, edges, rootAttachment, leafAttachment)
 
     fun childNodes(): List<ChildGraphNode<G, N, E>> = nodes.filterIsInstance<ChildGraphNode<G, N, E>>()
 
     fun childGraphs(): List<HierarchicalLeisersonCircuitGraph<G, N, E>> = childNodes().map { it.childGraph }
 
+    data class Flattened<N, E>(
+        val graph: WeightedGraph<N, E>,
+        val rootAttachment: WeightedGraph.Node<N>,
+        val leafAttachment: WeightedGraph.Node<N>,
+    )
+
     /**
      * Recursively inlines every [ChildGraphNode] into its containing graph, producing a single flat
      * [LeisersonCircuitGraph]. A [ChildGraphNode] is replaced by its (recursively flattened) child graph's nodes
-     * and edges; edges that pointed into/out of the [ChildGraphNode] are redirected to the child graph's unique
-     * root node / leaf node (its "super input" / "super output" [VirtualNode], per convention).
+     * and edges; edges that pointed into/out of the [ChildGraphNode] are redirected to the child graph's
+     * [rootAttachment] / [leafAttachment].
+     *
+     * [LeisersonCircuitGraph]'s constructor is itself a zero-weight-cycle check, so this throws immediately if
+     * the flattened result contains one - fine for callers that treat a cycle as unrecoverable (retiming), but
+     * unusable for callers that want to inspect *which* nodes are involved. Use [flattenToWeightedGraph] for that.
      */
-    fun flatten(virtualNodeWeight: (VirtualNode<N>) -> Int = { 0 }): LeisersonCircuitGraph<G, N, E> {
+    fun flatten(virtualNodeWeight: (VirtualNode<N>) -> Int = { 0 }): LeisersonCircuitGraph<G, N, E> =
+        flattenToWeightedGraph(virtualNodeWeight).graph.let { LeisersonCircuitGraph(value, it.nodes, it.edges) }
+
+    /**
+     * Same recursive inlining as [flatten], but returns a plain [WeightedGraph] - no cycle validation, so a
+     * combinational loop in the input doesn't throw here. Callers that need to know whether/where a cycle exists
+     * (rather than treating one as an unrecoverable error) should inspect the result themselves, e.g. via
+     * [Graph.subgraph] + [Graph.stronglyConnectedComponentsTarjan].
+     */
+    fun flattenToWeightedGraph(virtualNodeWeight: (VirtualNode<N>) -> Int = { 0 }): Flattened<N, E> {
         val directFlatNode = mutableMapOf<Node<N>, WeightedGraph.Node<N>>()
         val childInputAttachment = mutableMapOf<Node<N>, WeightedGraph.Node<N>>()
         val childOutputAttachment = mutableMapOf<Node<N>, WeightedGraph.Node<N>>()
@@ -63,21 +91,12 @@ class HierarchicalLeisersonCircuitGraph<G, N, E>(
         }
 
         childNodes().forEach { node ->
-            val flatChildGraph = node.childGraph.flatten(virtualNodeWeight)
-            allFlatNodes.addAll(flatChildGraph.nodes)
-            allFlatEdges.addAll(flatChildGraph.edges)
+            val flatChild = node.childGraph.flattenToWeightedGraph(virtualNodeWeight)
+            allFlatNodes.addAll(flatChild.graph.nodes)
+            allFlatEdges.addAll(flatChild.graph.edges)
 
-            val roots = flatChildGraph.rootNodes()
-            val leaves = flatChildGraph.leafNodes()
-            require(roots.size == 1) {
-                "Child graph for node ${node.value} must have exactly one root node, found ${roots.size}"
-            }
-            require(leaves.size == 1) {
-                "Child graph for node ${node.value} must have exactly one leaf node, found ${leaves.size}"
-            }
-
-            childInputAttachment[node] = roots.single()
-            childOutputAttachment[node] = leaves.single()
+            childInputAttachment[node] = flatChild.rootAttachment
+            childOutputAttachment[node] = flatChild.leafAttachment
         }
 
         fun resolveSource(node: Node<N>) = directFlatNode[node] ?: childOutputAttachment.getValue(node)
@@ -94,6 +113,10 @@ class HierarchicalLeisersonCircuitGraph<G, N, E>(
             )
         }
 
-        return LeisersonCircuitGraph(value, allFlatNodes, allFlatEdges)
+        return Flattened(
+            graph = WeightedGraph(allFlatNodes, allFlatEdges),
+            rootAttachment = resolveSink(rootAttachment),
+            leafAttachment = resolveSource(leafAttachment),
+        )
     }
 }

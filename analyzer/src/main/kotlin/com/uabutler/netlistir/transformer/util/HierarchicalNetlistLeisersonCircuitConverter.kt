@@ -103,6 +103,8 @@ object HierarchicalNetlistLeisersonCircuitConverter {
             value = module,
             nodes = leafNodes.values + childNodes.values + listOf(superInputNode, superOutputNode),
             edges = edges + superInputEdges + superOutputEdges,
+            rootAttachment = superInputNode,
+            leafAttachment = superOutputNode,
         )
     }
 

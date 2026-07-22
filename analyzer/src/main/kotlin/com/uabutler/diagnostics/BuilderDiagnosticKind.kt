@@ -99,4 +99,12 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             append("of $nodeType '$nodeName' in function '$functionName' is connected more than once")
         }
     }
+
+    data class CombinationalLoop(val involvedNodes: List<NodeInLoop>) : BuilderDiagnosticKind {
+        data class NodeInLoop(val nodeName: String, val functionName: String)
+
+        override val message get() =
+            "Combinational loop involving: ${involvedNodes.joinToString(", ") { "${it.nodeName} (in ${it.functionName})" }} " +
+            "(no register breaks the cycle)"
+    }
 }

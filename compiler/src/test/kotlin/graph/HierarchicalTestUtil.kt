@@ -20,17 +20,22 @@ object HierarchicalTestUtil {
 
     /**
      * Creates a hierarchical graph where:
-     *  - nodes in [virtualNodes] become VirtualNode (weight 0, I/O boundaries)
+     *  - [rootAttachment] and [leafAttachment] become VirtualNode (weight 0, I/O boundaries) -
+     *    matching the real convention (HierarchicalNetlistLeisersonCircuitConverter.fromModule)
+     *    of exactly one super-input and one super-output node per graph
      *  - nodes in [childGraphs] become ChildGraphNode referencing the given sub-graph
      *  - all other nodes in [edgeList] become LeafNode (weight from [leafWeights], defaulting to 1)
      */
     fun createHierarchicalGraph(
         name: String,
         edgeList: List<Edge>,
+        rootAttachment: String,
+        leafAttachment: String,
         leafWeights: Map<String, Int> = emptyMap(),
         childGraphs: Map<String, HGraph> = emptyMap(),
-        virtualNodes: Set<String> = emptySet(),
     ): HGraph {
+        val virtualNodes = setOf(rootAttachment, leafAttachment)
+
         val allNodeNames = (
             edgeList.flatMap { listOf(it.source, it.sink) } +
             childGraphs.keys +
@@ -63,7 +68,13 @@ object HierarchicalTestUtil {
             )
         }
 
-        return HGraph(value = name, nodes = nodes.values, edges = edges)
+        return HGraph(
+            value = name,
+            nodes = nodes.values,
+            edges = edges,
+            rootAttachment = nodes.getValue(rootAttachment),
+            leafAttachment = nodes.getValue(leafAttachment),
+        )
     }
 
     fun getCorrespondingEdge(edges: Collection<HEdge>, sketch: Edge): HEdge =

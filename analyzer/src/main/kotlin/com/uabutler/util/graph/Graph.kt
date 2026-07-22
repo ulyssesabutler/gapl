@@ -1,6 +1,20 @@
 package com.uabutler.util.graph
 
 import com.uabutler.util.Logger
+import java.util.Collections
+import java.util.IdentityHashMap
+
+// Node/edge wrapper types (WeightedGraph.Node, etc.) are structural data classes, so two distinct
+// positions in a graph can end up wrapping equal (e.g. weight, value) pairs - notably when the same
+// underlying value gets flattened in from multiple call sites sharing one child graph (see
+// HierarchicalLeisersonCircuitGraph.flatten - the same function invoked twice with identical
+// arguments shares one built module, so each call site's flattening produces separately-constructed
+// but structurally-equal node wrappers for its internals). Every lookup in this file is
+// identity-based specifically so such coincidentally-equal-but-distinct instances are never merged;
+// relying on structural equals/hashCode here previously let repeated same-invocation call sites
+// collapse into one shared adjacency-list entry, corrupting the graph and producing spurious edges/cycles.
+private fun <K, V> identityMapOf(): MutableMap<K, V> = IdentityHashMap()
+private fun <K> identitySetOf(): MutableSet<K> = Collections.newSetFromMap(IdentityHashMap())
 
 interface GraphNode<N> {
     val value: N
@@ -16,7 +30,9 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
     val nodes: Collection<NodeT>,
     val edges: Collection<EdgeT>,
 ) {
-    protected val adjacencyList: Map<NodeT, List<EdgeT>> = edges.groupBy { it.source }
+    protected val adjacencyList: Map<NodeT, List<EdgeT>> = identityMapOf<NodeT, MutableList<EdgeT>>().apply {
+        edges.forEach { edge -> getOrPut(edge.source) { mutableListOf() }.add(edge) }
+    }
     protected fun outgoingEdges(node: NodeT) = adjacencyList[node] ?: emptyList()
 
     protected open fun newGraph(
@@ -28,8 +44,12 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
 
     fun topologicalSort(): List<NodeT> {
         // Kahn's algorithm
-        val nodesWithIncoming = edges.groupBy { it.sink }.mapValues { (_, edges) -> edges.map { it.source }.toMutableList() }
-        val inNodes = nodes.associateWith { nodesWithIncoming[it] ?: mutableListOf() }
+        val nodesWithIncoming = identityMapOf<NodeT, MutableList<NodeT>>().apply {
+            edges.forEach { edge -> getOrPut(edge.sink) { mutableListOf() }.add(edge.source) }
+        }
+        val inNodes = identityMapOf<NodeT, MutableList<NodeT>>().apply {
+            nodes.forEach { put(it, nodesWithIncoming[it] ?: mutableListOf()) }
+        }
 
         val currentStartNodes = inNodes.filterValues { it.isEmpty() }.keys.toMutableList()
 
@@ -41,7 +61,8 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
 
                 adjacencyList[currentNode]?.forEach { edge ->
                     val currentList = inNodes[edge.sink]!!
-                    currentList.remove(edge.source)
+                    val removeIndex = currentList.indexOfFirst { it === edge.source }
+                    if (removeIndex >= 0) currentList.removeAt(removeIndex)
                     if (currentList.isEmpty()) currentStartNodes.add(edge.sink)
                 }
             }
@@ -49,7 +70,8 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
             if (candidateList.size != nodes.size) throw IllegalArgumentException("Graph contains cycles").also {
                 Logger.debug { "Error in topological sort: Graph contains cycles" }
                 Logger.run("SCC Edges") {
-                    val sccNodes = nodes - candidateList.toSet()
+                    val visited = identitySetOf<NodeT>().apply { addAll(candidateList) }
+                    val sccNodes = nodes.filterNot { it in visited }
                     sccNodes.flatMap { sink -> inNodes[sink]!!.map { source -> source.value to sink.value } }
                         .forEach { (source, sink) -> Logger.debug { "$source -> $sink" } }
                 }
@@ -57,15 +79,21 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
         }
     }
 
-    fun rootNodes(): List<NodeT> = nodes - edges.map { it.sink }.toSet()
+    fun rootNodes(): List<NodeT> {
+        val sinks = identitySetOf<NodeT>().apply { edges.forEach { add(it.sink) } }
+        return nodes.filterNot { it in sinks }
+    }
 
-    fun leafNodes(): List<NodeT> = nodes - edges.map { it.source }.toSet()
+    fun leafNodes(): List<NodeT> {
+        val sources = identitySetOf<NodeT>().apply { edges.forEach { add(it.source) } }
+        return nodes.filterNot { it in sources }
+    }
 
     fun subgraph(
         nodeFilter: (NodeT) -> Boolean = { true },
         edgeFilter: (EdgeT) -> Boolean = { true },
     ): G {
-        val keptNodes = nodes.filter(nodeFilter).toSet()
+        val keptNodes = identitySetOf<NodeT>().apply { nodes.filter(nodeFilter).forEach { add(it) } }
         val keptEdges = edges
             .asSequence()
             .filter(edgeFilter)
@@ -94,46 +122,75 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
         override val value: List<EdgeT>, // all original edges crossing SCCs
     ) : GraphEdge<SccSubgraph<NodeT, EdgeT>, List<EdgeT>, SccNode<NodeT, EdgeT>>
 
+    // Iterative (not recursive) Tarjan's algorithm - a real GAPL design's netlist can easily be
+    // deep enough (thousands of chained nodes) to blow the JVM's call stack with a naive recursive
+    // DFS, once something (e.g. a whole-program combinational-loop check) exercises this on every
+    // compile rather than only on designs that opt into retiming. Each stack frame explicitly
+    // tracks which outgoing edge of its node it's currently examining, mirroring exactly what the
+    // recursive version's call stack would otherwise track implicitly.
+    private class DfsFrame<NodeT>(val node: NodeT, var edgeIndex: Int = 0)
+
     fun stronglyConnectedComponentsTarjan(): List<Set<NodeT>> {
         var currentIndex = 0
-        val indexByNode = mutableMapOf<NodeT, Int>()
-        val lowLinkByNode = mutableMapOf<NodeT, Int>()
-        val onStack = mutableSetOf<NodeT>()
+        val indexByNode = identityMapOf<NodeT, Int>()
+        val lowLinkByNode = identityMapOf<NodeT, Int>()
+        val onStack = identitySetOf<NodeT>()
         val stack = ArrayDeque<NodeT>()
         val components = mutableListOf<Set<NodeT>>()
 
-        fun dfs(node: NodeT) {
-            indexByNode[node] = currentIndex
-            lowLinkByNode[node] = currentIndex
-            currentIndex += 1
+        fun visit(start: NodeT) {
+            val callStack = ArrayDeque<DfsFrame<NodeT>>()
 
-            stack.addLast(node)
-            onStack.add(node)
-
-            for (edge in outgoingEdges(node)) {
-                val nextNode = edge.sink
-                if (nextNode !in indexByNode) {
-                    dfs(nextNode)
-                    lowLinkByNode[node] = minOf(lowLinkByNode.getValue(node), lowLinkByNode.getValue(nextNode))
-                } else if (nextNode in onStack) {
-                    lowLinkByNode[node] = minOf(lowLinkByNode.getValue(node), indexByNode.getValue(nextNode))
-                }
+            fun open(node: NodeT) {
+                indexByNode[node] = currentIndex
+                lowLinkByNode[node] = currentIndex
+                currentIndex += 1
+                stack.addLast(node)
+                onStack.add(node)
+                callStack.addLast(DfsFrame(node))
             }
 
-            if (lowLinkByNode.getValue(node) == indexByNode.getValue(node)) {
-                val component = mutableSetOf<NodeT>()
-                while (true) {
-                    val w = stack.removeLast()
-                    onStack.remove(w)
-                    component.add(w)
-                    if (w == node) break
+            open(start)
+
+            while (callStack.isNotEmpty()) {
+                val frame = callStack.last()
+                val node = frame.node
+                val outgoing = outgoingEdges(node)
+
+                if (frame.edgeIndex < outgoing.size) {
+                    val edge = outgoing[frame.edgeIndex]
+                    frame.edgeIndex += 1
+                    val nextNode = edge.sink
+
+                    if (nextNode !in indexByNode) {
+                        open(nextNode)
+                    } else if (nextNode in onStack) {
+                        lowLinkByNode[node] = minOf(lowLinkByNode.getValue(node), indexByNode.getValue(nextNode))
+                    }
+                } else {
+                    callStack.removeLast()
+                    val parentFrame = callStack.lastOrNull()
+                    if (parentFrame != null) {
+                        val parent = parentFrame.node
+                        lowLinkByNode[parent] = minOf(lowLinkByNode.getValue(parent), lowLinkByNode.getValue(node))
+                    }
+
+                    if (lowLinkByNode.getValue(node) == indexByNode.getValue(node)) {
+                        val component = identitySetOf<NodeT>()
+                        while (true) {
+                            val w = stack.removeLast()
+                            onStack.remove(w)
+                            component.add(w)
+                            if (w === node) break
+                        }
+                        components.add(component)
+                    }
                 }
-                components.add(component)
             }
         }
 
         for (node in nodes) {
-            if (node !in indexByNode) dfs(node)
+            if (node !in indexByNode) visit(node)
         }
 
         return components
@@ -160,8 +217,9 @@ open class Graph<N, E, NodeT : GraphNode<N>, EdgeT : GraphEdge<N, E, NodeT>,  G:
         val sccs: List<Set<NodeT>> = stronglyConnectedComponentsTarjan()
 
         // Map each original node -> SCC id
-        val nodeToSccId: Map<NodeT, Int> =
-            sccs.flatMapIndexed { index, component -> component.map { it to index } }.toMap()
+        val nodeToSccId = identityMapOf<NodeT, Int>().apply {
+            sccs.forEachIndexed { index, component -> component.forEach { put(it, index) } }
+        }
 
         // Internal edges per SCC
         val internalEdgesByScc: Array<MutableSet<EdgeT>> = Array(sccs.size) { mutableSetOf() }

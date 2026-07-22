@@ -1,12 +1,15 @@
 package diagnostics
 
+import com.uabutler.Analyzer
 import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.util.Logger
 import diagnostics.AnalyzerDiagnosticsTestUtil.compileFullExpectingDiagnostics
+import diagnostics.AnalyzerDiagnosticsTestUtil.defaultOptions
 import org.junit.jupiter.api.BeforeEach
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class NetlistBuilderDiagnosticsTest {
 
@@ -267,5 +270,93 @@ class NetlistBuilderDiagnosticsTest {
         assertEquals("first", outputKind.functionName)
         val inputKind = assertIs<BuilderDiagnosticKind.MultiplyDrivenNodeInput>(diagnostics[1].kind)
         assertEquals("second", inputKind.functionName)
+    }
+
+    @Test
+    fun `a node combinationally driving its own input reports a diagnostic`() {
+        val gapl = """
+            function test() i: wire[2] => o: wire[2] {
+                declare x: wire[2] => x;
+                i => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.first().kind)
+        assertEquals(listOf("x"), kind.involvedNodes.map { it.nodeName })
+        assertEquals("test", kind.involvedNodes.single().functionName)
+    }
+
+    @Test
+    fun `two nodes combinationally driving each other reports one diagnostic naming both`() {
+        val gapl = """
+            function test() i: wire[2] => o: wire[2] {
+                declare x: wire[2] => declare y: wire[2] => x;
+                i => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.first().kind)
+        assertEquals(listOf("x", "y"), kind.involvedNodes.map { it.nodeName })
+    }
+
+    @Test
+    fun `a register in the loop is not reported as a combinational loop`() {
+        val gapl = """
+            function test() i: wire[2] => o: wire[2] {
+                declare reg1: register(wire[2]) => declare x: wire[2] => reg1;
+                reg1 => o;
+            }
+        """.trimIndent()
+
+        val result = Analyzer.analyzeFull(gapl, defaultOptions)
+
+        assertTrue(result.diagnostics.isEmpty())
+    }
+
+    @Test
+    fun `a combinational loop spanning a function call is reported, naming nodes in both functions`() {
+        val gapl = """
+            function passthrough() a: wire[2] => b: wire[2] {
+                a => b;
+            }
+
+            function top() i: wire[2] => o: wire[2] {
+                declare x: wire[2] => passthrough() => x;
+                i => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.first().kind)
+        assertEquals(
+            setOf("passthrough" to "a", "passthrough" to "b", "top" to "x"),
+            kind.involvedNodes.map { it.functionName to it.nodeName }.toSet(),
+        )
+    }
+
+    @Test
+    fun `a register inside a called function correctly breaks a cross-module loop`() {
+        val gapl = """
+            function delay() a: wire[2] => b: wire[2] {
+                a => declare reg1: register(wire[2]) => b;
+            }
+
+            function top() i: wire[2] => o: wire[2] {
+                declare x: wire[2] => delay() => x;
+                i => o;
+            }
+        """.trimIndent()
+
+        val result = Analyzer.analyzeFull(gapl, defaultOptions)
+
+        assertTrue(result.diagnostics.isEmpty())
     }
 }

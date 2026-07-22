@@ -29,7 +29,10 @@ class NodeBuilder(
     // Declaration span of each node, recorded at creation time - used to give undriven-wire
     // diagnostics a precise location without storing anything on the Node/Module IR types
     // themselves (which would go stale once transformers start relocating nodes across modules).
-    private val nodeSpans = mutableMapOf<Node, SourceSpan>()
+    // Not private: ModuleBuilder pulls this out after buildNodesIntoModule() finishes and merges
+    // it into a program-wide map, since the combinational-loop check runs across every built
+    // module, after this NodeBuilder instance is otherwise done.
+    val nodeSpans = mutableMapOf<Node, SourceSpan>()
 
     private fun createInputNode(
         identifier: String,

@@ -24,7 +24,8 @@ class HierarchicalMinimalRegisterSolverTest {
                 Edge("child-b", "child-out", 0),
             ),
             leafWeights = mapOf("child-a" to 1, "child-b" to 1),
-            virtualNodes = setOf("child-in", "child-out"),
+            rootAttachment = "child-in",
+            leafAttachment = "child-out",
         )
 
         val parentGraph = createHierarchicalGraph(
@@ -37,7 +38,8 @@ class HierarchicalMinimalRegisterSolverTest {
             ),
             leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("in", "out"),
+            rootAttachment = "in",
+            leafAttachment = "out",
         )
 
         val flattenedGraph = parentGraph.flatten()
@@ -83,7 +85,8 @@ class HierarchicalMinimalRegisterSolverTest {
                 Edge("child-b", "child-out", 0),
             ),
             leafWeights = mapOf("child-a" to 1, "child-b" to 1),
-            virtualNodes = setOf("child-in", "child-out"),
+            rootAttachment = "child-in",
+            leafAttachment = "child-out",
         )
 
         val parentGraph = createHierarchicalGraph(
@@ -96,7 +99,8 @@ class HierarchicalMinimalRegisterSolverTest {
             ),
             leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("in", "out"),
+            rootAttachment = "in",
+            leafAttachment = "out",
         )
 
         val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
@@ -114,7 +118,8 @@ class HierarchicalMinimalRegisterSolverTest {
                 Edge("child-a", "child-out", 0),
             ),
             leafWeights = mapOf("child-a" to 1),
-            virtualNodes = setOf("child-in", "child-out"),
+            rootAttachment = "child-in",
+            leafAttachment = "child-out",
         )
 
         val parentGraph = createHierarchicalGraph(
@@ -127,7 +132,8 @@ class HierarchicalMinimalRegisterSolverTest {
             ),
             leafWeights = mapOf("a" to 1, "b" to 1),
             childGraphs = mapOf("child" to childGraph),
-            virtualNodes = setOf("in", "out"),
+            rootAttachment = "in",
+            leafAttachment = "out",
         )
 
         val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
