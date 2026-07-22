@@ -14,6 +14,7 @@ interface Scope {
 
     // Every scope but the root delegates to its parent, so only ProgramScope needs to own one.
     val diagnostics: DiagnosticsCollector get() = parentScope!!.diagnostics
+    val definitions: DefinitionsCollector get() = parentScope!!.definitions
 
     fun resolveLocal(name: String): ResolvedSymbol?
 
@@ -26,10 +27,22 @@ interface Scope {
 
         if (name in predefinedFunctionNames) return ResolvedSymbol.Function(ctx = null)
 
-        return resolveGlobal(name) ?: run {
+        val resolved = resolveGlobal(name)
+        if (resolved == null) {
             diagnostics.reportError(ResolverDiagnosticKind.UnresolvedSymbol(name), SourceSpan.of(identifier))
-            null
+            return null
         }
+
+        declarationSpan(resolved)?.let { definitions.record(SourceSpan.of(identifier), it) }
+        return resolved
+    }
+
+    private fun declarationSpan(resolved: ResolvedSymbol): SourceSpan? = when (resolved) {
+        is ResolvedSymbol.Function -> resolved.ctx?.let { SourceSpan.of(it) }
+        is ResolvedSymbol.Interface -> SourceSpan.of(resolved.ctx)
+        is ResolvedSymbol.Parameter -> SourceSpan.of(resolved.ctx)
+        is ResolvedSymbol.CircuitNode -> SourceSpan.of(resolved.ctx)
+        is ResolvedSymbol.FunctionIO -> SourceSpan.of(resolved.ctx)
     }
 
     fun symbols(): List<DeclaredSymbol>

@@ -23,6 +23,7 @@ class GaplLanguageServer : LanguageServer, LanguageClientAware {
     override fun initialize(params: InitializeParams): CompletableFuture<InitializeResult> {
         val capabilities = ServerCapabilities().apply {
             setTextDocumentSync(TextDocumentSyncKind.Full)
+            setDefinitionProvider(true)
         }
 
         return CompletableFuture.completedFuture(InitializeResult(capabilities))

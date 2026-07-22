@@ -11,6 +11,7 @@ import com.uabutler.resolver.scope.util.declaredIdentifierToken
 class ProgramScope(
     val program: CSTParser.ProgramContext,
     override val diagnostics: DiagnosticsCollector,
+    override val definitions: DefinitionsCollector,
 ): Scope {
 
     override val parentScope: Scope? = null

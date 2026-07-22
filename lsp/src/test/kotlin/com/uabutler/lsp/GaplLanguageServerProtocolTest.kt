@@ -1,14 +1,17 @@
 package com.uabutler.lsp
 
+import org.eclipse.lsp4j.DefinitionParams
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.MessageActionItem
 import org.eclipse.lsp4j.MessageParams
+import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent
+import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
 import org.eclipse.lsp4j.launch.LSPLauncher
@@ -22,6 +25,23 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+// Finds the (line, character) LSP position of the nth (0-indexed) occurrence of `needle` in
+// `text`, so tests can point at a specific identifier without hand-counting columns.
+private fun positionOf(text: String, needle: String, occurrence: Int = 0): Position {
+    var seen = 0
+    text.lines().forEachIndexed { lineIndex, line ->
+        var fromIndex = 0
+        while (true) {
+            val idx = line.indexOf(needle, fromIndex)
+            if (idx == -1) break
+            if (seen == occurrence) return Position(lineIndex, idx)
+            seen++
+            fromIndex = idx + 1
+        }
+    }
+    error("'$needle' occurrence $occurrence not found in text")
+}
 
 // A minimal recording LanguageClient - captures every publishDiagnostics call on a queue so
 // tests can block until the notification actually arrives over the (async) piped connection.
@@ -154,6 +174,56 @@ class GaplLanguageServerProtocolTest {
 
             val published = nextDiagnostics(client.publishedDiagnostics)
             assertTrue(published.diagnostics.isEmpty())
+        }
+    }
+
+    @Test
+    fun `go to definition on a locally declared circuit node returns the declaration`() {
+        withServer { server, client ->
+            val gapl = """
+                function test() i: wire => o: wire {
+                    i => declare x: wire;
+                    x => o;
+                }
+            """.trimIndent()
+
+            server.textDocumentService.didOpen(
+                DidOpenTextDocumentParams(TextDocumentItem("file:///def.gapl", "gapl", 1, gapl))
+            )
+            nextDiagnostics(client.publishedDiagnostics)
+
+            val usagePosition = positionOf(gapl, "x => o")
+            val result = server.textDocumentService.definition(
+                DefinitionParams(TextDocumentIdentifier("file:///def.gapl"), usagePosition)
+            ).get(5, TimeUnit.SECONDS)
+
+            val locations = result.left
+            assertEquals(1, locations.size)
+            assertEquals("file:///def.gapl", locations.first().uri)
+            assertEquals(positionOf(gapl, "declare x").line, locations.first().range.start.line)
+        }
+    }
+
+    @Test
+    fun `go to definition on a builtin function reference returns nothing`() {
+        withServer { server, client ->
+            val gapl = """
+                function top() i: wire => o: wire {
+                    i => register(wire)[0] => o;
+                }
+            """.trimIndent()
+
+            server.textDocumentService.didOpen(
+                DidOpenTextDocumentParams(TextDocumentItem("file:///builtin.gapl", "gapl", 1, gapl))
+            )
+            nextDiagnostics(client.publishedDiagnostics)
+
+            val usagePosition = positionOf(gapl, "register")
+            val result = server.textDocumentService.definition(
+                DefinitionParams(TextDocumentIdentifier("file:///builtin.gapl"), usagePosition)
+            ).get(5, TimeUnit.SECONDS)
+
+            assertTrue(result.left.isEmpty())
         }
     }
 }

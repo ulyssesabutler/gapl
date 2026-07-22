@@ -6,6 +6,7 @@ import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.resolver.Resolver
+import com.uabutler.resolver.scope.DefinitionLink
 import com.uabutler.util.Logger
 import com.uabutler.util.standardLibary
 
@@ -38,6 +39,21 @@ object Analyzer {
         }
     }
 
+    // Declarations that fall inside the prepended stdlib text (e.g. jumping to a builtin like
+    // `register`) are dropped rather than shifted to a bogus negative line - there's no real file
+    // the LSP can point an editor at for text that's invisible to the user.
+    fun shiftDefinitionsToUserSource(definitions: List<DefinitionLink>, options: Options): List<DefinitionLink> {
+        val offset = stdLibLineOffset(options)
+
+        return definitions.mapNotNull { link ->
+            if (link.declarationSpan.startLine - offset <= 0) {
+                null
+            } else {
+                DefinitionLink(link.usageSpan.shiftedLines(-offset), link.declarationSpan.shiftedLines(-offset))
+            }
+        }
+    }
+
     fun analyze(gapl: String, options: Options = Options()): Resolver.AnalysisResult {
         val preprocessed = Logger.run("Preprocessing", Logger.Level.INFO) { preprocess(gapl, options) }
 
@@ -49,12 +65,16 @@ object Analyzer {
 
         val result = Logger.run("Resolver", Logger.Level.INFO) { Resolver.analyze(program) }
 
-        return result.copy(diagnostics = shiftToUserSource(result.diagnostics, options))
+        return result.copy(
+            diagnostics = shiftToUserSource(result.diagnostics, options),
+            definitions = shiftDefinitionsToUserSource(result.definitions, options),
+        )
     }
 
     data class FullAnalysisResult(
         val ast: ProgramNode,
         val diagnostics: List<Diagnostic>,
+        val definitions: List<DefinitionLink>,
         // Null when resolver diagnostics blocked netlist-building.
         val modules: List<MutableModule>?,
     )
@@ -65,13 +85,13 @@ object Analyzer {
         val analysis = analyze(gapl, options)
 
         if (analysis.diagnostics.isNotEmpty()) {
-            return FullAnalysisResult(analysis.ast, analysis.diagnostics, null)
+            return FullAnalysisResult(analysis.ast, analysis.diagnostics, analysis.definitions, null)
         }
 
         val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
         val diagnostics = analysis.diagnostics + shiftToUserSource(netlistResult.diagnostics, options)
 
-        return FullAnalysisResult(analysis.ast, diagnostics, netlistResult.modules)
+        return FullAnalysisResult(analysis.ast, diagnostics, analysis.definitions, netlistResult.modules)
     }
 
 }
