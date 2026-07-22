@@ -8,6 +8,7 @@ import com.uabutler.ast.node.IdentifierNode
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.SemanticTokenKind
 
 class GenericParameterDefinitionScope(
     parentScope: Scope,
@@ -44,6 +45,7 @@ class GenericParameterDefinitionScope(
     private fun singleDefinition(definition: CSTParser.ParameterDefinitionContext): Definition {
         val span = SourceSpan.of(definition)
         val identifier = definition.declaredIdenfier!!.toIdentifierNode()
+        semanticTokens.record(identifier.span, SemanticTokenKind.TYPE_PARAMETER)
         val type = definition.type!!
         val typeSpan = SourceSpan.of(type)
 

@@ -7,6 +7,7 @@ import com.uabutler.resolver.scope.DeclaredSymbol
 import com.uabutler.resolver.scope.ProgramScope
 import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.functions.circuits.CircuitStatementScope
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
 import com.uabutler.resolver.scope.util.toIdentifierNode
@@ -63,10 +64,12 @@ class FunctionDefinitionScope(
 
         val span = SourceSpan.of(functionDefinition)
         val definitions = GenericParameterDefinitionScope(this, parameterDefinitions).ast()
+        val identifier = functionDefinition.declaredIdentifier!!.toIdentifierNode()
+        semanticTokens.record(identifier.span, SemanticTokenKind.FUNCTION)
 
         return FunctionDefinitionNode(
             span = span,
-            identifier = functionDefinition.declaredIdentifier!!.toIdentifierNode(),
+            identifier = identifier,
             genericInterfaces = definitions.interfaceDefinitions,
             genericParameters = definitions.parameterDefinitions,
             inputFunctionIO = inputNodes.map { FunctionIOScope(this, it).ast() },

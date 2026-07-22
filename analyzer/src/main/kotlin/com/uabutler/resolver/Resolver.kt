@@ -7,6 +7,8 @@ import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.DefinitionLink
 import com.uabutler.resolver.scope.DefinitionsCollector
 import com.uabutler.resolver.scope.ProgramScope
+import com.uabutler.resolver.scope.SemanticToken
+import com.uabutler.resolver.scope.SemanticTokensCollector
 
 object Resolver {
 
@@ -14,14 +16,16 @@ object Resolver {
         val ast: ProgramNode,
         val diagnostics: List<Diagnostic>,
         val definitions: List<DefinitionLink>,
+        val semanticTokens: List<SemanticToken>,
     )
 
     fun analyze(program: CSTParser.ProgramContext): AnalysisResult {
         val diagnostics = DiagnosticsCollector()
         val definitions = DefinitionsCollector()
-        val ast = ProgramScope(program, diagnostics, definitions).ast()
+        val semanticTokens = SemanticTokensCollector()
+        val ast = ProgramScope(program, diagnostics, definitions, semanticTokens).ast()
 
-        return AnalysisResult(ast, diagnostics.diagnostics(), definitions.definitions())
+        return AnalysisResult(ast, diagnostics.diagnostics(), definitions.definitions(), semanticTokens.tokens())
     }
 
 }

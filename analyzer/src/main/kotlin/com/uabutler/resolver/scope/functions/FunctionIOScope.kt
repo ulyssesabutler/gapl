@@ -5,6 +5,7 @@ import com.uabutler.ast.node.functions.interfaces.DefaultInterfaceTypeNode
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.util.toIdentifierNode
 
@@ -16,6 +17,7 @@ class FunctionIOScope(
     fun ast(): FunctionIONode {
         val span = SourceSpan.of(functionIO)
         val identifier = functionIO.declaredIdentifier!!.toIdentifierNode()
+        semanticTokens.record(identifier.span, SemanticTokenKind.PARAMETER)
         val interfaceType = DefaultInterfaceTypeNode(span)
         val interfaceExpression = InterfaceExpressionScope(this, functionIO.interfaceType!!).ast()
 

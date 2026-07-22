@@ -23,6 +23,7 @@ import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTLexer
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.semanticTokenKind
 import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class StaticExpressionScope(
@@ -45,7 +46,15 @@ class StaticExpressionScope(
                     return ErrorStaticExpressionNode(span, "unexpected parameters")
                 }
 
-                IdentifierStaticExpressionNode(span, atom.identifier!!.toIdentifierNode())
+                val identifier = atom.identifier!!
+                // Static expressions (vector bounds, generic parameter values) don't go through
+                // Scope.resolve() - resolution failures here are handled later, during
+                // netlist-building. Use resolveGlobal directly so a valid reference still gets
+                // classified for semantic tokens, without resolve()'s diagnostic-on-failure side
+                // effect changing this stage's error behavior.
+                resolveGlobal(identifier.text!!)?.let { semanticTokens.record(SourceSpan.of(identifier), semanticTokenKind(it)) }
+
+                IdentifierStaticExpressionNode(span, identifier.toIdentifierNode())
             }
 
             is CSTParser.TrueExpressionContext -> TrueStaticExpressionNode(span)

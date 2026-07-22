@@ -8,6 +8,14 @@ import org.antlr.v4.kotlinruntime.Token
 
 data class DeclaredSymbol(val name: String, val token: Token)
 
+fun semanticTokenKind(resolved: ResolvedSymbol): SemanticTokenKind = when (resolved) {
+    is ResolvedSymbol.Function -> SemanticTokenKind.FUNCTION
+    is ResolvedSymbol.Interface -> SemanticTokenKind.INTERFACE
+    is ResolvedSymbol.Parameter -> SemanticTokenKind.TYPE_PARAMETER
+    is ResolvedSymbol.CircuitNode -> SemanticTokenKind.VARIABLE
+    is ResolvedSymbol.FunctionIO -> SemanticTokenKind.PARAMETER
+}
+
 interface Scope {
 
     val parentScope: Scope?
@@ -15,6 +23,7 @@ interface Scope {
     // Every scope but the root delegates to its parent, so only ProgramScope needs to own one.
     val diagnostics: DiagnosticsCollector get() = parentScope!!.diagnostics
     val definitions: DefinitionsCollector get() = parentScope!!.definitions
+    val semanticTokens: SemanticTokensCollector get() = parentScope!!.semanticTokens
 
     fun resolveLocal(name: String): ResolvedSymbol?
 
@@ -33,7 +42,10 @@ interface Scope {
             return null
         }
 
-        declarationSpan(resolved)?.let { definitions.record(SourceSpan.of(identifier), it) }
+        val usageSpan = SourceSpan.of(identifier)
+        declarationSpan(resolved)?.let { definitions.record(usageSpan, it) }
+        semanticTokens.record(usageSpan, semanticTokenKind(resolved))
+
         return resolved
     }
 

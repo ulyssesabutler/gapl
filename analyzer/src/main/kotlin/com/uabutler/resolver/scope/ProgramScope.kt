@@ -12,6 +12,7 @@ class ProgramScope(
     val program: CSTParser.ProgramContext,
     override val diagnostics: DiagnosticsCollector,
     override val definitions: DefinitionsCollector,
+    override val semanticTokens: SemanticTokensCollector,
 ): Scope {
 
     override val parentScope: Scope? = null

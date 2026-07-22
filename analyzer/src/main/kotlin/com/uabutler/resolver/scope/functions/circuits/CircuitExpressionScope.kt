@@ -28,6 +28,7 @@ import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.parsers.generated.CSTParser
 import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
@@ -75,6 +76,7 @@ class CircuitNodeExpressionScope(
             }
             is CSTParser.DeclaredCircuitExpressionContext -> {
                 val identifier = body.declaredIdentifier!!.toIdentifierNode()
+                semanticTokens.record(identifier.span, SemanticTokenKind.VARIABLE)
                 val type = body.circuitExpressionType()
 
                 if (type !is CSTParser.BasicCircuitExpressionTypeContext) {

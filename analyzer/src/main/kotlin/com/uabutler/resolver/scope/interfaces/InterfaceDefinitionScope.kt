@@ -10,6 +10,7 @@ import com.uabutler.resolver.scope.DeclaredSymbol
 import com.uabutler.resolver.scope.ProgramScope
 import com.uabutler.resolver.scope.ResolvedSymbol
 import com.uabutler.resolver.scope.Scope
+import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
 import com.uabutler.resolver.scope.util.toIdentifierNode
 
@@ -38,6 +39,7 @@ class InterfaceDefinitionScope(
 
         interfaceDefinition.aliasInterfaceDefinition()?.let { alias ->
             val identifier = alias.declaredIdentifer!!.toIdentifierNode()
+            semanticTokens.record(identifier.span, SemanticTokenKind.INTERFACE)
             val parameters = GenericParameterDefinitionScope(this, parameterDefinitions).ast()
             val aliasedInterface = InterfaceExpressionScope(this, alias.expression()!!).ast()
 
@@ -52,6 +54,7 @@ class InterfaceDefinitionScope(
 
         interfaceDefinition.recordInterfaceDefinition()?.let { record ->
             val identifier = record.declaredIdentifer!!.toIdentifierNode()
+            semanticTokens.record(identifier.span, SemanticTokenKind.INTERFACE)
             val parameters = GenericParameterDefinitionScope(this, parameterDefinitions).ast()
             val ports = record.portDefinition().map { port ->
                 RecordInterfacePortNode(
