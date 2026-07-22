@@ -32,7 +32,10 @@ highlighting (not implemented yet - see Future TODOs).
   surface. Always run this, not just `compileKotlin`, after touching `plugin.xml`.
 - `./gradlew :intellij-plugin:runIde` - launches a real sandboxed IDE with this plugin installed,
   for actually trying it against a `.gapl` file. **Needs a GUI** - couldn't be run in the sandbox
-  this plugin was originally built in; verify this yourself.
+  this plugin was originally built in, only confirmed working (server spawns correctly, no
+  plugin-loading errors) once tried on a real machine. Depends on `:lsp:installDist` and passes
+  the resulting binary's path via the `gapl.lsp.path` system property, so the sandboxed IDE finds
+  the server without needing it on `PATH` - no manual setup needed before running this task.
 - The `intellijIdea("2024.3")` target in `build.gradle.kts` determines which IDE Platform version
   gets downloaded to build/test against. This is independent of the plugin's own `sinceBuild`
   compatibility declaration and independent of which Gradle version builds it - see Known gotchas.
