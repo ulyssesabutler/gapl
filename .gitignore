@@ -41,6 +41,10 @@ bin/
 ### VS Code ###
 .vscode/
 
+### npm/TypeScript ###
+node_modules/
+*.vsix
+
 ### Mac OS ###
 .DS_Store
 

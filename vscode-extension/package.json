@@ -1,0 +1,60 @@
+{
+  "name": "gapl-vscode",
+  "displayName": "GAPL",
+  "description": "Language support for GAPL (gate array programming language), backed by the gapl-lsp language server.",
+  "version": "0.0.1",
+  "publisher": "uabutler",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:gapl"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gapl",
+        "aliases": [
+          "GAPL"
+        ],
+        "extensions": [
+          ".gapl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gapl",
+        "scopeName": "source.gapl",
+        "path": "./syntaxes/gapl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "GAPL",
+      "properties": {
+        "gapl.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the gapl-lsp executable. Leave empty during development to use the build in ../lsp/build/install/gapl-lsp/bin/gapl-lsp relative to this extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}
