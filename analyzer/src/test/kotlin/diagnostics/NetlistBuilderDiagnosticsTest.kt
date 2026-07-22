@@ -166,6 +166,38 @@ class NetlistBuilderDiagnosticsTest {
     }
 
     @Test
+    fun `a multi-bit output port driven twice reports one diagnostic, not one per bit`() {
+        val gapl = """
+            function test() i: wire[2], i2: wire[2] => o: wire[2] {
+                i => o;
+                i2 => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.MultiplyDrivenOutputPort>(diagnostics.first().kind)
+        assertEquals("o", kind.portName)
+    }
+
+    @Test
+    fun `the same connection repeated three times reports two diagnostics, one for each redundant connection`() {
+        val gapl = """
+            function test() i: wire => o: wire {
+                i => o;
+                i => o;
+                i => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(2, diagnostics.size)
+        diagnostics.forEach { assertIs<BuilderDiagnosticKind.MultiplyDrivenOutputPort>(it.kind) }
+    }
+
+    @Test
     fun `a body node input driven by two connections reports a diagnostic`() {
         val gapl = """
             function test() i: wire, i2: wire => o: wire {

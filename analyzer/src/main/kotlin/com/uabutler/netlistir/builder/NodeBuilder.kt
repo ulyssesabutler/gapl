@@ -334,12 +334,20 @@ class NodeBuilder(
             previous.wires.zip(current.wires)
         }
 
+        // A single connection statement can drive many wires at once (a whole multi-bit group),
+        // so collapse conflicts down to one diagnostic per target group here, not one per wire -
+        // otherwise a single "i => o;" repeated against a wide o would report once per bit.
+        val alreadyReportedGroups = mutableSetOf<WireVectorGroup<*>>()
+
         wirePairs.forEach { (previousOutput, currentInput) ->
             val inputWire = currentInput as InputWire
             val outputWire = previousOutput as OutputWire
 
             if (module.getConnectionForInputWireOrNull(inputWire) != null) {
-                reportMultiplyDrivenInput(inputWire, connectionExpression.span)
+                val group = inputWire.parentWireVector.parentGroup
+                if (alreadyReportedGroups.add(group)) {
+                    reportMultiplyDrivenInput(inputWire, connectionExpression.span)
+                }
             } else {
                 module.connect(inputWire, outputWire)
             }
