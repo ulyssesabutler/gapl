@@ -97,12 +97,11 @@ the extension needs to opt into.
   LSP client layers automatically on top of the TextMate grammar below — no extension-side code
   needed. This likely covers most of what the TextMate grammar alone couldn't (distinguishing a
   declared function name from a parameter, for instance). The TextMate grammar itself
-  (`syntaxes/gapl.tmLanguage.json`) still hasn't been visually verified against real GAPL source in
-  a rendered editor (no GUI access when either was written) — worth checking both together against
-  real `.gapl` files (e.g. `../gapl-example/src/example.gapl`) next time there's a GUI available,
-  since semantic tokens don't cover comments (the grammar's `-> skip` action discards them before
-  they reach any token stream - would need a separate grammar change to fix) or accessors (`.`,
-  `[i]`, `[a:b]`) - the TextMate grammar is still what's responsible for those.
+  (`syntaxes/gapl.tmLanguage.json`) has since been visually verified against real GAPL source in a
+  rendered editor and confirmed working. Semantic tokens still don't cover comments (the grammar's
+  `-> skip` action discards them before they reach any token stream - would need a separate grammar
+  change to fix) or accessors (`.`, `[i]`, `[a:b]`) - the TextMate grammar is still what's
+  responsible for those.
 - **New LSP capabilities land here too.** `../analyzer`/`../lsp` are expected to grow hover and
   find-references next (see `../lsp`'s own follow-up notes) — `vscode-languageclient` picks up
   most capabilities automatically via content negotiation, so this usually needs no changes, but
