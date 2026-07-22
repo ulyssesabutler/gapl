@@ -1,7 +1,10 @@
 package com.uabutler
 
+import com.uabutler.ast.node.ProgramNode
 import com.uabutler.diagnostics.Diagnostic
 import com.uabutler.diagnostics.DiagnosticsException
+import com.uabutler.netlistir.builder.ModuleBuilder
+import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.resolver.Resolver
 import com.uabutler.util.Logger
 import com.uabutler.util.standardLibary
@@ -47,6 +50,28 @@ object Analyzer {
         val result = Logger.run("Resolver", Logger.Level.INFO) { Resolver.analyze(program) }
 
         return result.copy(diagnostics = shiftToUserSource(result.diagnostics, options))
+    }
+
+    data class FullAnalysisResult(
+        val ast: ProgramNode,
+        val diagnostics: List<Diagnostic>,
+        // Null when resolver diagnostics blocked netlist-building.
+        val modules: List<MutableModule>?,
+    )
+
+    // Parses, resolves, and builds the netlist IR, so diagnostics from ModuleBuilder (undriven
+    // wires, width/arity mismatches) are included alongside syntax/resolver diagnostics.
+    fun analyzeFull(gapl: String, options: Options = Options()): FullAnalysisResult {
+        val analysis = analyze(gapl, options)
+
+        if (analysis.diagnostics.isNotEmpty()) {
+            return FullAnalysisResult(analysis.ast, analysis.diagnostics, null)
+        }
+
+        val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
+        val diagnostics = analysis.diagnostics + shiftToUserSource(netlistResult.diagnostics, options)
+
+        return FullAnalysisResult(analysis.ast, diagnostics, netlistResult.modules)
     }
 
 }

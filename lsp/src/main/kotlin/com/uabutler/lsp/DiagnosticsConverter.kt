@@ -31,7 +31,7 @@ object DiagnosticsConverter {
 
     fun analyzeAndPublish(client: LanguageClient, uri: String, text: String) {
         val diagnostics = try {
-            Analyzer.analyze(text).diagnostics
+            Analyzer.analyzeFull(text).diagnostics
         } catch (e: DiagnosticsException) {
             e.diagnostics
         } catch (e: Exception) {

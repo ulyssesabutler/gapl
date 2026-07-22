@@ -19,4 +19,16 @@ object AnalyzerDiagnosticsTestUtil {
             e.diagnostics
         }
     }
+
+    // Like compileExpectingDiagnostics, but also runs ModuleBuilder - needed for diagnostics that
+    // only surface from netlist-building (BuilderDiagnosticKind), not parsing/resolving alone.
+    fun compileFullExpectingDiagnostics(gapl: String, options: Analyzer.Options = defaultOptions): List<Diagnostic> {
+        return try {
+            val result = Analyzer.analyzeFull(gapl, options)
+            check(result.diagnostics.isNotEmpty()) { "expected diagnostics but got none" }
+            result.diagnostics
+        } catch (e: DiagnosticsException) {
+            e.diagnostics
+        }
+    }
 }

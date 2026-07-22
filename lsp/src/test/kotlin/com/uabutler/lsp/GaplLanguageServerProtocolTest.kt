@@ -87,6 +87,28 @@ class GaplLanguageServerProtocolTest {
     }
 
     @Test
+    fun `opening a document with an undriven output port reports one diagnostic`() {
+        // This is exactly the case that used to crash the compiler mid-transform instead of
+        // reporting a diagnostic (see commit history) - Analyzer.analyze alone can't catch it,
+        // since it only surfaces from ModuleBuilder (netlist-building), which analyzeFull adds.
+        withServer { server, client ->
+            val gapl = """
+                function test() i: wire => o: wire {
+                    i => declare x: wire;
+                }
+            """.trimIndent()
+
+            server.textDocumentService.didOpen(
+                DidOpenTextDocumentParams(TextDocumentItem("file:///undriven.gapl", "gapl", 1, gapl))
+            )
+
+            val published = nextDiagnostics(client.publishedDiagnostics)
+            assertEquals(1, published.diagnostics.size)
+            assertEquals(DiagnosticSeverity.Error, published.diagnostics.first().severity)
+        }
+    }
+
+    @Test
     fun `opening a document with no errors reports no diagnostics`() {
         withServer { server, client ->
             val gapl = """

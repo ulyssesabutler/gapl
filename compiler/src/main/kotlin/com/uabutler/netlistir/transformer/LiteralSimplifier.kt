@@ -35,9 +35,10 @@ object LiteralSimplifier: Transformer {
                 .filter { it.predefinedFunction is LiteralFunction }
 
             existingLiteralNodes.onEach { originalLiteralNode ->
+                val literalFunction = originalLiteralNode.predefinedFunction as LiteralFunction
                 val signature = LiteralFunctionSignature(
-                    size = (originalLiteralNode.predefinedFunction as LiteralFunction).size,
-                    value = originalLiteralNode.predefinedFunction.value,
+                    size = literalFunction.size,
+                    value = literalFunction.value,
                 )
 
                 val newLiteralNode = getLiteralNode(signature)

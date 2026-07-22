@@ -2,7 +2,7 @@ package diagnostics
 
 import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.util.Logger
-import diagnostics.DiagnosticsTestUtil.compileExpectingDiagnostics
+import diagnostics.AnalyzerDiagnosticsTestUtil.compileFullExpectingDiagnostics
 import org.junit.jupiter.api.BeforeEach
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,7 +27,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.GenericParameterArityMismatch>(diagnostics.first().kind)
@@ -48,7 +48,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.GenericParameterArityMismatch>(diagnostics.first().kind)
@@ -69,7 +69,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.StaticExpressionParameterNotInteger>(diagnostics.first().kind)
@@ -88,7 +88,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.ExpectedModuleInstantiation>(diagnostics.first().kind)
@@ -103,7 +103,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.UndrivenOutputPort>(diagnostics.first().kind)
@@ -119,7 +119,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(1, diagnostics.size)
         val kind = assertIs<BuilderDiagnosticKind.UndrivenNodeInput>(diagnostics.first().kind)
@@ -139,7 +139,7 @@ class NetlistBuilderDiagnosticsTest {
             }
         """.trimIndent()
 
-        val diagnostics = compileExpectingDiagnostics(gapl)
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
 
         assertEquals(2, diagnostics.size)
         val outputKind = assertIs<BuilderDiagnosticKind.UndrivenOutputPort>(diagnostics[0].kind)

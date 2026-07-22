@@ -1,7 +1,6 @@
 package com.uabutler
 
 import com.uabutler.diagnostics.DiagnosticsException
-import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.transformer.ConstantSimplifier
 import com.uabutler.netlistir.transformer.Flattener
@@ -97,19 +96,13 @@ object Compiler {
     }
 
     fun compile(gapl: String, options: Options): String {
-        val analysis = Logger.run("Analyzer", Logger.Level.INFO) { Analyzer.analyze(gapl, options.analyzerOptions) }
+        val analysis = Logger.run("Analyzer", Logger.Level.INFO) { Analyzer.analyzeFull(gapl, options.analyzerOptions) }
 
         if (analysis.diagnostics.isNotEmpty()) {
             throw DiagnosticsException(analysis.diagnostics)
         }
 
-        val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
-
-        if (netlistResult.diagnostics.isNotEmpty()) {
-            throw DiagnosticsException(Analyzer.shiftToUserSource(netlistResult.diagnostics, options.analyzerOptions))
-        }
-
-        val initialNetlistModules = netlistResult.modules
+        val initialNetlistModules = analysis.modules!!
 
         val transformedModules = Logger.run("Transformers", Logger.Level.INFO) { runNetlistTransformers(initialNetlistModules, options) }
 
