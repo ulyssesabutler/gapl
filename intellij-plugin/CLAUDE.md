@@ -101,12 +101,14 @@ highlighting (not implemented yet - see Future TODOs).
   a bare `gapl-lsp` command name resolved against `PATH` - no bundling, no settings UI, no real
   install story yet. Decide this the same way for both clients when it's tackled, rather than
   independently.
-- **Syntax highlighting.** Not implemented. Either a custom lightweight `FileType` +
-  `SyntaxHighlighterFactory` (IntelliJ has no TextMate-grammar-equivalent built into the generic
-  LSP client the way VSCode does), or wait for `../lsp` to advertise
-  `semanticTokensProvider` (LSP `textDocument/semanticTokens`), which the platform's LSP client
-  would pick up automatically per JetBrains' docs - the latter is probably the better long-term
-  answer since it'd benefit both editors at once, but needs work on the server side first.
+- **Syntax highlighting - done, server-side.** `../lsp` now implements `textDocument/semanticTokens/full`
+  (keywords, operators, numbers, and identifiers classified by resolved kind - function, interface,
+  parameter, variable, type parameter). Per JetBrains' docs this plugin needs zero code for it - the
+  platform's LSP client picks up semantic tokens automatically once the server advertises the
+  capability, verified server-side via a protocol test and a manual run against a real `.gapl` file.
+  Not yet visually confirmed rendering correctly in a real running IDE (no GUI in the sandbox this
+  was built in) - worth a look next time `runIde` is used. If it's missing/wrong, the bug is almost
+  certainly in `../lsp` or `../analyzer`'s `SemanticTokensCollector`, not here.
 - **Packaging/publishing.** No JetBrains Marketplace publishing set up - `buildPlugin`'s zip output
   is dev/manual-install only today.
 - **Gradle 9 / newer plugin tooling.** A deliberate follow-up if wanted, not something to bundle

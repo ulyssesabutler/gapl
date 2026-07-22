@@ -92,11 +92,17 @@ the extension needs to opt into.
   packaging already set up in `../compiler/build.gradle.kts`) and locating it on `PATH`.
 - **Packaging/publishing.** No `vsce package`/`vsce publish` setup yet — this only runs via the
   Extension Development Host today.
-- **Syntax highlighting quality.** The TextMate grammar hasn't been visually verified against real
-  GAPL source in a rendered editor (no GUI access when it was written). Do a pass with real
-  `.gapl` files (e.g. `../gapl-example/src/example.gapl`) and extend it — accessors (`.`, `[i]`,
-  `[a:b]`), function/interface declaration names as distinct scopes, generic parameter lists — are
-  all currently un-highlighted or only weakly distinguished.
+- **Syntax highlighting quality.** `../lsp` now implements `textDocument/semanticTokens/full`
+  (keywords, operators, numbers, identifiers classified by resolved kind), which VSCode's built-in
+  LSP client layers automatically on top of the TextMate grammar below — no extension-side code
+  needed. This likely covers most of what the TextMate grammar alone couldn't (distinguishing a
+  declared function name from a parameter, for instance). The TextMate grammar itself
+  (`syntaxes/gapl.tmLanguage.json`) still hasn't been visually verified against real GAPL source in
+  a rendered editor (no GUI access when either was written) — worth checking both together against
+  real `.gapl` files (e.g. `../gapl-example/src/example.gapl`) next time there's a GUI available,
+  since semantic tokens don't cover comments (the grammar's `-> skip` action discards them before
+  they reach any token stream - would need a separate grammar change to fix) or accessors (`.`,
+  `[i]`, `[a:b]`) - the TextMate grammar is still what's responsible for those.
 - **New LSP capabilities land here too.** `../analyzer`/`../lsp` are expected to grow hover and
   find-references next (see `../lsp`'s own follow-up notes) — `vscode-languageclient` picks up
   most capabilities automatically via content negotiation, so this usually needs no changes, but
