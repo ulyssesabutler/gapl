@@ -8,7 +8,7 @@ repositories {
 
 dependencies {
     implementation(project(":antlr"))
-    implementation("com.strumenta:antlr-kotlin-runtime:1.0.0")
+    implementation("com.strumenta:antlr-kotlin-runtime:1.0.3")
     testImplementation(kotlin("test"))
 }
 

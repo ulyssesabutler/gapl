@@ -2,7 +2,7 @@ import com.strumenta.antlrkotlin.gradle.AntlrKotlinTask
 
 plugins {
     kotlin("jvm") version "2.0.21"
-    id("com.strumenta.antlr-kotlin") version "1.0.0"
+    id("com.strumenta.antlr-kotlin") version "1.0.3"
 }
 
 java {
@@ -14,7 +14,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.strumenta:antlr-kotlin-runtime:1.0.0")
+    implementation("com.strumenta:antlr-kotlin-runtime:1.0.3")
 }
 
 val generateKotlinGrammarSource = tasks.register<AntlrKotlinTask>("generateKotlinGrammarSource") {
