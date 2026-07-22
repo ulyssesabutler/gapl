@@ -4,7 +4,7 @@ import com.uabutler.netlistir.builder.util.InterfaceStructure
 import com.uabutler.netlistir.builder.util.ParameterValue
 import com.uabutler.netlistir.util.ObjectUtils
 import com.uabutler.verilogir.builder.creator.util.Identifier
-import com.uabutler.netlistir.transformer.util.NodeCopier
+import com.uabutler.netlistir.util.NodeCopier
 
 open class Module(
     val invocation: Invocation,

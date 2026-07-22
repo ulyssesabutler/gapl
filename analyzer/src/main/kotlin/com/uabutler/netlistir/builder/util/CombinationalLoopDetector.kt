@@ -4,8 +4,8 @@ import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.VirtualNode
-import com.uabutler.netlistir.transformer.util.HierarchicalNetlistLeisersonCircuitConverter
-import com.uabutler.netlistir.transformer.util.InvocationGraph
+import com.uabutler.netlistir.util.graph.HierarchicalNetlistLeisersonCircuitConverter
+import com.uabutler.netlistir.util.InvocationGraph
 import com.uabutler.util.PropagationDelay
 
 // Node weight is irrelevant to cycle detection - only edge weight (register hop count) matters,

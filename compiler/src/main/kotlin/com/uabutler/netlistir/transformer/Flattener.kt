@@ -3,11 +3,11 @@ package com.uabutler.netlistir.transformer
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
-import com.uabutler.netlistir.transformer.util.NodeCopier
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNodeToPassThroughNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNodeToPassThroughNode
-import com.uabutler.netlistir.transformer.util.InvocationGraph
+import com.uabutler.netlistir.util.NodeCopier
+import com.uabutler.netlistir.util.NodeCopier.copyBodyNode
+import com.uabutler.netlistir.util.NodeCopier.copyInputNodeToPassThroughNode
+import com.uabutler.netlistir.util.NodeCopier.copyOutputNodeToPassThroughNode
+import com.uabutler.netlistir.util.InvocationGraph
 import com.uabutler.util.Logger
 import com.uabutler.util.Timer
 

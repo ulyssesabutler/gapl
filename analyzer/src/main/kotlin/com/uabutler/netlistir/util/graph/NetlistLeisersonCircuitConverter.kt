@@ -1,4 +1,4 @@
-package com.uabutler.netlistir.transformer.util
+package com.uabutler.netlistir.util.graph
 
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.WireInterfaceStructure
@@ -12,10 +12,11 @@ import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.netlist.VirtualNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
+import com.uabutler.netlistir.util.NodeCopier
+import com.uabutler.netlistir.util.NodeCopier.copyBodyNode
 import com.uabutler.util.PropagationDelay
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
+import com.uabutler.netlistir.util.NodeCopier.copyInputNode
+import com.uabutler.netlistir.util.NodeCopier.copyOutputNode
 import com.uabutler.netlistir.util.IntegerRegisterFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.AnonymousIdentifierGenerator

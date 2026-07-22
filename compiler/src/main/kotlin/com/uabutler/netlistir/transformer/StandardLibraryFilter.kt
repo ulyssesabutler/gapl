@@ -1,7 +1,7 @@
 package com.uabutler.netlistir.transformer
 
 import com.uabutler.netlistir.netlist.Module
-import com.uabutler.netlistir.transformer.util.InvocationGraph
+import com.uabutler.netlistir.util.InvocationGraph
 import com.uabutler.util.StandardLibraryFunctions
 
 object StandardLibraryFilter: Transformer {

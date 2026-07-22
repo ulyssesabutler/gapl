@@ -1,4 +1,4 @@
-package com.uabutler.netlistir.transformer.util
+package com.uabutler.netlistir.util
 
 import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputNode

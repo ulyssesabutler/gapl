@@ -1,4 +1,4 @@
-package com.uabutler.netlistir.transformer.util
+package com.uabutler.netlistir.util.graph
 
 import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputNode
@@ -10,11 +10,13 @@ import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.VirtualIONode
-import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.NonRegisterConnection
-import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.WeightedNonRegisterConnectionGroup
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyBodyNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyInputNode
-import com.uabutler.netlistir.transformer.util.NodeCopier.copyOutputNode
+import com.uabutler.netlistir.util.InvocationGraph
+import com.uabutler.netlistir.util.NodeCopier
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.WeightedNonRegisterConnectionGroup
+import com.uabutler.netlistir.util.NodeCopier.copyBodyNode
+import com.uabutler.netlistir.util.NodeCopier.copyInputNode
+import com.uabutler.netlistir.util.NodeCopier.copyOutputNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
 

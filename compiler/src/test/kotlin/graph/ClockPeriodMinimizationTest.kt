@@ -1,8 +1,8 @@
 package graph
 
 import com.uabutler.util.Logger
-import com.uabutler.util.graph.util.FastSolver
-import com.uabutler.util.graph.util.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
+import com.uabutler.netlistir.transformer.util.retiming.Retiming
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.BeforeEach

@@ -1,7 +1,7 @@
 package graph
 
 import com.uabutler.util.Logger
-import com.uabutler.util.graph.util.MinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.BeforeEach

@@ -1,8 +1,8 @@
-package com.uabutler.util.graph.util
+package com.uabutler.netlistir.transformer.util.retiming.solver
 
+import com.uabutler.netlistir.transformer.util.retiming.Retiming
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
-import kotlin.collections.sorted
 
 class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
 

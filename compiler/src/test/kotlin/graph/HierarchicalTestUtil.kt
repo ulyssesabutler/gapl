@@ -1,7 +1,7 @@
 package graph
 
 import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
-import com.uabutler.util.graph.util.HierarchicalMinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.HierarchicalMinimalRegisterSolver
 
 typealias HGraph = HierarchicalLeisersonCircuitGraph<String, String, String>
 typealias HEdge = HierarchicalLeisersonCircuitGraph.Edge<String, String>

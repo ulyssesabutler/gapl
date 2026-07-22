@@ -1,4 +1,4 @@
-package com.uabutler.util.graph.util
+package com.uabutler.netlistir.transformer.util.retiming.solver
 
 import com.google.ortools.Loader
 import com.uabutler.util.graph.LeisersonCircuitGraph
@@ -8,7 +8,7 @@ import com.google.ortools.sat.CpSolver
 import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
-import com.uabutler.netlistir.netlist.VirtualNode
+import com.uabutler.netlistir.transformer.util.retiming.Retiming
 import com.uabutler.util.graph.WeightedGraph
 
 data class NodeEqualityConstraint<N>(

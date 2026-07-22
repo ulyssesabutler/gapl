@@ -1,15 +1,16 @@
-package com.uabutler.netlistir.transformer.util
+package com.uabutler.netlistir.transformer.util.retiming
 
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.VirtualBodyNode
-import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.NonRegisterConnection
+import com.uabutler.netlistir.util.graph.HierarchicalNetlistLeisersonCircuitConverter
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
+import com.uabutler.netlistir.transformer.util.retiming.solver.HierarchicalMinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.TimingProperties
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.graph.LeisersonCircuitGraph
-import com.uabutler.util.graph.util.HierarchicalMinimalRegisterSolver
-import com.uabutler.util.graph.util.TimingProperties
 
 class HierarchicalRetimer(
     val modules: Collection<MutableModule>,

@@ -6,16 +6,16 @@ import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
-import com.uabutler.netlistir.transformer.util.HierarchicalRetimer
+import com.uabutler.netlistir.transformer.util.retiming.HierarchicalRetimer
 import com.uabutler.util.PropagationDelay
-import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter
-import com.uabutler.netlistir.transformer.util.NetlistLeisersonCircuitConverter.NonRegisterConnection
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
-import com.uabutler.util.graph.util.FastSolver
-import com.uabutler.util.graph.util.MinimalRegisterSolver
-import com.uabutler.util.graph.util.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.Retiming
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
 /* TODO: Interface

@@ -1,7 +1,6 @@
-package com.uabutler.netlistir.transformer.util
+package com.uabutler.netlistir.util
 
 import com.uabutler.netlistir.netlist.Module
-import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.util.graph.UnweightedGraph
 
