@@ -1,6 +1,5 @@
 package com.uabutler
 
-import com.uabutler.diagnostics.Diagnostic
 import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.builder.ModuleBuilder
 import com.uabutler.netlistir.netlist.Module
@@ -12,9 +11,7 @@ import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
 import com.uabutler.util.PropagationDelay
-import com.uabutler.resolver.Resolver
 import com.uabutler.util.Logger
-import com.uabutler.util.standardLibary
 import com.uabutler.verilogir.builder.VerilogBuilder
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
@@ -30,6 +27,7 @@ object Compiler {
         val retimingMinimizeRegisterCount: Boolean,
         val retimingMaintainTiming: Boolean,
     ) {
+        val analyzerOptions get() = Analyzer.Options(includeStdLib)
     }
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
@@ -98,50 +96,17 @@ object Compiler {
         }
     }
 
-    fun preprocessor(gapl: String, options: Options) = buildString {
-        if (options.includeStdLib) appendLine(standardLibary)
-        appendLine(gapl)
-    }
-
-    // The number of lines occupied by the prepended standard library in the preprocessed source,
-    // used to translate diagnostic spans back to the user's original source before reporting them.
-    fun stdLibLineOffset(options: Options) = if (options.includeStdLib) standardLibary.count { it == '\n' } + 1 else 0
-
-    // Diagnostics are collected against the preprocessed (stdlib-prepended) source; shift them back
-    // to the user's own source before they're ever reported, flagging the rare case where an error
-    // genuinely falls inside the prepended stdlib text as a likely compiler bug instead of showing
-    // a nonsensical negative line number.
-    private fun forUserSource(diagnostics: List<Diagnostic>, options: Options): List<Diagnostic> {
-        val offset = stdLibLineOffset(options)
-
-        return diagnostics.map { diagnostic ->
-            if (diagnostic.span.startLine - offset <= 0) {
-                diagnostic.copy(note = "this location is inside the prepended standard library, not your source - if you did not modify the standard library, this is likely a compiler bug; please contact a TA")
-            } else {
-                diagnostic.shiftedLines(-offset)
-            }
-        }
-    }
-
     fun compile(gapl: String, options: Options): String {
-        val preprocessed = Logger.run("Preprocessing", Logger.Level.INFO) { preprocessor(gapl, options) }
-
-        val program = try {
-            Logger.run("Parser", Logger.Level.INFO) { Parser.fromString(preprocessed).program() }
-        } catch (e: DiagnosticsException) {
-            throw DiagnosticsException(forUserSource(e.diagnostics, options))
-        }
-
-        val analysis = Logger.run("Resolver", Logger.Level.INFO) { Resolver.analyze(program) }
+        val analysis = Logger.run("Analyzer", Logger.Level.INFO) { Analyzer.analyze(gapl, options.analyzerOptions) }
 
         if (analysis.diagnostics.isNotEmpty()) {
-            throw DiagnosticsException(forUserSource(analysis.diagnostics, options))
+            throw DiagnosticsException(analysis.diagnostics)
         }
 
         val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
 
         if (netlistResult.diagnostics.isNotEmpty()) {
-            throw DiagnosticsException(forUserSource(netlistResult.diagnostics, options))
+            throw DiagnosticsException(Analyzer.shiftToUserSource(netlistResult.diagnostics, options.analyzerOptions))
         }
 
         val initialNetlistModules = netlistResult.modules
