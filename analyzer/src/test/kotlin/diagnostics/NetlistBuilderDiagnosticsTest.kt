@@ -400,6 +400,38 @@ class NetlistBuilderDiagnosticsTest {
     }
 
     @Test
+    fun `the same textual loop reported by multiple unrelated generic instantiations collapses to one diagnostic`() {
+        // Mirrors aes/test.gapl's round_key(1..10): a generic function with a genuine textual bug,
+        // called several times with a generic parameter that doesn't affect the bug at all - every
+        // instantiation independently rediscovers the identical loop at the identical declaration
+        // span, and should collapse to one diagnostic instead of one per instantiation.
+        val gapl = """
+            function buggy(unrelated: integer) i: wire[2] => o: wire[2] {
+                declare x: wire[2] => x;
+                i => o;
+            }
+
+            function callSite1() a: wire[2] => b: wire[2] {
+                a => buggy(1) => b;
+            }
+
+            function callSite2() a: wire[2] => b: wire[2] {
+                a => buggy(2) => b;
+            }
+
+            function callSite3() a: wire[2] => b: wire[2] {
+                a => buggy(3) => b;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.first().kind)
+        assertEquals(listOf("x"), kind.involvedNodes.map { it.nodeName })
+    }
+
+    @Test
     fun `a register inside a called function correctly breaks a cross-module loop`() {
         val gapl = """
             function delay() a: wire[2] => b: wire[2] {

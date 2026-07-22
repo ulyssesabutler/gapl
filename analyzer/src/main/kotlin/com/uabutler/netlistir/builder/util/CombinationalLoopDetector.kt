@@ -26,17 +26,27 @@ private val zeroDelay = object : PropagationDelay {
  * Only root modules (functions nothing else in the program calls) are checked: flattening a root's
  * hierarchical graph recursively inlines its entire reachable call tree, so this is both complete
  * (nothing reachable from any root is missed) and avoids reporting the same underlying loop once
- * per level of call nesting. It doesn't fully dedupe across independent roots that happen to share
- * a buggy callee - a rare enough case not worth the extra complexity of cross-root node-identity
- * tracking to eliminate.
+ * per level of call nesting. This can still independently rediscover the identical textual bug once
+ * per generic instantiation that doesn't actually affect it (e.g. round_key(1..10) in aes/test.gapl,
+ * or several independent roots that all happen to call the same buggy helper) - that's expected and
+ * relied upon, not a gap: the ranking below is specifically deterministic so every such rediscovery
+ * produces an equal [com.uabutler.diagnostics.Diagnostic], and DiagnosticsCollector's dedup (by
+ * severity+span+kind, which for real distinct problems never collide since their kind's own fields
+ * differ) collapses them to one, regardless of which root(s) found them.
  *
  * Returns one entry per independent loop found - the [Node]s involved, ranked most-to-least
- * relevant for a human reader (and deterministic): a name the user actually chose beats one
- * synthesized by AnonymousIdentifierGenerator (e.g. an inlined `+`/`xor` gate, or expanding a
- * generic stdlib helper); among named nodes, a declared node ([BodyNode]) beats a function's own
- * parameter ([com.uabutler.netlistir.netlist.IONode], inherently generic-named since it's reused
- * identically across every call to that function - `i`/`o` and the like); ties break
- * alphabetically. Empty if there are no loops.
+ * relevant for a human reader: a name the user actually chose beats one synthesized by
+ * AnonymousIdentifierGenerator (e.g. an inlined `+`/`xor` gate, or expanding a generic stdlib
+ * helper); among named nodes, a declared node ([BodyNode]) beats a function's own parameter
+ * ([com.uabutler.netlistir.netlist.IONode], inherently generic-named since it's reused identically
+ * across every call to that function - `i`/`o` and the like); ties break alphabetically by node
+ * name, then by owning function name. That last tie-break matters for more than cosmetics: it's
+ * what makes the ranking fully content-determined rather than dependent on the arbitrary iteration
+ * order of the (identity-based) Set stronglyConnectedComponentsTarjan returns - two structurally
+ * identical loops (e.g. the same buggy generic function called once per value of an unrelated
+ * generic parameter, as in aes/test.gapl's round_key(1..10)) need to rank their nodes identically
+ * so the resulting diagnostics are equal and collapse via DiagnosticsCollector's dedup, instead of
+ * surviving as near-duplicates that only differ in node order. Empty if there are no loops.
  */
 fun findCombinationalLoops(modules: Collection<MutableModule>): List<List<Node>> {
     val rootModules = InvocationGraph(modules).rootModules().toSet()
@@ -64,10 +74,16 @@ fun findCombinationalLoops(modules: Collection<MutableModule>): List<List<Node>>
                                 { node: Node -> node.name().startsWith("anonymous_") },
                                 { node: Node -> node !is BodyNode },
                                 { node: Node -> node.name() },
+                                { node: Node -> node.parentModule.invocation.gaplFunctionName },
                             )
                         )
                 }
                 .filter { it.isNotEmpty() }
         }
-        .sortedBy { loop -> loop.firstOrNull()?.name() ?: "" }
+        .sortedWith(
+            compareBy(
+                { loop: List<Node> -> loop.firstOrNull()?.name() ?: "" },
+                { loop: List<Node> -> loop.firstOrNull()?.parentModule?.invocation?.gaplFunctionName ?: "" },
+            )
+        )
 }
