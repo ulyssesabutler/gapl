@@ -343,6 +343,63 @@ class NetlistBuilderDiagnosticsTest {
     }
 
     @Test
+    fun `a combinational loop anchors on the user's declared node, not a stdlib helper's generic i-o parameter`() {
+        val gapl = """
+            function test() a: wire => b: wire {
+                declare x: wire => wire_to_vector() => vector_to_wire() => x;
+                a => b;
+            }
+        """.trimIndent()
+
+        // Real standard library included this time, specifically to exercise the "prefer a node
+        // in the user's own source over one inside the invisible prepended stdlib text" ranking -
+        // wire_to_vector/vector_to_wire are real stdlib helpers with generic i/o parameter names.
+        val result = Analyzer.analyzeFull(gapl, Analyzer.Options(includeStdLib = true))
+
+        assertEquals(1, result.diagnostics.size)
+        val diagnostic = result.diagnostics.first()
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostic.kind)
+
+        assertEquals(
+            setOf("x" to "test", "i" to "wire_to_vector", "o" to "wire_to_vector", "i" to "vector_to_wire", "o" to "vector_to_wire"),
+            kind.involvedNodes.map { it.nodeName to it.functionName }.toSet(),
+        )
+
+        // The chosen span points at the user's own declared node, not a stdlib helper's parameter -
+        // and consequently isn't flagged as falling inside the invisible prepended stdlib text.
+        assertEquals(2, diagnostic.span.startLine) // `declare x: wire => ...` is line 2 of the test source
+        assertEquals(null, diagnostic.note)
+    }
+
+    @Test
+    fun `a generic helper called twice in one loop is listed once, not once per call site`() {
+        val gapl = """
+            function helper(size: integer) i: wire[size] => o: wire[size] {
+                i => o;
+            }
+
+            function test() a: wire[2] => b: wire[2] {
+                declare x: wire[2] => helper(2) => helper(2) => x;
+                a => b;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.first().kind)
+
+        // helper(2) is called twice, so without dedup "i (in helper)"/"o (in helper)" would each
+        // appear twice (once per call site's inlined copy) even though they're indistinguishable
+        // in the message, which only shows the bare function name, not the generic instantiation.
+        assertEquals(
+            setOf("x" to "test", "i" to "helper", "o" to "helper"),
+            kind.involvedNodes.map { it.nodeName to it.functionName }.toSet(),
+        )
+        assertEquals(3, kind.involvedNodes.size)
+    }
+
+    @Test
     fun `a register inside a called function correctly breaks a cross-module loop`() {
         val gapl = """
             function delay() a: wire[2] => b: wire[2] {

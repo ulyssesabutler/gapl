@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder.util
 
+import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.VirtualNode
@@ -29,8 +30,13 @@ private val zeroDelay = object : PropagationDelay {
  * a buggy callee - a rare enough case not worth the extra complexity of cross-root node-identity
  * tracking to eliminate.
  *
- * Returns one entry per independent loop found (the [Node]s involved, sorted by name for
- * deterministic output), empty if there are none.
+ * Returns one entry per independent loop found - the [Node]s involved, ranked most-to-least
+ * relevant for a human reader (and deterministic): a name the user actually chose beats one
+ * synthesized by AnonymousIdentifierGenerator (e.g. an inlined `+`/`xor` gate, or expanding a
+ * generic stdlib helper); among named nodes, a declared node ([BodyNode]) beats a function's own
+ * parameter ([com.uabutler.netlistir.netlist.IONode], inherently generic-named since it's reused
+ * identically across every call to that function - `i`/`o` and the like); ties break
+ * alphabetically. Empty if there are no loops.
  */
 fun findCombinationalLoops(modules: Collection<MutableModule>): List<List<Node>> {
     val rootModules = InvocationGraph(modules).rootModules().toSet()
@@ -50,7 +56,17 @@ fun findCombinationalLoops(modules: Collection<MutableModule>): List<List<Node>>
                     // below, but must stay in for the detection check itself.
                     scc.size > 1 || combinationalOnly.edges.any { it.source == it.sink && it.source in scc }
                 }
-                .map { scc -> scc.map { it.value }.filterNot { it is VirtualNode }.sortedBy { node -> node.name() } }
+                .map { scc ->
+                    scc.map { it.value }
+                        .filterNot { it is VirtualNode }
+                        .sortedWith(
+                            compareBy(
+                                { node: Node -> node.name().startsWith("anonymous_") },
+                                { node: Node -> node !is BodyNode },
+                                { node: Node -> node.name() },
+                            )
+                        )
+                }
                 .filter { it.isNotEmpty() }
         }
         .sortedBy { loop -> loop.firstOrNull()?.name() ?: "" }

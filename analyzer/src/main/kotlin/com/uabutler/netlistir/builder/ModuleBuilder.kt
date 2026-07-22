@@ -13,7 +13,14 @@ import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 
-class ModuleBuilder(val program: ProgramNode) {
+class ModuleBuilder(
+    val program: ProgramNode,
+    // Used only to prefer a combinational-loop diagnostic's anchor span in the user's own source
+    // over one inside the invisible prepended stdlib text - see validateNoCombinationalLoops.
+    // Defaults to 0 ("nothing is stdlib") so existing callers/tests that don't care don't need to
+    // pass it.
+    private val stdLibLineOffset: Int = 0,
+) {
 
     val programContext = ProgramContext(program)
     private val functionNodes = program.functions
@@ -119,18 +126,19 @@ class ModuleBuilder(val program: ProgramNode) {
 
     private fun validateNoCombinationalLoops(modules: List<MutableModule>) {
         findCombinationalLoops(modules).forEach { loop ->
+            // loop is already ranked most-to-least relevant (see findCombinationalLoops); the only
+            // thing it can't judge for itself is visibility - a node inside the prepended stdlib
+            // text is invisible/unclickable to the user, so among equally-ranked candidates prefer
+            // whichever one the user can actually see in their own file.
+            val anchorNode = loop.firstOrNull { nodeSpans.getValue(it).startLine > stdLibLineOffset } ?: loop.first()
+            val span = nodeSpans.getValue(anchorNode)
+
             val involvedNodes = loop.map {
                 BuilderDiagnosticKind.CombinationalLoop.NodeInLoop(
                     nodeName = it.name(),
                     functionName = it.parentModule.invocation.gaplFunctionName,
                 )
-            }
-            // Prefer anchoring on a node the user actually named over one synthesized by
-            // AnonymousIdentifierGenerator (e.g. from expanding a generic stdlib helper) - a loop
-            // spanning many call sites of the same helper is far more actionable pointing at a
-            // real declared node than at whichever anonymous one happened to sort first.
-            val anchorNode = loop.firstOrNull { !it.name().startsWith("anonymous_") } ?: loop.first()
-            val span = nodeSpans[anchorNode]!!
+            }.distinct() // the same (name, function) pair can repeat many times across call sites of one generic helper
 
             diagnosticsCollector.reportError(BuilderDiagnosticKind.CombinationalLoop(involvedNodes), span)
         }

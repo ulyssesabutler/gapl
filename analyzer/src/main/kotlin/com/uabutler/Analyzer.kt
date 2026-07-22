@@ -159,7 +159,9 @@ object Analyzer {
             return FullAnalysisResult(analysis.ast, analysis.diagnostics, analysis.definitions, analysis.semanticTokens, null)
         }
 
-        val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) { ModuleBuilder(analysis.ast).buildAllModules() }
+        val netlistResult = Logger.run("Netlist Builder", Logger.Level.INFO) {
+            ModuleBuilder(analysis.ast, stdLibLineOffset(options)).buildAllModules()
+        }
         val diagnostics = analysis.diagnostics + shiftToUserSource(netlistResult.diagnostics, options)
 
         return FullAnalysisResult(analysis.ast, diagnostics, analysis.definitions, analysis.semanticTokens, netlistResult.modules)
