@@ -28,7 +28,7 @@ fun retime(projectRoot: File, delayModel: File, retimingClockPeriod: Int, progra
                 clockPeriod = retimingClockPeriod,
                 retime = delayModel,
                 retimingClockPeriod = retimingClockPeriod,
-                retimingMinimizeRegisterCount = true,
+                retimingSolver = "minimal-register",
             ).run()
         }
     }
@@ -48,7 +48,7 @@ fun build(
                 clockPeriod = variant.clockPeriod,
                 retime = null,
                 retimingClockPeriod = null,
-                retimingMinimizeRegisterCount = null,
+                retimingSolver = null,
             ).run()
         }
     }
