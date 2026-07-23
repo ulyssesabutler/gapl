@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer.util.retiming.solver
 
+import com.uabutler.netlistir.transformer.util.retiming.HierarchicalRetimingProblem
 import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
@@ -19,8 +20,9 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
     private val graphs: Collection<HierarchicalLeisersonCircuitGraph<G, N, E>>,
     private val expansionNodeFactory: () -> N,
     private val expansionEdgeValueFactory: () -> E,
-) {
-    data class SolveResult<G, N, E>(
+) : HierarchicalSolver<G, N, E>(HierarchicalRetimingProblem(graphs)) {
+
+    private data class SolveResult<G, N, E>(
         val retimedGraph: HierarchicalLeisersonCircuitGraph<G, N, E>,
         val unretimedProperties: TimingProperties,
         val retimedProperties: TimingProperties,
@@ -35,7 +37,20 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         val retimingDifference: Int,
     )
 
-    fun solveAll(targetClockPeriod: Int): Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>> {
+    override fun solveOrNull(targetClockPeriod: Int?): HierarchicalRetimingProblem<G, N, E>? {
+        // Unconstrained ("no target period") hierarchical solving isn't implemented - matches
+        // today's real limitation (HierarchicalRetimer previously required a non-null target).
+        if (targetClockPeriod == null) return null
+
+        val results = solveAll(targetClockPeriod)
+        // All-or-nothing: solveAll can silently omit a root whose solveSingle failed. The
+        // Solver.solveOrNull contract is all-or-nothing, so a partial batch is a failed solve.
+        if (!problem.roots.all { it in results }) return null
+
+        return HierarchicalRetimingProblem(problem.roots.map { results.getValue(it).retimedGraph })
+    }
+
+    private fun solveAll(targetClockPeriod: Int): Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>> {
         val results = mutableMapOf<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>>()
         val processed = mutableSetOf<HierarchicalLeisersonCircuitGraph<G, N, E>>()
 
@@ -48,48 +63,6 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
 
         graphs.forEach { processGraph(it) }
         return results
-    }
-
-    private fun computeTimingProperties(graph: LeisersonCircuitGraph<G, N, E>): TimingProperties {
-        val inputNodes = graph.rootNodes()
-        val outputNodes = graph.leafNodes()
-
-        val fullPaths = inputNodes.flatMap { inputNode ->
-            graph.findFastestConnectionsFromNode(inputNode)
-                .filter { it.sink in outputNodes }
-        }
-
-        val registerDelay = fullPaths.minByOrNull { it.registerCount }?.registerCount ?: 0
-        val combinationalDelay = fullPaths.filter { it.registerCount == 0 }.maxByOrNull { it.delay }?.delay
-
-        val inputDelay = inputNodes.flatMap { inputNode ->
-            graph.findFastestConnectionsFromNode(inputNode)
-                .filter { it.sink !in outputNodes }
-                .filter { it.registerCount == 0 }
-                .map { it.delay }
-        }.maxOrNull()
-
-        val reversedGraph = LeisersonCircuitGraph(
-            value = graph.value,
-            nodes = graph.nodes,
-            edges = graph.edges.map { WeightedGraph.Edge(it.weight, it.sink, it.source, it.value) },
-        )
-
-        val outputDelay = reversedGraph.rootNodes().flatMap { outputNode ->
-            reversedGraph.findFastestConnectionsFromNode(outputNode)
-                .filter { it.sink !in inputNodes }
-                .filter { it.registerCount == 0 }
-                .map { it.delay }
-        }.maxOrNull()
-
-        return TimingProperties(
-            inputDelay = inputDelay,
-            outputDelay = outputDelay,
-            combinationalDelay = combinationalDelay,
-            registerDelay = registerDelay,
-            clockPeriod = graph.computeClockPeriod(),
-            registerCount = graph.edges.sumOf { it.weight },
-        )
     }
 
     private fun solveSingle(
@@ -263,4 +236,46 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
 
         SolveResult(retimedGraph, unretimedProperties, retimedProperties)
     }
+}
+
+fun <G, N, E> computeTimingProperties(graph: LeisersonCircuitGraph<G, N, E>): TimingProperties {
+    val inputNodes = graph.rootNodes()
+    val outputNodes = graph.leafNodes()
+
+    val fullPaths = inputNodes.flatMap { inputNode ->
+        graph.findFastestConnectionsFromNode(inputNode)
+            .filter { it.sink in outputNodes }
+    }
+
+    val registerDelay = fullPaths.minByOrNull { it.registerCount }?.registerCount ?: 0
+    val combinationalDelay = fullPaths.filter { it.registerCount == 0 }.maxByOrNull { it.delay }?.delay
+
+    val inputDelay = inputNodes.flatMap { inputNode ->
+        graph.findFastestConnectionsFromNode(inputNode)
+            .filter { it.sink !in outputNodes }
+            .filter { it.registerCount == 0 }
+            .map { it.delay }
+    }.maxOrNull()
+
+    val reversedGraph = LeisersonCircuitGraph(
+        value = graph.value,
+        nodes = graph.nodes,
+        edges = graph.edges.map { WeightedGraph.Edge(it.weight, it.sink, it.source, it.value) },
+    )
+
+    val outputDelay = reversedGraph.rootNodes().flatMap { outputNode ->
+        reversedGraph.findFastestConnectionsFromNode(outputNode)
+            .filter { it.sink !in inputNodes }
+            .filter { it.registerCount == 0 }
+            .map { it.delay }
+    }.maxOrNull()
+
+    return TimingProperties(
+        inputDelay = inputDelay,
+        outputDelay = outputDelay,
+        combinationalDelay = combinationalDelay,
+        registerDelay = registerDelay,
+        clockPeriod = graph.computeClockPeriod(),
+        registerCount = graph.edges.sumOf { it.weight },
+    )
 }

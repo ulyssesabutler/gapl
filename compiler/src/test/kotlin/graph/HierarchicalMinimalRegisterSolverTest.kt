@@ -104,7 +104,7 @@ class HierarchicalMinimalRegisterSolverTest {
         )
 
         val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
-        val flattenedGraph = results[parentGraph]!!.retimedGraph.flatten()
+        val flattenedGraph = results!!.getValue(parentGraph).flatten()
 
         assertEquals(1, flattenedGraph.computeClockPeriod())
     }
@@ -137,7 +137,7 @@ class HierarchicalMinimalRegisterSolverTest {
         )
 
         val results = solve(listOf(childGraph, parentGraph), targetClockPeriod = 1)
-        val flattenedGraph = results[parentGraph]!!.retimedGraph.flatten()
+        val flattenedGraph = results!!.getValue(parentGraph).flatten()
 
         assertEquals(1, flattenedGraph.computeClockPeriod())
     }

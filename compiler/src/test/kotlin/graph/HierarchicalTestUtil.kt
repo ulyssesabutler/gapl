@@ -5,7 +5,6 @@ import com.uabutler.netlistir.transformer.util.retiming.solver.HierarchicalMinim
 
 typealias HGraph = HierarchicalLeisersonCircuitGraph<String, String, String>
 typealias HEdge = HierarchicalLeisersonCircuitGraph.Edge<String, String>
-typealias HSolveResult = HierarchicalMinimalRegisterSolver.SolveResult<String, String, String>
 
 data class Edge(
     val source: String,
@@ -83,15 +82,17 @@ object HierarchicalTestUtil {
     fun solve(
         graphs: Collection<HGraph>,
         targetClockPeriod: Int,
-    ): Map<HGraph, HSolveResult> {
+    ): Map<HGraph, HGraph>? {
         var counter = 0
-        return HierarchicalMinimalRegisterSolver(
+        val solver = HierarchicalMinimalRegisterSolver(
             graphs = graphs,
             expansionNodeFactory = { "expansion-${counter++}" },
             expansionEdgeValueFactory = { "expansion-edge" },
-        ).solveAll(targetClockPeriod)
+        )
+        val retimed = solver.solveOrNull(targetClockPeriod) ?: return null
+        return graphs.toList().zip(retimed.roots).toMap()
     }
 
-    fun solve(graph: HGraph, targetClockPeriod: Int): HSolveResult? =
-        solve(listOf(graph), targetClockPeriod)[graph]
+    fun solve(graph: HGraph, targetClockPeriod: Int): HGraph? =
+        solve(listOf(graph), targetClockPeriod)?.get(graph)
 }
