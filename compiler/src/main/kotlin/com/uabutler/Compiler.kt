@@ -8,6 +8,8 @@ import com.uabutler.netlistir.transformer.LiteralSimplifier
 import com.uabutler.netlistir.transformer.PassThroughRemover
 import com.uabutler.netlistir.transformer.Renamer
 import com.uabutler.netlistir.transformer.Retimer
+import com.uabutler.netlistir.transformer.RetimingSolverId
+import com.uabutler.netlistir.transformer.RetimingSolverKind
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.Logger
@@ -17,24 +19,68 @@ import com.uabutler.verilogir.builder.creator.util.Identifier
 object Compiler {
 
     data class Options(
-        val flattenMode: Flattener.Mode,
+        val flattenMode: Flattener.Mode?,
         val literalSimplification: Boolean,
         val constantSimplification: Boolean,
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
         val retimingClockPeriod: Int?,
-        val retimingMinimizeRegisterCount: Boolean,
+        val retimingSolverId: RetimingSolverId,
+        val retimingMinClockPeriodSolverId: RetimingSolverId?,
         val retimingMaintainTiming: Boolean,
     ) {
         val analyzerOptions get() = Analyzer.Options(includeStdLib)
     }
 
+    // -flatten is optional: when the user doesn't pass it, the required mode is derived from the
+    // chosen retiming solver's kind (monolithic solvers need everything flattened; hierarchical
+    // solvers need the native module hierarchy intact). When retiming isn't requested at all,
+    // there's no solver kind to derive from, so this just preserves the old always-"all" default.
+    // An explicit -flatten value that conflicts with the solver's requirement is a hard error,
+    // never silently overridden.
+    private fun resolveFlattenMode(options: Options): Flattener.Mode {
+        if (options.retime == null) return options.flattenMode ?: Flattener.Mode.ALL
+
+        val requiredKind = options.retimingSolverId.kind
+        val requiredFlattenMode = when (requiredKind) {
+            RetimingSolverKind.MONOLITHIC -> Flattener.Mode.ALL
+            RetimingSolverKind.HIERARCHICAL -> Flattener.Mode.NONE
+        }
+
+        val explicit = options.flattenMode ?: return requiredFlattenMode
+        val explicitKind = if (explicit == Flattener.Mode.ALL) RetimingSolverKind.MONOLITHIC else RetimingSolverKind.HIERARCHICAL
+        if (explicitKind != requiredKind) {
+            throw Exception(
+                "-flatten $explicit is incompatible with -retiming-solver ${options.retimingSolverId.id} (requires a $requiredKind flatten mode)"
+            )
+        }
+        return explicit
+    }
+
+    private fun resolveMinClockPeriodSolverId(options: Options): RetimingSolverId {
+        val solverKind = options.retimingSolverId.kind
+        val default = when (solverKind) {
+            RetimingSolverKind.MONOLITHIC -> RetimingSolverId.FAST
+            RetimingSolverKind.HIERARCHICAL -> RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER
+        }
+
+        val explicit = options.retimingMinClockPeriodSolverId ?: return default
+        if (explicit.kind != solverKind) {
+            throw Exception(
+                "-retiming-min-clock-period-solver ${explicit.id} is a ${explicit.kind} solver, but -retiming-solver ${options.retimingSolverId.id} is $solverKind"
+            )
+        }
+        return explicit
+    }
+
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
+        val effectiveFlattenMode = resolveFlattenMode(options)
+
         val transformers = Logger.run("Building Transformer List") {
             buildList {
-                if (options.flattenMode != Flattener.Mode.NONE) {
+                if (effectiveFlattenMode != Flattener.Mode.NONE) {
                     Logger.debug { "Flattener" }
-                    add(Flattener(options.flattenMode))
+                    add(Flattener(effectiveFlattenMode))
                 }
 
                 if (options.includeStdLib) {
@@ -57,17 +103,17 @@ object Compiler {
                 add(PassThroughRemover)
 
                 if (options.retime != null) {
-                    val retimeMode = when (options.flattenMode) {
-                        Flattener.Mode.ALL -> Retimer.Mode.MONOLITH
-                        Flattener.Mode.RECURSIVE,
-                        Flattener.Mode.NONE -> Retimer.Mode.HIERARCHICAL
+                    val retimeMode = when (options.retimingSolverId.kind) {
+                        RetimingSolverKind.MONOLITHIC -> Retimer.Mode.MONOLITH
+                        RetimingSolverKind.HIERARCHICAL -> Retimer.Mode.HIERARCHICAL
                     }
 
                     add(Retimer(
                         mode = retimeMode,
                         delay = options.retime,
                         targetClockPeriod = options.retimingClockPeriod,
-                        minimizeRegisterCount = options.retimingMinimizeRegisterCount,
+                        retimingSolverId = options.retimingSolverId,
+                        minClockPeriodSolverId = resolveMinClockPeriodSolverId(options),
                         maintainTiming = options.retimingMaintainTiming,
                     ))
                 }
