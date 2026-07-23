@@ -37,18 +37,42 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         val retimingDifference: Int,
     )
 
+    // Timing properties from the most recent solveOrNull call, keyed by (unretimed) root graph.
+    // Exposed via timingPropertiesFromLastSolve so callers needing correct before/after stats
+    // (e.g. HierarchicalRetimer's logging) don't have to recompute them by naively flattening a
+    // retimed graph - see timingPropertiesFromLastSolve's doc comment for why that's unsafe.
+    private var lastSolveResults: Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>> = emptyMap()
+
     override fun solveOrNull(targetClockPeriod: Int?): HierarchicalRetimingProblem<G, N, E>? {
         // Unconstrained ("no target period") hierarchical solving isn't implemented - matches
         // today's real limitation (HierarchicalRetimer previously required a non-null target).
         if (targetClockPeriod == null) return null
 
         val results = solveAll(targetClockPeriod)
+        lastSolveResults = results
         // All-or-nothing: solveAll can silently omit a root whose solveSingle failed. The
         // Solver.solveOrNull contract is all-or-nothing, so a partial batch is a failed solve.
         if (!problem.roots.all { it in results }) return null
 
         return HierarchicalRetimingProblem(problem.roots.map { results.getValue(it).retimedGraph })
     }
+
+    /**
+     * (unretimedProperties, retimedProperties) for [root] from the most recent successful
+     * solveOrNull call, or null if [root] wasn't part of it.
+     *
+     * These are the properties computed internally during the actual solve (via the per-level
+     * "expansion" boundary bookkeeping) - deliberately NOT re-derived by the caller via
+     * `root.flatten()`/`retimedGraph.flatten()`. Naively flattening an *unretimed* graph is fine
+     * (that's how HierarchicalRetimingProblem's own computeClockPeriod/computePossibleClockPeriods
+     * work), but naively flattening a *retimed* one is not: the boundary edge weights this solver
+     * assigns are calibrated against the "expansion" node's synthetic topology (which folds in the
+     * child's already-computed retiming difference), not the child's real internal structure, so
+     * splicing the real structure back in can produce a graph that looks like it has an illegal
+     * zero-register cycle even though the retiming itself is correct.
+     */
+    fun timingPropertiesFromLastSolve(root: HierarchicalLeisersonCircuitGraph<G, N, E>): Pair<TimingProperties, TimingProperties>? =
+        lastSolveResults[root]?.let { it.unretimedProperties to it.retimedProperties }
 
     private fun solveAll(targetClockPeriod: Int): Map<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>> {
         val results = mutableMapOf<HierarchicalLeisersonCircuitGraph<G, N, E>, SolveResult<G, N, E>>()

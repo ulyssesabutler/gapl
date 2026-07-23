@@ -8,7 +8,6 @@ import com.uabutler.netlistir.util.graph.HierarchicalNetlistLeisersonCircuitConv
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
 import com.uabutler.netlistir.transformer.util.retiming.solver.HierarchicalMinimalRegisterSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.TimingProperties
-import com.uabutler.netlistir.transformer.util.retiming.solver.computeTimingProperties
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.graph.LeisersonCircuitGraph
@@ -26,9 +25,9 @@ class HierarchicalRetimer(
         val registerCount: Int,
     )
 
-    // These are populated by re-deriving TimingProperties from before/after graphs, purely for the
-    // logging below - reaching back into solve-derived stats from outside the solver still feels
-    // architecturally awkward. See brainstorming/todo.md > ## Retiming.
+    // Populated from HierarchicalMinimalRegisterSolver.timingPropertiesFromLastSolve, purely for
+    // the logging below - reaching back into solve-derived stats from outside the solver still
+    // feels architecturally awkward. See brainstorming/todo.md > ## Retiming.
     private val unretimedGraphStats: MutableMap<Module.Invocation, GraphStats> = mutableMapOf()
     private val retimedGraphStats: MutableMap<Module.Invocation, GraphStats> = mutableMapOf()
 
@@ -94,10 +93,11 @@ class HierarchicalRetimer(
         val retimedProblem = solver.solveOrNull(clockPeriod)
             ?: throw Exception("Failed to find feasible hierarchical solution for clock period $clockPeriod")
 
-        hierarchicalGraphs.zip(retimedProblem.roots).forEach { (original, retimed) ->
+        hierarchicalGraphs.forEach { original ->
             val invocation = original.value.invocation
-            unretimedGraphStats[invocation] = computeTimingProperties(original.flatten()).toGraphStats()
-            retimedGraphStats[invocation] = computeTimingProperties(retimed.flatten()).toGraphStats()
+            val (unretimed, retimed) = solver.timingPropertiesFromLastSolve(original) ?: return@forEach
+            unretimedGraphStats[invocation] = unretimed.toGraphStats()
+            retimedGraphStats[invocation] = retimed.toGraphStats()
         }
 
         val retimeOrder = hierarchicalGraphs.map { it.value.invocation }
