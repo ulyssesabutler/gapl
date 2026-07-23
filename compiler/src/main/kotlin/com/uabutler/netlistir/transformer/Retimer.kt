@@ -15,7 +15,8 @@ import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
-import com.uabutler.netlistir.transformer.util.retiming.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
+import com.uabutler.netlistir.transformer.util.retiming.findMinimumClockPeriod
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
 /* TODO: Interface
@@ -150,18 +151,15 @@ class Retimer(
             .map { NetlistLeisersonCircuitConverter.fromModule(it, delay, maintainTiming) }
             .onEach { graph -> recordGraphStats("Unretimed", graph) }
             .map { graph ->
-                val fastSolver = FastSolver(graph)
-                val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(graph) else fastSolver
-                val retiming = Retiming(
-                    graph = graph,
-                    graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
-                )
-                val clockPeriod = targetClockPeriod ?: retiming.findMinimumClockPeriod(fastSolver)
+                val problem = MonolithicRetimingProblem(graph)
+                val fastSolver = FastSolver(problem)
+                val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(problem) else fastSolver
+                val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(fastSolver, problem)
 
                 Logger.trace { "Retiming will use clock period of $clockPeriod" }
                 Logger.trace { "Retiming will use ${finalSolver::class.simpleName} solver" }
 
-                finalSolver.solveOrNull(clockPeriod) ?: throw Exception("Failed to find feasible solution")
+                finalSolver.solveOrNull(clockPeriod)?.graph ?: throw Exception("Failed to find feasible solution")
             }
             .onEach { graph -> recordGraphStats("Retimed", graph) }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }

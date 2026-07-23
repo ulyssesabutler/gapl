@@ -2,7 +2,8 @@ package graph
 
 import com.uabutler.util.Logger
 import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
-import com.uabutler.netlistir.transformer.util.retiming.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
+import com.uabutler.netlistir.transformer.util.retiming.findMinimumClockPeriod
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.BeforeEach
@@ -18,12 +19,10 @@ class ClockPeriodMinimizationTest {
      */
 
     fun Graph.minimizeClockPeriod(): Graph {
-        val solver = FastSolver(this)
-        val minimumClockPeriod = Retiming(
-            graph = this,
-            graphFactory = { nodes, edges -> Graph(this.value, nodes, edges) },
-        ).findMinimumClockPeriod(solver)
-        return solver.solveOrNull(minimumClockPeriod)!!
+        val problem = MonolithicRetimingProblem(this)
+        val solver = FastSolver(problem)
+        val minimumClockPeriod = findMinimumClockPeriod(solver, problem)
+        return solver.solveOrNull(minimumClockPeriod)!!.graph
     }
 
     @BeforeEach

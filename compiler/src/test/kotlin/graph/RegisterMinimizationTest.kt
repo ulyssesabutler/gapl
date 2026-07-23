@@ -2,6 +2,7 @@ package graph
 
 import com.uabutler.util.Logger
 import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import graph.TestUtil.createGraph
 import graph.TestUtil.getCorrespondingEdge
 import org.junit.jupiter.api.BeforeEach
@@ -11,8 +12,8 @@ import kotlin.test.assertEquals
 class RegisterMinimizationTest {
 
     fun Graph.minimizeRegisterCount(clockPeriod: Int? = null): Graph {
-        val solver = MinimalRegisterSolver(this)
-        return solver.solveOrNull(clockPeriod)!!
+        val solver = MinimalRegisterSolver(MonolithicRetimingProblem(this))
+        return solver.solveOrNull(clockPeriod)!!.graph
     }
 
     @BeforeEach

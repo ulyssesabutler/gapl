@@ -1,9 +1,9 @@
 package com.uabutler.netlistir.transformer.util.retiming.solver
 
-import com.uabutler.util.graph.LeisersonCircuitGraph
+import com.uabutler.netlistir.transformer.util.retiming.RetimingProblem
 
-abstract class Solver<G, N, E>(open val graph: LeisersonCircuitGraph<G, N, E>) {
+abstract class Solver<P : RetimingProblem>(open val problem: P) {
     abstract fun solveOrNull(
         targetClockPeriod: Int?,
-    ): LeisersonCircuitGraph<G, N, E>?
+    ): P?
 }
