@@ -16,7 +16,7 @@ data class TestProperties(
     var topModule: String? = null,
     var retimeDelayModel: String? = null,
     var retimingClockPeriod: String? = null,
-    var retimingMinimizeRegisterCount: Boolean = false,
+    var retimingSolver: String? = null,
     var retimingMaintainTiming: Boolean = false,
     val additionalCompilerFlags: MutableList<String> = mutableListOf(),
     val removeCompilerFlags: MutableList<String> = mutableListOf(),
@@ -44,7 +44,7 @@ fun loadTestProperties(testDirectory: File): TestProperties {
             "topModule" -> testProperties.topModule = value.toString()
             "retime" -> if (value.toString().toBoolean()) testProperties.retimeDelayModel = testDirectory.listFiles()!!.first { it.isFile && it.name == "delay.yaml" }.absolutePath
             "retimingClockPeriod" -> testProperties.retimingClockPeriod = value.toString()
-            "retimingMinimizeRegisterCount" -> testProperties.retimingMinimizeRegisterCount = value.toString().toBoolean()
+            "retimingSolver" -> testProperties.retimingSolver = value.toString()
             "retimingMaintainTiming" -> testProperties.retimingMaintainTiming = value.toString().toBoolean()
             "additionalCompilerFlags" -> testProperties.additionalCompilerFlags += value.toString().split(",")
             "additionalVerilatorFlags" -> testProperties.additionalVerilatorFlags += value.toString().split(",")
@@ -85,7 +85,10 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
             add(properties.retimingClockPeriod.toString())
         }
 
-        if (properties.retimingMinimizeRegisterCount) { add("-retiming-minimize-register-count") }
+        if (properties.retimingSolver != null) {
+            add("-retiming-solver")
+            add(properties.retimingSolver!!)
+        }
 
         if (properties.retimingMaintainTiming) { add("-retiming-maintains-timing") }
 

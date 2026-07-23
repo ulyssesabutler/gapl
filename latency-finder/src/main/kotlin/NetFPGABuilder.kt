@@ -10,7 +10,7 @@ class NetFPGABuilder(
     val clockPeriod: Int?,
     val retime: File? = null,
     val retimingClockPeriod: Int? = null,
-    val retimingMinimizeRegisterCount: Boolean? = null,
+    val retimingSolver: String? = null,
 ) {
 
     private fun runCommandInDirectoryAndTeeToLog(
@@ -49,7 +49,7 @@ class NetFPGABuilder(
 
         if (retime != null) add("-PdelayModelPath=${retime.absolutePath}")
         if (retimingClockPeriod != null) add("-PretimingClockPeriod=$retimingClockPeriod")
-        if (retimingMinimizeRegisterCount != null) add("-PretimingMinimizeRegisterCount=$retimingMinimizeRegisterCount")
+        if (retimingSolver != null) add("-PretimingSolver=$retimingSolver")
     }
 
     private fun getGradleCommandForClockPeriod(

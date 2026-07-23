@@ -127,7 +127,7 @@ val retime = propBool("retime", true)
 
 val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
 
-val retimingMinimizeRegisterCount = propBool("retimingMinimizeRegisterCount", false)
+val retimingSolver = propString("retimingSolver")
 val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 
 val flattenMode = propString("flatten", "all")!!
@@ -209,7 +209,10 @@ tasks.register("generateGaplVerilog") {
                 add("-retiming-clock-period")
                 add(retimingClockPeriod)
 
-                if (retimingMinimizeRegisterCount) { add("-retiming-minimize-register-count") }
+                if (retimingSolver != null) {
+                    add("-retiming-solver")
+                    add(retimingSolver)
+                }
                 if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
             }
 
