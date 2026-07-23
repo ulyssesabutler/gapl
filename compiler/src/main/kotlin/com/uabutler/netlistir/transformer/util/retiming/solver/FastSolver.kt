@@ -1,10 +1,11 @@
 package com.uabutler.netlistir.transformer.util.retiming.solver
 
 import com.uabutler.netlistir.transformer.util.retiming.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 
-class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Retiming.Solver<G, N, E>(graph) {
+class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Solver<G, N, E>(graph) {
 
     override fun solveOrNull(
         targetClockPeriod: Int?

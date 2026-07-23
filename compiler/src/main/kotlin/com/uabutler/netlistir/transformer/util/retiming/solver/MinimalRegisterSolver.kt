@@ -9,6 +9,7 @@ import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.transformer.util.retiming.Retiming
+import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.graph.WeightedGraph
 
 data class NodeEqualityConstraint<N>(
@@ -20,7 +21,7 @@ data class NodeEqualityConstraint<N>(
 class MinimalRegisterSolver<G, N, E>(
     graph: LeisersonCircuitGraph<G, N, E>,
     private val additionalEqualityConstraints: List<NodeEqualityConstraint<N>> = emptyList(),
-): Retiming.Solver<G, N, E>(graph) {
+): Solver<G, N, E>(graph) {
     companion object {
         init { Loader.loadNativeLibraries() }
 
