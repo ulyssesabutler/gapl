@@ -448,4 +448,63 @@ class NetlistBuilderDiagnosticsTest {
 
         assertTrue(result.diagnostics.isEmpty())
     }
+
+    @Test
+    fun `a function invoking itself with unchanged parameters reports a diagnostic instead of crashing`() {
+        val gapl = """
+            function loop() i: wire[2] => o: wire[2] {
+                i => loop() => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.RecursiveInvocation>(diagnostics.first().kind)
+        assertEquals(listOf("loop"), kind.involvedFunctions)
+    }
+
+    @Test
+    fun `mutual recursion with unchanged parameters reports one diagnostic naming both functions`() {
+        val gapl = """
+            function ping() i: wire[2] => o: wire[2] {
+                i => pong() => o;
+            }
+
+            function pong() i: wire[2] => o: wire[2] {
+                i => ping() => o;
+            }
+        """.trimIndent()
+
+        val diagnostics = compileFullExpectingDiagnostics(gapl)
+
+        assertEquals(1, diagnostics.size)
+        val kind = assertIs<BuilderDiagnosticKind.RecursiveInvocation>(diagnostics.first().kind)
+        assertEquals(listOf("ping", "pong"), kind.involvedFunctions)
+    }
+
+    @Test
+    fun `recursion via a genuinely different generic parameter each call is not flagged as recursive invocation`() {
+        // Mirrors gapl-example/count-min.gapl's recursive generic helpers: each call targets a
+        // distinct Module.Invocation (a different `size`), so the invocation graph is a DAG, not a
+        // cycle - this must compile cleanly, not be mistaken for the unchanged-parameter case above.
+        val gapl = """
+            function shrink(size: integer) i: wire[size] => o: wire[size] {
+                if (size == 1) {
+                    i => o;
+                } else {
+                    i[0:size - 2] => shrink(size - 1) => o[0:size - 2];
+                    i[size - 1] => o[size - 1];
+                }
+            }
+
+            function top() i: wire[3] => o: wire[3] {
+                i => shrink(3) => o;
+            }
+        """.trimIndent()
+
+        val result = Analyzer.analyzeFull(gapl, defaultOptions)
+
+        assertTrue(result.diagnostics.isEmpty())
+    }
 }

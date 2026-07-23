@@ -107,4 +107,10 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             "Combinational loop involving: ${involvedNodes.joinToString(", ") { "${it.nodeName} (in ${it.functionName})" }} " +
             "(no register breaks the cycle)"
     }
+
+    data class RecursiveInvocation(val involvedFunctions: List<String>) : BuilderDiagnosticKind {
+        override val message get() =
+            "Recursive function invocation involving: ${involvedFunctions.joinToString(", ")} " +
+            "(a function cannot invoke itself, directly or indirectly, without changing its generic parameters - this would produce an infinitely large circuit)"
+    }
 }

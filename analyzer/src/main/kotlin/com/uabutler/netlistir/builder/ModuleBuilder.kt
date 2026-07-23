@@ -12,6 +12,7 @@ import com.uabutler.netlistir.builder.util.findCombinationalLoops
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
+import com.uabutler.netlistir.util.InvocationGraph
 
 class ModuleBuilder(
     val program: ProgramNode,
@@ -91,18 +92,25 @@ class ModuleBuilder(
 
         val modules = moduleInstantiationTracker.getModules()
 
-        // TODO: The whole "Netlist Builder" stage (this loop above, plus the loop check below) took
+        // TODO: The whole "Netlist Builder" stage (this loop above, plus the loop checks below) took
         //   ~72s compiling simtest/tests/aes/test.gapl (a large design). Not yet profiled which part
         //   is actually the bottleneck - could be the ordinary per-function build loop above scaling
-        //   poorly for a design this size, or the loop check's whole-program graph flattening below,
+        //   poorly for a design this size, or the loop checks' whole-program graph flattening below,
         //   or both. Not urgent, but worth a look if this stage keeps showing up as slow.
-        // The loop check builds a whole-program graph via the same converter compiler's retiming
-        // pass uses, which resolves wire connections eagerly (throws on an unconnected input wire,
-        // and NPEs on a ModuleInvocationNode referencing a module that failed to build). Any earlier
-        // diagnostic already means the netlist may be structurally incomplete - skip rather than
-        // risk exactly those crashes analyzing something already known to be broken.
+        // The recursive-invocation check must run, and must be clean, before the combinational-loop
+        // check below: that check builds a whole-program graph via the same converter compiler's
+        // retiming pass uses, which requires the invocation graph to be a DAG (it topologically sorts
+        // it to inline calls bottom-up) and throws an uncaught exception otherwise - exactly what an
+        // unchanged-parameter recursive call produces. It also resolves wire connections eagerly
+        // (throws on an unconnected input wire, and NPEs on a ModuleInvocationNode referencing a
+        // module that failed to build), so any earlier diagnostic already means the netlist may be
+        // structurally incomplete - skip rather than risk those crashes analyzing something already
+        // known to be broken.
         if (diagnosticsCollector.diagnostics().isEmpty()) {
-            validateNoCombinationalLoops(modules)
+            val foundRecursiveInvocation = validateNoRecursiveInvocation(modules)
+            if (!foundRecursiveInvocation) {
+                validateNoCombinationalLoops(modules)
+            }
         }
 
         return Result(
@@ -127,6 +135,32 @@ class ModuleBuilder(
         )
         nodeBuilder.buildNodesIntoModule()
         nodeSpans.putAll(nodeBuilder.nodeSpans)
+    }
+
+    // Returns true if at least one cycle was found (and reported) - the caller uses this to decide
+    // whether it's safe to run the combinational-loop check afterward (see buildAllModules).
+    private fun validateNoRecursiveInvocation(modules: List<MutableModule>): Boolean {
+        val cycles = InvocationGraph(modules).findCycles()
+
+        cycles.forEach { cycle ->
+            // Same anchor-selection reasoning as validateNoCombinationalLoops: prefer a call site the
+            // user can actually see over one inside the invisible prepended stdlib text, among an
+            // otherwise-arbitrary choice of which call site in the cycle to point at.
+            val rankedCallSites = cycle.callSites.sortedWith(compareBy(
+                { node -> node.name().startsWith("anonymous_") },
+                { node -> node.name() },
+                { node -> node.parentModule.invocation.gaplFunctionName },
+            ))
+            val anchorNode = rankedCallSites.firstOrNull { nodeSpans.getValue(it).startLine > stdLibLineOffset }
+                ?: rankedCallSites.first()
+            val span = nodeSpans.getValue(anchorNode)
+
+            val involvedFunctions = cycle.modules.map { it.invocation.gaplFunctionName }.distinct().sorted()
+
+            diagnosticsCollector.reportError(BuilderDiagnosticKind.RecursiveInvocation(involvedFunctions), span)
+        }
+
+        return cycles.isNotEmpty()
     }
 
     private fun validateNoCombinationalLoops(modules: List<MutableModule>) {
