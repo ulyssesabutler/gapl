@@ -8,8 +8,8 @@ import com.google.ortools.sat.CpSolver
 import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
 import com.uabutler.netlistir.netlist.VirtualIONode
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import com.uabutler.netlistir.transformer.util.retiming.Retiming
-import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.graph.WeightedGraph
 
 data class NodeEqualityConstraint<N>(
@@ -19,19 +19,22 @@ data class NodeEqualityConstraint<N>(
 )
 
 class MinimalRegisterSolver<G, N, E>(
-    graph: LeisersonCircuitGraph<G, N, E>,
+    problem: MonolithicRetimingProblem<G, N, E>,
     private val additionalEqualityConstraints: List<NodeEqualityConstraint<N>> = emptyList(),
-): Solver<G, N, E>(graph) {
+): MonolithicSolver<G, N, E>(problem) {
+
+    private val graph = problem.graph
+
     companion object {
         init { Loader.loadNativeLibraries() }
 
         fun computeUpperRetimingUpperBound(graph: LeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
             if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
-            return@run FastSolver(graph).solveOrNull(clockPeriod)?.edges?.sumOf { it.weight }?.toLong()
+            return@run FastSolver(MonolithicRetimingProblem(graph)).solveOrNull(clockPeriod)?.graph?.edges?.sumOf { it.weight }?.toLong()
         }
     }
 
-    override fun solveOrNull(targetClockPeriod: Int?): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
+    override fun solveOrNull(targetClockPeriod: Int?): MonolithicRetimingProblem<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
         Logger.trace { "Target clock period: $targetClockPeriod" }
 
         Logger.start("Creating LP problem", Logger.Level.TRACE)
@@ -214,6 +217,6 @@ class MinimalRegisterSolver<G, N, E>(
             Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
         }
 
-        return@run retiming.generateNewCircuit()
+        return@run MonolithicRetimingProblem(retiming.generateNewCircuit())
     }
 }

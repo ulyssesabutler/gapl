@@ -1,16 +1,18 @@
 package com.uabutler.netlistir.transformer.util.retiming.solver
 
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import com.uabutler.netlistir.transformer.util.retiming.Retiming
-import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 
-class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Solver<G, N, E>(graph) {
+class FastSolver<G, N, E>(problem: MonolithicRetimingProblem<G, N, E>): MonolithicSolver<G, N, E>(problem) {
+
+    private val graph = problem.graph
 
     override fun solveOrNull(
         targetClockPeriod: Int?
-    ): LeisersonCircuitGraph<G, N, E>? = Logger.run("Retiming for clock period $targetClockPeriod", Logger.Level.DEBUG) {
-        if (targetClockPeriod == null) return@run graph
+    ): MonolithicRetimingProblem<G, N, E>? = Logger.run("Retiming for clock period $targetClockPeriod", Logger.Level.DEBUG) {
+        if (targetClockPeriod == null) return@run problem
 
         val retiming = Retiming(
             graph = graph,
@@ -66,7 +68,7 @@ class FastSolver<G, N, E>(graph: LeisersonCircuitGraph<G, N, E>): Solver<G, N, E
 
         return@run if (clockPeriodOfRetimedGraph <= targetClockPeriod) {
             Logger.debug { "Found feasible solution" }
-            retiming.generateNewCircuit()
+            MonolithicRetimingProblem(retiming.generateNewCircuit())
         } else {
             Logger.debug { "Did not find feasible solution" }
             null

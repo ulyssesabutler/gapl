@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer.util.retiming.solver
 
+import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.HierarchicalLeisersonCircuitGraph
@@ -221,7 +222,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         }
 
         // Step 4: Run the flat solver
-        val retimedFlatGraph = MinimalRegisterSolver(flatGraph, equalityConstraints).solveOrNull(targetClockPeriod)
+        val retimedFlatGraph = MinimalRegisterSolver(MonolithicRetimingProblem(flatGraph), equalityConstraints).solveOrNull(targetClockPeriod)?.graph
             ?: return@run null
 
         // Step 5: Back-map retimed edge weights to the hierarchical graph

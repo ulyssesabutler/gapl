@@ -1,6 +1,5 @@
 package com.uabutler.netlistir.transformer.util.retiming
 
-import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
@@ -34,44 +33,6 @@ class Retiming<G, N, E>(
         } catch (e: IllegalArgumentException) {
             throw Exception("Failed to generate graph: Illegal retiming", e)
         }
-    }
-
-    fun findMinimumClockPeriod(
-        solver: Solver<G, N, E>
-    ): Int = Logger.run("Finding minimum clock period") {
-        val possibleClockPeriods = Logger.run("Finding possible clock periods") {
-            graph.computePossibleClockPeriods().also {
-                Logger.debug { "Found ${it.size} possible clock periods" }
-                Logger.debug { it.joinToString() }
-            }
-        }
-
-        val cache = mutableMapOf<Int, Boolean>()
-        fun attempt(clockPeriod: Int): Boolean {
-            if (cache.containsKey(clockPeriod)) {
-                Logger.debug { "Clock period $clockPeriod was already checked" }
-                return cache[clockPeriod]!!
-            }
-
-            val solvedGraph = solver.solveOrNull(clockPeriod)
-
-            if (solvedGraph != null) {
-                Logger.debug { "Clock period $clockPeriod is feasible" }
-
-                possibleClockPeriods
-                    .filter { it >= solvedGraph.computeClockPeriod() }
-                    .forEach { cache[it] = true }
-
-                return true
-            } else {
-                Logger.debug { "Clock period $clockPeriod is infeasible" }
-                return false
-            }
-        }
-
-        possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) 1 else -1 }
-
-        return@run cache.filter { it.value }.minBy { it.key }.key
     }
 
 }
