@@ -91,6 +91,11 @@ class ModuleBuilder(
 
         val modules = moduleInstantiationTracker.getModules()
 
+        // TODO: The whole "Netlist Builder" stage (this loop above, plus the loop check below) took
+        //   ~72s compiling simtest/tests/aes/test.gapl (a large design). Not yet profiled which part
+        //   is actually the bottleneck - could be the ordinary per-function build loop above scaling
+        //   poorly for a design this size, or the loop check's whole-program graph flattening below,
+        //   or both. Not urgent, but worth a look if this stage keeps showing up as slow.
         // The loop check builds a whole-program graph via the same converter compiler's retiming
         // pass uses, which resolves wire connections eagerly (throws on an unconnected input wire,
         // and NPEs on a ModuleInvocationNode referencing a module that failed to build). Any earlier

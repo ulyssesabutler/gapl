@@ -57,6 +57,9 @@ object LiteralSimplifier: Transformer {
         }
     }
 
+    // TODO: This stage alone took ~198s compiling simtest/tests/aes/test.gapl (a large design with
+    //   many literal nodes) - worth profiling module.getConnectionsForNodeOutput/connect/disconnect
+    //   for hidden O(n^2) behavior before assuming this is just "large designs are slow." Not urgent.
     override fun transform(original: List<Module>): List<Module> {
         return original
             .map { it.toMutableModule() }
