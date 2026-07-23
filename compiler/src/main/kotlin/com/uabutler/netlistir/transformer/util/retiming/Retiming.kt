@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer.util.retiming
 
+import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.util.graph.WeightedGraph
@@ -10,12 +11,6 @@ class Retiming<G, N, E>(
 ) {
 
     private val nodeLag = graph.nodes.associateWith { 0 }.toMutableMap()
-
-    abstract class Solver<G, N, E>(open val graph: LeisersonCircuitGraph<G, N, E>) {
-        abstract fun solveOrNull(
-            targetClockPeriod: Int?,
-        ): LeisersonCircuitGraph<G, N, E>?
-    }
 
     fun setNodeLag(node: WeightedGraph.Node<N>, lag: Int) = nodeLag.put(node, lag)
 
