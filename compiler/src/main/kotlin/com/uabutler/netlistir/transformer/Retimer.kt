@@ -15,22 +15,18 @@ import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
 import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.MonolithicSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.SccSolver
 import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
 import com.uabutler.netlistir.transformer.util.retiming.findMinimumClockPeriod
 import com.uabutler.verilogir.builder.creator.util.Identifier
-
-/* TODO: Interface
- *   I think we want to control retiming via these command line argument
- *      -retime-for-clock-period [MIN|int]
- *      -retime-for-min-register-count
- *      -retime-maintains-timing
- */
 
 class Retimer(
     val mode: Mode,
     val delay: PropagationDelay,
     val targetClockPeriod: Int?,
-    val minimizeRegisterCount: Boolean,
+    val retimingSolverId: RetimingSolverId,
+    val minClockPeriodSolverId: RetimingSolverId,
     val maintainTiming: Boolean,
 ): Transformer {
 
@@ -44,6 +40,16 @@ class Retimer(
             return module.getNodes().any {
                 it is PredefinedFunctionNode && it.predefinedFunction is RegisterFunction
             }
+        }
+
+        private fun <G, N, E> buildMonolithicSolver(
+            id: RetimingSolverId,
+            problem: MonolithicRetimingProblem<G, N, E>,
+        ): MonolithicSolver<G, N, E> = when (id) {
+            RetimingSolverId.FAST -> FastSolver(problem)
+            RetimingSolverId.MINIMAL_REGISTER -> MinimalRegisterSolver(problem)
+            RetimingSolverId.SCC -> SccSolver(problem)
+            RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER -> error("$id is a hierarchical solver, not a monolithic one")
         }
     }
 
@@ -152,9 +158,9 @@ class Retimer(
             .onEach { graph -> recordGraphStats("Unretimed", graph) }
             .map { graph ->
                 val problem = MonolithicRetimingProblem(graph)
-                val fastSolver = FastSolver(problem)
-                val finalSolver = if (minimizeRegisterCount) MinimalRegisterSolver(problem) else fastSolver
-                val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(fastSolver, problem)
+                val searchSolver = buildMonolithicSolver(minClockPeriodSolverId, problem)
+                val finalSolver = buildMonolithicSolver(retimingSolverId, problem)
+                val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(searchSolver, problem)
 
                 Logger.trace { "Retiming will use clock period of $clockPeriod" }
                 Logger.trace { "Retiming will use ${finalSolver::class.simpleName} solver" }
@@ -174,22 +180,20 @@ class Retimer(
 
     private fun transformAll(original: List<MutableModule>): List<MutableModule> {
         if (maintainTiming) throw Exception("Maintain timing is not supported yet")
-        return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod!!)
+        return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
     }
 
     override fun transform(original: List<Module>): List<Module> {
         val original = original.map { it.toMutableModule() }
 
         // Validate options
-        if (mode == Mode.HIERARCHICAL) {
-            if (targetClockPeriod == null) throw Exception("Must specify target clock period for hierarchical retime")
-            if (!minimizeRegisterCount) throw Exception("Must specify minimize register count for hierarchical retime")
-            if (maintainTiming) throw Exception("Maintain timing is not supported for hierarchical retime")
+        if (mode == Mode.HIERARCHICAL && maintainTiming) {
+            throw Exception("Maintain timing is not supported for hierarchical retime")
         }
 
         return when (mode) {
             Mode.MONOLITH -> {
-                Logger.info { "Retiming in monolithic mode with target $targetClockPeriod, ${if (minimizeRegisterCount) "minimizing" else "not minimizing"} register count, and ${if (maintainTiming) "maintaining" else "not maintaining"} timing" }
+                Logger.info { "Retiming in monolithic mode with target $targetClockPeriod, using solver ${retimingSolverId.id}, and ${if (maintainTiming) "maintaining" else "not maintaining"} timing" }
                 recordCircuitStats("Unretimed", original)
                 transformPiecewise(original).also {
                     recordCircuitStats("Retimed", it)

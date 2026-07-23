@@ -3,6 +3,7 @@ package com.uabutler
 import com.uabutler.diagnostics.DiagnosticFormatter
 import com.uabutler.diagnostics.DiagnosticsException
 import com.uabutler.netlistir.transformer.Flattener.Mode
+import com.uabutler.netlistir.transformer.RetimingSolverId
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.YamlDelayModel
@@ -45,13 +46,14 @@ fun createDelayModelFromFile(yaml: File): PropagationDelay {
 
 fun compilerOptions(parsedArgs: Map<String, List<String>>): Compiler.Options {
     return Compiler.Options(
-        flattenMode = Mode.entries.first { it.name.lowercase() == (parsedArgs["-flatten"]?.first()?.lowercase() ?: "all") },
+        flattenMode = parsedArgs["-flatten"]?.first()?.lowercase()?.let { name -> Mode.entries.first { it.name.lowercase() == name } },
         literalSimplification = !parsedArgs.containsKey("-ono-literal-simplification"),
         constantSimplification = parsedArgs.containsKey("-constant-simplification"),
         includeStdLib = !parsedArgs.containsKey("-no-std-lib"),
         retime = parsedArgs["-retime"]?.let { createDelayModelFromFile(File(it.first())) },
         retimingClockPeriod = parsedArgs["-retiming-clock-period"]?.first()?.lowercase()?.let { if (it == "min") null else it.toIntOrNull() },
-        retimingMinimizeRegisterCount = parsedArgs.containsKey("-retiming-minimize-register-count"),
+        retimingSolverId = RetimingSolverId.fromId(parsedArgs["-retiming-solver"]?.first() ?: "fast"),
+        retimingMinClockPeriodSolverId = parsedArgs["-retiming-min-clock-period-solver"]?.first()?.let { RetimingSolverId.fromId(it) },
         retimingMaintainTiming = parsedArgs.containsKey("-retiming-maintains-timing"),
     )
 }
@@ -65,8 +67,8 @@ fun printHelp() {
     println("    Usage:       -o OUTPUT_FILENAME")
     println("    Description: The output verilog file")
     println("  Flatten")
-    println("    Usage:       -flatten none|all|recursive")
-    println("    Description: Defaults to all. Determine the type of inlining.")
+    println("    Usage:       [-flatten none|all|recursive]")
+    println("    Description: Determine the type of inlining. If omitted, derived from -retiming-solver when retiming is requested (monolithic solvers require all, hierarchical solvers require none); defaults to all otherwise.")
     println("  Literal Simplification")
     println("    Usage:       [-ono-literal-simplification]")
     println("    Description: Defaults to true. Providing this option disables function inlining.")
@@ -79,9 +81,12 @@ fun printHelp() {
     println("  Retiming Clock Period")
     println("    Usage:       [-retiming-clock-period min|CLOCK_PERIOD]")
     println("    Description: What clock period should the retiming algorithm target? Either \"min\" or an integer. Defaults to min.")
-    println("  Retiming Minimize Register Count")
-    println("    Usage:       [-retiming-minimize-register-count]")
-    println("    Description: Produce a circuit with the smallest number of registers possible given the clock period constraint.")
+    println("  Retiming Solver")
+    println("    Usage:       [-retiming-solver fast|minimal-register|scc|hierarchical-minimal-register]")
+    println("    Description: Which solver to use for the final retiming. Defaults to fast. fast/minimal-register/scc are monolithic (require -flatten all); hierarchical-minimal-register is hierarchical (requires -flatten none or recursive).")
+    println("  Retiming Min Clock Period Solver")
+    println("    Usage:       [-retiming-min-clock-period-solver fast|minimal-register|scc|hierarchical-minimal-register]")
+    println("    Description: Which solver to use when searching for the minimum clock period (-retiming-clock-period min). Must be the same kind (monolithic/hierarchical) as -retiming-solver. Defaults to fast for monolithic solvers, hierarchical-minimal-register for hierarchical solvers.")
     println("  Retiming Maintains Timing")
     println("    Usage:       [-retiming-maintains-timing]")
     println("    Description: Should the retiming algorithm maintain the timing characteristics of the original circuit?")
