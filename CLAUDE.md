@@ -83,6 +83,10 @@ Concretely, as Gradle subprojects:
 - This repo is often worked in via git worktrees (`.claude/worktrees/` is gitignored) for parallel
   background sessions — if you're in one, it's an isolated checkout sharing the same underlying
   `.git`, not a separate clone.
+- **Default to a new worktree (via `EnterWorktree`) for any substantive or multi-file change** —
+  a real implementation, a refactor, anything touching more than one file or requiring a plan —
+  without waiting to be asked. Trivial work (answering a question, a one-line fix, a single-file
+  tweak) should stay in place on the current branch; don't create a worktree for those.
 
 ## Cross-cutting things worth knowing before diving into a subproject
 
