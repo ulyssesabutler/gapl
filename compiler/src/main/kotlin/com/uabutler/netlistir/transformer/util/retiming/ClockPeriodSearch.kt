@@ -25,8 +25,16 @@ fun <P : RetimingProblem> findMinimumClockPeriod(
         if (result != null) {
             Logger.debug { "Clock period $clockPeriod is feasible" }
 
+            // Feasibility is monotone in the target period, so every candidate >= the one we just
+            // confirmed is also feasible - cache them without extra solver calls. This deliberately
+            // does not try to find the *exact* achieved period via result.computeClockPeriod():
+            // for a HierarchicalRetimingProblem that would mean naively flattening an already-
+            // retimed graph, which does not correctly account for the solver's per-level boundary
+            // bookkeeping and can produce a graph that looks like it has an illegal zero-register
+            // cycle. Caching from the tried period instead of the (possibly tighter) achieved one
+            // is always correct, just a slightly more conservative optimization.
             possibleClockPeriods
-                .filter { it >= result.computeClockPeriod() }
+                .filter { it >= clockPeriod }
                 .forEach { cache[it] = true }
 
             return true

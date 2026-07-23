@@ -11,14 +11,25 @@ There are a few different validations we need to do, but currently don't.
     - These might depend on other parameters to evaluate
 
 ## Retiming
-- `HierarchicalRetimer`'s per-module timing stats (`unretimedGraphStats`/`retimedGraphStats`,
-  used only for `printAllGraphStats` logging) are computed by calling `computeTimingProperties`
-  directly on `.flatten()`ed before/after graphs from outside the solver. This still feels
-  architecturally awkward - a solver-external caller reaching back into solver-internal
-  machinery for stats derived from the solve - and should be revisited. It's also a slightly
-  different (generic-flatten-based) computation than the one `HierarchicalMinimalRegisterSolver`
-  uses internally for its own per-level expansion math, so the two are not guaranteed to agree
-  bit-for-bit, only in spirit.
+- Naively calling `HierarchicalLeisersonCircuitGraph.flatten()` on an already-*retimed* graph is
+  unsafe, not just "architecturally awkward" - it was originally tried for both
+  `HierarchicalRetimingProblem`-generic clock-period lookups and `HierarchicalRetimer`'s stats
+  logging, and both crashed in practice (`IllegalArgumentException: Graph cannot contain
+  zero-weight cycles`) on a real hierarchical `-retiming-clock-period min` run. The retimed
+  boundary edge weights `HierarchicalMinimalRegisterSolver` computes are calibrated against its
+  synthetic per-level "expansion" topology (phantom input/output/combinational-delay nodes encoding
+  the child's already-computed retiming difference), not the child's real internal structure, so
+  splicing the real structure back in during a naive flatten can produce something that looks
+  like an illegal zero-register cycle even though the retiming itself is correct. Fixed by (a)
+  `findMinimumClockPeriod` no longer calling `result.computeClockPeriod()` on a solved result -
+  it caches from the tried period instead, which is always correct by monotonicity, just a
+  slightly more conservative cache-fill than exploiting an over-achieving solver; and (b)
+  `HierarchicalMinimalRegisterSolver` now exposes `timingPropertiesFromLastSolve(root)`, sourcing
+  `HierarchicalRetimer`'s stats from the properties actually computed during the solve rather than
+  re-deriving them externally. `HierarchicalRetimingProblem.computeClockPeriod()`/
+  `computePossibleClockPeriods()` (which still do naively flatten) are only ever safe to call on
+  the pristine, never-retimed problem now - worth a stronger type-level guard than a comment if
+  this bites again.
 - `SccSolver` does not enforce the zero-register `VirtualIONode` boundary invariant that
   `MinimalRegisterSolver` enforces (classical host-vertex retiming) - the vendored `retimeByScc`
   has no equality-constraint mechanism. Acceptable for now since it's feasibility-only (like
