@@ -71,9 +71,12 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
         add("-o")
         add(outputVerilogFile.absolutePath)
 
-        if (!properties.literalSimplication) { add("-ono-literal-simplication") }
+        if (!properties.literalSimplication) { add("-ono-literal-simplification") }
 
-        if (!properties.flatten) { add("-ono-flatten") }
+        if (!properties.flatten) {
+            add("-flatten")
+            add("none")
+        }
 
         if (properties.retimeDelayModel != null) {
             add("-retime")
@@ -100,20 +103,40 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
     }
 }
 
-fun createVerilatorExeName(testDir: File) = "test_${testDir.name}"
+/**
+ * A single test to run: the shared GAPL/C++ sources live in [programDir], while
+ * [variationDir] (a subdirectory of it) holds just that variation's test.properties/delay.yaml.
+ */
+data class TestCase(val programDir: File, val variationDir: File) {
+    val qualifiedName get() = "${programDir.name}/${variationDir.name}"
+    val id get() = "${programDir.name}_${variationDir.name}"
+}
 
-fun createVerilatorSimCommand(testDir: File, verilogFiles: List<File>, cppFiles: List<File>, properties: TestProperties): List<String> {
-    val objDir = layout.buildDirectory.dir("tests/${testDir.name}/cpp").get().asFile
+/**
+ * Every subdirectory of [testsRoot] is a program; every subdirectory of a program
+ * is one of its variations (e.g. tests/md5/{unretimed,retimed}).
+ */
+fun discoverTestCases(testsRoot: File): List<TestCase> =
+    testsRoot.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.flatMap { programDir ->
+        programDir.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.map { variationDir ->
+            TestCase(programDir, variationDir)
+        }.orEmpty()
+    }.orEmpty()
 
-    val gaplFiles = testDir.listFiles { f -> f.isFile && f.extension == "gapl" }?.toList().orEmpty()
+fun createVerilatorExeName(testCase: TestCase) = "test_${testCase.id}"
+
+fun createVerilatorSimCommand(testCase: TestCase, verilogFiles: List<File>, cppFiles: List<File>, properties: TestProperties): List<String> {
+    val objDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/cpp").get().asFile
+
+    val gaplFiles = testCase.programDir.listFiles { f -> f.isFile && f.extension == "gapl" }?.toList().orEmpty()
     val topFromSingleGapl = if (gaplFiles.size == 1) gaplFiles.first().nameWithoutExtension else null
     val top = properties.topModule ?: topFromSingleGapl
 
     if (top.isNullOrBlank()) {
-        throw Exception("⚠️  Could not determine top module for '${testDir.name}'. Provide tests/${testDir.name}/top.txt or use a single .gapl file.")
+        throw Exception("⚠️  Could not determine top module for '${testCase.qualifiedName}'. Provide tests/${testCase.programDir.name}/top.txt or use a single .gapl file.")
     }
 
-    val exeName = createVerilatorExeName(testDir)
+    val exeName = createVerilatorExeName(testCase)
 
     return buildList {
         addAll(listOf("verilator", "-Wall", "-Wno-UNUSEDSIGNAL", "-Wno-DECLFILENAME", "-cc"))
@@ -132,12 +155,13 @@ fun createVerilatorSimCommand(testDir: File, verilogFiles: List<File>, cppFiles:
 val testsRoot = file("tests")
 
 /**
- * Generates Verilog for each test directory.
- * For each subdirectory under simtest/tests containing *.gapl files, compiles them into build/tests/<name>/verilog.
+ * Generates Verilog for each test case.
+ * For each tests/<program>/<variation> directory pair, compiles <program>'s *.gapl files
+ * (using <variation>'s test.properties/delay.yaml) into build/tests/<program>/<variation>/verilog.
  */
 tasks.register("generateVerilog") {
     group = "simtest"
-    description = "Compile GAPL test sources to Verilog for each test directory"
+    description = "Compile GAPL test sources to Verilog for each test case"
     dependsOn(":compiler:installDist")
 
     // Inputs/Outputs for gradle up-to-date checks
@@ -152,21 +176,21 @@ tasks.register("generateVerilog") {
 
         var hasFailure = false
 
-        testsRoot.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.forEach { testDir ->
-            val gaplFiles = testDir.listFiles { f -> f.isFile && f.extension == "gapl" }?.toList().orEmpty()
+        discoverTestCases(testsRoot).forEach { testCase ->
+            val gaplFiles = testCase.programDir.listFiles { f -> f.isFile && f.extension == "gapl" }?.toList().orEmpty()
             if (gaplFiles.isEmpty()) {
-                println("Skipping '${testDir.name}': no .gapl files found.")
+                println("Skipping '${testCase.qualifiedName}': no .gapl files found.")
                 return@forEach
             }
 
-            val outDir = layout.buildDirectory.dir("tests/${testDir.name}/verilog").get().asFile
+            val outDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/verilog").get().asFile
             outDir.mkdirs()
 
             gaplFiles.forEach { gapl ->
                 val outV = File(outDir, "${gapl.nameWithoutExtension}.v")
-                println("Compiling ${testDir.name}/${gapl.name} -> ${outV.relativeTo(project.projectDir)}")
+                println("Compiling ${testCase.qualifiedName}/${gapl.name} -> ${outV.relativeTo(project.projectDir)}")
 
-                val command = createGaplCompileCommand(gapl, outV, loadTestProperties(testDir))
+                val command = createGaplCompileCommand(gapl, outV, loadTestProperties(testCase.variationDir))
                 println("  Using ${command.drop(1).joinToString(" ")}")
 
                 val err = ByteArrayOutputStream()
@@ -203,32 +227,32 @@ tasks.register("runSimulation") {
     doLast {
         var hasFailure = false
 
-        testsRoot.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.forEach { testDir ->
-            val testProperties = loadTestProperties(testDir)
+        discoverTestCases(testsRoot).forEach { testCase ->
+            val testProperties = loadTestProperties(testCase.variationDir)
 
-            val objDir = layout.buildDirectory.dir("tests/${testDir.name}/cpp").get().asFile
-            val cppFiles = testDir.listFiles { f -> f.isFile && f.extension.lowercase() == "cpp" }?.toList().orEmpty()
+            val objDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/cpp").get().asFile
+            val cppFiles = testCase.programDir.listFiles { f -> f.isFile && f.extension.lowercase() == "cpp" }?.toList().orEmpty()
 
             // Determine top module (same logic as earlier)
             if (cppFiles.isEmpty()) {
-                println("Skipping '${testDir.name}': no C++ wrapper (*.cpp) found.")
+                println("Skipping '${testCase.qualifiedName}': no C++ wrapper (*.cpp) found.")
                 return@forEach
             }
 
             // Locate generated Verilog
-            val verilogDir = layout.buildDirectory.dir("tests/${testDir.name}/verilog").get().asFile
+            val verilogDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/verilog").get().asFile
             val verilogFiles = verilogDir.listFiles { f -> f.isFile && f.extension == "v" }?.toList().orEmpty()
             if (verilogFiles.isEmpty()) {
-                println("Skipping '${testDir.name}': no generated Verilog found. Run :simtest:generateVerilog first.")
+                println("Skipping '${testCase.qualifiedName}': no generated Verilog found. Run :simtest:generateVerilog first.")
                 hasFailure = true
                 return@forEach
             }
 
             // The output waveform
-            val waveformDir = layout.buildDirectory.dir("tests/${testDir.name}/waveform").get().asFile
+            val waveformDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/waveform").get().asFile
             val waveformFile = if (testProperties.waveform) {
                 waveformDir.mkdirs()
-                File(waveformDir, "${testDir.name}.vcd")
+                File(waveformDir, "${testCase.id}.vcd")
             } else {
                 null
             }
@@ -237,13 +261,13 @@ tasks.register("runSimulation") {
             val buildErr = ByteArrayOutputStream()
             val buildRes = exec {
                 isIgnoreExitValue = true
-                commandLine(createVerilatorSimCommand(testDir, verilogFiles, cppFiles, testProperties))
+                commandLine(createVerilatorSimCommand(testCase, verilogFiles, cppFiles, testProperties))
                 errorOutput = buildErr
                 standardOutput = buildErr
             }
             if (buildRes.exitValue != 0) {
                 hasFailure = true
-                println("❌ Building test executable failed for '${testDir.name}'")
+                println("❌ Building test executable failed for '${testCase.qualifiedName}'")
                 val msg = buildErr.toString().trim()
                 if (msg.isNotEmpty()) {
                     println("---- Verilator Build Output ----")
@@ -253,7 +277,7 @@ tasks.register("runSimulation") {
                 return@forEach
             }
 
-            val exe = File(objDir, createVerilatorExeName(testDir))
+            val exe = File(objDir, createVerilatorExeName(testCase))
             if (!exe.exists()) {
                 hasFailure = true
                 println("❌ Expected test executable not found in ${objDir.absolutePath}")
@@ -270,7 +294,7 @@ tasks.register("runSimulation") {
             }
             if (runRes.exitValue != 0) {
                 hasFailure = true
-                println("❌ Test '${testDir.name}' failed (exit code ${runRes.exitValue})")
+                println("❌ Test '${testCase.qualifiedName}' failed (exit code ${runRes.exitValue})")
                 val msg = runErr.toString().trim()
                 if (msg.isNotEmpty()) {
                     println("---- Test Output ----")
@@ -278,7 +302,7 @@ tasks.register("runSimulation") {
                     println("---------------------")
                 }
             } else {
-                println("✅ Test '${testDir.name}' passed")
+                println("✅ Test '${testCase.qualifiedName}' passed")
             }
         }
 

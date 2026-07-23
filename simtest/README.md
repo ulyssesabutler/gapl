@@ -7,20 +7,22 @@ Two phases:
 2) simtestRun: Build each test's Verilator C++ harness and run it, failing if the program exits non-zero.
 
 Test structure:
-- Place each test in its own subdirectory under simtest/tests, e.g. simtest/tests/my_test.
-- In each test directory:
+- Each program lives in its own subdirectory under simtest/tests, e.g. simtest/tests/my_test.
+- Each program directory holds:
   - One or more .gapl files that will be compiled to Verilog.
-  - One or more C++ wrapper files (*.cpp) that drive the simulation (e.g., a main that instantiates and stimulates the model).
+  - One or more C++ wrapper files (*.cpp) that drive the simulation (e.g., a main that instantiates and stimulates the model). These are shared across all of the program's variations.
   - Optional: top.txt containing the top module name if it can't be inferred.
+  - One subdirectory per variation (e.g. unretimed/, retimed/), each holding just that variation's test.properties and (if retimed) delay.yaml.
+- Every program/variation pair is compiled and run as its own test case, reusing the program's .gapl/.cpp against that variation's properties.
 
 Top module inference order:
-1) tests/<name>/top.txt content (first line, trimmed).
+1) tests/<program>/top.txt content (first line, trimmed).
 2) If exactly one .gapl file is present: use its basename as the top module name.
 3) Parse the C++ wrapper for an include of V<top>.h.
 
 Generated artifacts:
-- Verilog: build/tests/<test>/verilog/*.v
-- Verilator obj_dir and executable: build/tests/<test>/obj_dir/sim_<test>
+- Verilog: build/tests/<program>/<variation>/verilog/*.v
+- Verilator obj_dir and executable: build/tests/<program>/<variation>/cpp/test_<program>_<variation>
 
 Tasks:
 - simtestGenerateVerilog: Compile GAPL to Verilog for all test directories.
@@ -36,4 +38,5 @@ Adding new tests:
 - Create a new directory under simtest/tests, e.g., simtest/tests/fifo.
 - Add fifo.gapl and a C++ file like sim_main.cpp that runs the test.
 - Optionally add simtest/tests/fifo/top.txt with "fifo" if top module name can't be inferred.
+- Add at least one variation subdirectory, e.g. simtest/tests/fifo/unretimed/, with a test.properties (may be absent/empty if defaults are fine). Add more variation subdirectories (e.g. retimed/, with its own test.properties and delay.yaml) to run the same fifo.gapl/sim_main.cpp against different compiler options.
 - Run: ./gradlew :simtest:build
