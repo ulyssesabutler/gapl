@@ -9,6 +9,7 @@ enum class RetimingSolverId(val id: String, val kind: RetimingSolverKind) {
     FAST("fast", RetimingSolverKind.MONOLITHIC),
     MINIMAL_REGISTER("minimal-register", RetimingSolverKind.MONOLITHIC),
     SCC("scc", RetimingSolverKind.MONOLITHIC),
+    DAG("dag", RetimingSolverKind.MONOLITHIC),
     HIERARCHICAL_MINIMAL_REGISTER("hierarchical-minimal-register", RetimingSolverKind.HIERARCHICAL);
 
     companion object {

@@ -13,6 +13,7 @@ import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonReg
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
+import com.uabutler.netlistir.transformer.util.retiming.solver.DagSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.MonolithicSolver
@@ -49,6 +50,7 @@ class Retimer(
             RetimingSolverId.FAST -> FastSolver(problem)
             RetimingSolverId.MINIMAL_REGISTER -> MinimalRegisterSolver(problem)
             RetimingSolverId.SCC -> SccSolver(problem)
+            RetimingSolverId.DAG -> DagSolver(problem)
             RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER -> error("$id is a hierarchical solver, not a monolithic one")
         }
     }

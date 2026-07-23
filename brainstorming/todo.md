@@ -30,17 +30,23 @@ There are a few different validations we need to do, but currently don't.
   `computePossibleClockPeriods()` (which still do naively flatten) are only ever safe to call on
   the pristine, never-retimed problem now - worth a stronger type-level guard than a comment if
   this bites again.
-- `SccSolver` does not enforce the zero-register `VirtualIONode` boundary invariant that
-  `MinimalRegisterSolver` enforces (classical host-vertex retiming) - the vendored `retimeByScc`
-  has no equality-constraint mechanism. Acceptable for now since it's feasibility-only (like
-  `FastSolver`), but a real gap if `scc` is ever used as the final/register-shaping solver
-  against real module I/O boundaries.
+- `SccSolver`/`DagSolver` do not enforce the zero-register `VirtualIONode` boundary invariant that
+  `MinimalRegisterSolver` enforces (classical host-vertex retiming) - the vendored `retimeByScc`/
+  `dagRetime` have no equality-constraint mechanism. Acceptable for now since both are
+  feasibility-only (like `FastSolver`), but a real gap if either is ever used as the
+  final/register-shaping solver against real module I/O boundaries.
+- `DagSolver` (wraps `retiming.dagRetime`) is narrower than every other monolithic solver here: it
+  requires the *entire* circuit to be acyclic, not just well-formed - a cycle with a register
+  protecting it (the normal shape of any real stateful/feedback circuit) is out of its domain
+  entirely, not just a harder case. `DagSolver.solveOrNull` throws (not returns null) if the graph
+  isn't a true DAG, since that's a solver/graph-shape mismatch, distinct from a target period being
+  genuinely infeasible. Only useful for pure combinational-pipeline circuits with no loops at all.
 - `HierarchicalRetimer` hardcodes `HierarchicalMinimalRegisterSolver` internally (for both the
   min-clock-period search and the final solve) instead of taking a resolved `HierarchicalSolver`
   - fine while it's the only implementation, but should take an injected/resolved solver once a
   second `HierarchicalSolver` exists.
-- The vendored reference algorithms repo at
-  `compiler/src/main/kotlin/.../retiming/solver/retiming/` (source for `SccSolver`) is a nested
-  git repo, currently untracked and not vendored properly (no submodule, no committed copy) -
-  deliberately deferred. Plan is to eventually extract only the relevant portions into this
-  codebase properly, rather than depending on the whole standalone repo as-is.
+- The vendored reference algorithms (source for `SccSolver`/`DagSolver`) now live at
+  `compiler/src/main/kotlin/.../retiming/solver/anirudhsk/`, committed directly (no more nested
+  git repo/submodule). The files still declare `package retiming` rather than a package matching
+  their directory - harmless (Kotlin doesn't require the two to match), but worth cleaning up
+  if these are ever touched again.
