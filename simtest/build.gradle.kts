@@ -68,37 +68,36 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
 
     return buildList {
         add(compiler.absolutePath)
-        add("-i")
         add(gaplFile.absolutePath)
-        add("-o")
+        add("--output")
         add(outputVerilogFile.absolutePath)
 
-        if (!properties.literalSimplication) { add("-ono-literal-simplification") }
+        if (!properties.literalSimplication) { add("--no-literal-simplification") }
 
         if (!properties.flatten) {
-            add("-flatten")
+            add("--flatten")
             add("none")
         }
 
         if (properties.retimeDelayModel != null) {
-            add("-retime")
+            add("--retime")
             add(properties.retimeDelayModel!!)
         }
 
         if (properties.retimingClockPeriod != null) {
-            add("-retiming-clock-period")
+            add("--retiming-clock-period")
             add(properties.retimingClockPeriod.toString())
         }
 
         if (properties.retimingSolver != null) {
-            add("-retiming-solver")
+            add("--retiming-solver")
             add(properties.retimingSolver!!)
         }
 
-        if (properties.retimingMaintainTiming) { add("-retiming-maintains-timing") }
+        if (properties.retimingMaintainTiming) { add("--retiming-maintains-timing") }
 
-        add("-log-level")
-        add("DEBUG")
+        add("--log-level")
+        add("debug")
 
         addAll(properties.additionalCompilerFlags)
         removeAll(properties.removeCompilerFlags)

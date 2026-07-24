@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer
 
+import com.uabutler.InvalidCompilerOptionsException
 import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
@@ -190,7 +191,7 @@ class Retimer(
 
         // Validate options
         if (mode == Mode.HIERARCHICAL && maintainTiming) {
-            throw Exception("Maintain timing is not supported for hierarchical retime")
+            throw InvalidCompilerOptionsException("--retiming-maintains-timing is not supported for hierarchical retime (--flatten none/recursive)")
         }
 
         return when (mode) {

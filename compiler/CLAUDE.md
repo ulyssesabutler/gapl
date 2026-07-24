@@ -19,11 +19,16 @@ where retiming/flattening/CLI behavior lives.
 
 ### Pipeline entry points
 
-- `GAPL.kt` — CLI entry point. `parseArgs` folds `Array<String>` into `Map<String, List<String>>`
-  keyed by flag; `compilerOptions` builds `Compiler.Options` from that map; `compile()` reads/joins
-  input files, calls `Compiler.compile`, and distinguishes `DiagnosticsException` (your GAPL is wrong
-  — formatted diagnostics, exit 1) from any other `Throwable` (the compiler is wrong — generic
-  "contact a TA" message, stack trace at ERROR log level, exit 1).
+- `GAPL.kt` — CLI entry point, built on [Clikt](https://ajalt.github.io/clikt/) (pinned to 5.0.0, not
+  latest — see gotchas). `Gapl` (a `CliktCommand`) declares each flag as a typed, validated property
+  and builds `Compiler.Options` directly from them in `run()`; unrecognized flags, missing required
+  options, and bad choice values are all rejected by Clikt itself, with `--help` generated from the
+  same option declarations rather than hand-maintained separately. `compile()` reads/joins input
+  files, calls `Compiler.compile`, and distinguishes three outcomes: `DiagnosticsException` (your GAPL
+  is wrong — formatted diagnostics, exit 1), `InvalidCompilerOptionsException` (your flags are wrong —
+  e.g. `--flatten`/`--retiming-solver` kind mismatch — clean "Error: ..." message, exit 1), or any
+  other `Throwable` (the compiler is wrong — generic "contact a TA" message, stack trace at ERROR log
+  level, exit 1).
 - `Compiler.kt` — `Compiler.compile(gapl, options)` calls `Analyzer.analyzeFull(gapl, options.analyzerOptions)`,
   throws `DiagnosticsException` if any diagnostics came back, otherwise runs `runNetlistTransformers`
   over `analysis.modules!!` and serializes to Verilog.
@@ -34,19 +39,19 @@ Every transformer implements `netlistir/transformer/Transformer.kt`'s one-method
 (`transform(original: List<Module>): List<Module>`). `Compiler.runNetlistTransformers` builds a
 conditional list and folds over it, **in this order**:
 
-1. **`Flattener`** (only if `-flatten` isn't `none`) — inlines `ModuleInvocationNode`s. `ALL` mode
+1. **`Flattener`** (only if `--flatten` isn't `none`) — inlines `ModuleInvocationNode`s. `ALL` mode
    fully inlines everything (breadth-first from `InvocationGraph`'s roots down to zero invocations);
    `RECURSIVE` only inlines *self*-recursive calls, leaving other module calls as separate modules.
 2. **`StandardLibraryFilter`** (only if stdlib was included) — the stdlib is textually prepended
    source (see `../analyzer/CLAUDE.md`), so its functions show up as ordinary root modules after
    parsing; this drops the redundant standalone stdlib module definitions from the final output
    (their uses are already inlined/synthesized elsewhere).
-3. **`ConstantSimplifier`** (only if `-constant-simplification`) — **do not enable this**, see gotchas.
-4. **`LiteralSimplifier`** (default on, `-ono-literal-simplification` to disable) — dedupes identical
+3. **`ConstantSimplifier`** (only if `--constant-simplification`) — **do not enable this**, see gotchas.
+4. **`LiteralSimplifier`** (default on, `--no-literal-simplification` to disable) — dedupes identical
    literal nodes to one canonical node per `(size, value)` signature.
 5. **`PassThroughRemover`** — always runs. Cleans up `PassThroughNode`s left behind as inlining shims
    by `Flattener`, rewiring sinks directly to sources.
-6. **`Retimer`** (only if `-retime` was passed) — see below.
+6. **`Retimer`** (only if `--retime` was passed) — see below.
 7. **`Renamer`** — always runs, last. Gives every body node a short synthetic name (`node0`, `node1`,
    ...) per module — post-flattening names get extremely long (concatenated invocation chains), which
    can be a problem for downstream synthesizers.
@@ -55,7 +60,7 @@ conditional list and folds over it, **in this order**:
 
 The most complex part of this module. Leiserson-Saxe retiming: each node gets an integer lag `r(v)`;
 a retimed edge's register count is `w(e) + r(sink) - r(source)`. Two modes, chosen by
-`Compiler.runNetlistTransformers` based on `-flatten`: `Flattener.Mode.ALL` → `Retimer.Mode.MONOLITH`
+`Compiler.runNetlistTransformers` based on `--flatten`: `Flattener.Mode.ALL` → `Retimer.Mode.MONOLITH`
 (each module retimed independently); `RECURSIVE`/`NONE` → `Retimer.Mode.HIERARCHICAL` (modules retimed
 bottom-up, coordinated across the call graph).
 
@@ -74,8 +79,8 @@ bottom-up, coordinated across the call graph).
   ILP formulated with Google OR-Tools CP-SAT (Leiserson-Saxe's standard formulation: minimize
   `Σ (fanIn(v) - fanOut(v)) * r(v)`, subject to non-negative edge weights, clock-period constraints
   only on paths that actually need them, and an anchor constraint since retiming is only defined up
-  to a global constant). Slower than `FastSolver`, used only when `-retiming-minimize-register-count`
-  is actually requested.
+  to a global constant). Slower than `FastSolver`, used only when a `minimal-register` family solver
+  is selected via `--retiming-solver`/`--retiming-min-clock-period-solver`.
 - `netlistir/transformer/util/retiming/solver/HierarchicalMinimalRegisterSolver.kt` — orchestrates
   `MinimalRegisterSolver` per-module across a hierarchy: rather than inlining already-solved children
   wholesale, it "expands" each into a small synthetic summary (boundary nodes carrying the child's
@@ -86,8 +91,8 @@ bottom-up, coordinated across the call graph).
 The delay model: `PropagationDelay` (interface, actually defined in
 `../analyzer/src/main/kotlin/com/uabutler/util/PropagationDelay.kt` since the graph-conversion code
 that consumes it lives there too) is implemented here by `util/YamlDelayModel.kt`, a snakeyaml-based
-parser for `-retime`'s YAML file — maps operator names to per-bit-width delay values. Flow:
-`-retime FILE` → `GAPL.kt` → `YamlDelayModel` → `Compiler.Options.retime` → `Retimer` →
+parser for `--retime`'s YAML file — maps operator names to per-bit-width delay values. Flow:
+`--retime FILE` → `GAPL.kt` → `YamlDelayModel` → `Compiler.Options.retime` → `Retimer` →
 `NetlistLeisersonCircuitConverter.fromModule` (analyzer-side) assigns per-node combinational-delay
 weights when building the graph.
 
@@ -121,26 +126,31 @@ runnable `gapl` binary at `compiler/build/install/gapl/bin/gapl` without buildin
 
 ## Known gotchas
 
-- **`-constant-simplification` always crashes if passed.** The CLI help text says "Experimental.
-  Doesn't work," and it's not exaggerating — `Compiler.runNetlistTransformers` calls an unconditional
-  `TODO()` right after adding `ConstantSimplifier` to the pipeline, so this flag always throws
-  `NotImplementedError`. The underlying `ConstantSimplifier.kt` logic is actually mostly implemented
-  (full bit-array constant folding for binary/unary ops and registers) except `MuxFunction`/
-  `DemuxFunction`/`PriorityFunction`, which are separately stubbed `TODO("dont wanna")` — so even
-  fixing the outer crash wouldn't make this fully functional yet.
-- **Hierarchical retiming has hard cross-flag constraints that crash if violated, and they're driven
-  implicitly by `-flatten`, not obviously by anything `-retime`-related.** `-retime FILE -flatten
-  recursive` (or `-flatten none`) *without* `-retiming-minimize-register-count` throws ("Must specify
-  minimize register count for hierarchical retime") — because any `-flatten` mode other than `all`
-  forces `Retimer.Mode.HIERARCHICAL`, which requires that flag. `-flatten all` (the default) uses
-  monolithic mode instead, where the flag is optional — so this only bites when combined with a
-  non-default flatten mode. `-retiming-maintains-timing` is similarly incompatible with anything but
-  monolithic mode.
-- **`-log-level`'s real default is ERROR, not INFO** as `printHelp()` claims — confirmed directly in
-  `main()`. Pass `-log-level info` (or `debug`) explicitly if you're not seeing expected log output.
-- **`-v` never triggers a compile**, even if `-i`/`-o` are also present — it's one branch of an
-  `if`/`else if` chain in `main()`, so passing `-v` together with `-i`/`-o` prints the version and
-  stops there, silently skipping compilation, rather than doing both.
+- **Clikt is pinned to 5.0.0, not the latest 5.1.x.** Clikt >=5.0.2 is compiled against Kotlin 2.1+
+  metadata; this repo's Kotlin plugin is pinned to 2.0.21 (see root `../CLAUDE.md` on the Gradle/Kotlin
+  version constraints), and a newer Clikt fails at `:compiler:compileKotlin` with "Module was compiled
+  with an incompatible version of Kotlin." 5.0.0 is the last release built against Kotlin 2.0.0.
+  Bumping Clikt requires bumping the project's Kotlin version first (untested — see the root
+  `../CLAUDE.md` warning about Gradle/Kotlin version bumps having broken the build before).
+- **`--constant-simplification` always crashes if passed.** It's a `hidden = true` option in
+  `Gapl` (parseable, but excluded from `--help`) precisely because `Compiler.runNetlistTransformers`
+  calls an unconditional `TODO()` right after adding `ConstantSimplifier` to the pipeline, so this
+  flag always throws `NotImplementedError`. The underlying `ConstantSimplifier.kt` logic is actually
+  mostly implemented (full bit-array constant folding for binary/unary ops and registers) except
+  `MuxFunction`/`DemuxFunction`/`PriorityFunction`, which are separately stubbed `TODO("dont wanna")`
+  — so even fixing the outer crash wouldn't make this fully functional yet.
+- **Hierarchical retiming has hard cross-flag constraints, driven implicitly by `--flatten`, not
+  obviously by anything `--retime`-related.** Any `--flatten` mode other than `all` forces
+  `Retimer.Mode.HIERARCHICAL`, which requires `--retiming-solver`/`--retiming-min-clock-period-solver`
+  to be a hierarchical solver (currently just `hierarchical-minimal-register`) — an explicit monolithic
+  solver choice with a non-`all` flatten mode throws `InvalidCompilerOptionsException` (`Compiler.kt`'s
+  `resolveFlattenMode`/`resolveMinClockPeriodSolverId`), reported by `GAPL.kt` as a clean CLI error, not
+  an internal-error crash. `--retiming-maintains-timing` is similarly incompatible with hierarchical
+  mode (`Retimer.transform`), same exception type.
+- **`--log-level`'s default is `error`**, matching what `--help` now shows (Clikt derives the displayed
+  default from the option declaration itself, so this can no longer silently drift the way the old
+  hand-written help text once did). Pass `--log-level info` (or `debug`) explicitly if you're not
+  seeing expected log output.
 - **`LeisersonCircuitGraph`'s constructor is itself a cycle check that hard-crashes** (`IllegalArgumentException`)
   if the zero-weight-edge subgraph has a cycle — this is a real, unrecoverable error path used during
   retiming, distinct from `../analyzer`'s own graceful combinational-loop diagnostic. If you need to

@@ -194,33 +194,32 @@ tasks.register("generateGaplVerilog") {
 
         val compilerCommand = buildList {
             add(compiler.absolutePath)
-            add("-i")
             add(gaplTargetFile.absolutePath)
-            add("-o")
+            add("--output")
             add(verilogFile.absolutePath)
 
             if (retime) {
                 if (!delayModelFile.exists())
                     throw GradleException("Delay model file not found: ${delayModelFile.absolutePath}")
 
-                add("-retime")
+                add("--retime")
                 add(delayModelFile.absolutePath)
 
-                add("-retiming-clock-period")
-                add(retimingClockPeriod)
+                add("--retiming-clock-period")
+                add(retimingClockPeriod.lowercase())
 
                 if (retimingSolver != null) {
-                    add("-retiming-solver")
-                    add(retimingSolver)
+                    add("--retiming-solver")
+                    add(retimingSolver.lowercase())
                 }
-                if (retimingMaintainsTiming) { add("-retiming-maintains-timing") }
+                if (retimingMaintainsTiming) { add("--retiming-maintains-timing") }
             }
 
-            add("-flatten")
-            add(flattenMode)
+            add("--flatten")
+            add(flattenMode.lowercase())
 
-            add("-log-level")
-            add(logLevel)
+            add("--log-level")
+            add(logLevel.lowercase())
         }
 
         val err = java.io.ByteArrayOutputStream()

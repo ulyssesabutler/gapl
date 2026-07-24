@@ -22,6 +22,7 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.0")
     implementation("com.google.ortools:ortools-java:9.14.6206")
     implementation("com.google.protobuf:protobuf-java-util:4.34.0")
+    implementation("com.github.ajalt.clikt:clikt:5.0.0")
 }
 
 tasks.test {

@@ -16,6 +16,14 @@ import com.uabutler.util.Logger
 import com.uabutler.verilogir.builder.VerilogBuilder
 import com.uabutler.verilogir.builder.creator.util.Identifier
 
+/**
+ * Thrown for a self-consistent but invalid combination of [Compiler.Options] (e.g. an explicit
+ * --flatten value incompatible with the chosen --retiming-solver) — a mistake in how the compiler
+ * was invoked, not a bug in the compiler itself or an error in the GAPL source. Callers should
+ * report this the same way as a CLI usage error, not as an internal compiler error.
+ */
+class InvalidCompilerOptionsException(message: String) : Exception(message)
+
 object Compiler {
 
     data class Options(
@@ -50,8 +58,8 @@ object Compiler {
         val explicit = options.flattenMode ?: return requiredFlattenMode
         val explicitKind = if (explicit == Flattener.Mode.ALL) RetimingSolverKind.MONOLITHIC else RetimingSolverKind.HIERARCHICAL
         if (explicitKind != requiredKind) {
-            throw Exception(
-                "-flatten $explicit is incompatible with -retiming-solver ${options.retimingSolverId.id} (requires a $requiredKind flatten mode)"
+            throw InvalidCompilerOptionsException(
+                "--flatten $explicit is incompatible with --retiming-solver ${options.retimingSolverId.id} (requires a $requiredKind flatten mode)"
             )
         }
         return explicit
@@ -66,8 +74,8 @@ object Compiler {
 
         val explicit = options.retimingMinClockPeriodSolverId ?: return default
         if (explicit.kind != solverKind) {
-            throw Exception(
-                "-retiming-min-clock-period-solver ${explicit.id} is a ${explicit.kind} solver, but -retiming-solver ${options.retimingSolverId.id} is $solverKind"
+            throw InvalidCompilerOptionsException(
+                "--retiming-min-clock-period-solver ${explicit.id} is a ${explicit.kind} solver, but --retiming-solver ${options.retimingSolverId.id} is $solverKind"
             )
         }
         return explicit

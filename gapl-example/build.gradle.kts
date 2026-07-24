@@ -35,7 +35,7 @@ tasks.register("generateVerilog") {
 
             val result = exec {
                 isIgnoreExitValue = true
-                commandLine(compiler, "-i", gaplFile.absolutePath, "-o", verilogFile.absolutePath)
+                commandLine(compiler, gaplFile.absolutePath, "--output", verilogFile.absolutePath)
                 errorOutput = errorOut
                 standardOutput = System.out
             }
