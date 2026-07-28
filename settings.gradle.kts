@@ -24,6 +24,7 @@ include(
     "simengine", // Use analyzer's netlist IR to simulate a design directly, without going through Verilog
     "vcd", // Generic, GAPL-independent VCD waveform writer
     "simtrace", // Wires simengine + vcd together: walks a running Engine's instance tree and emits real VCD output
+    "simgen", // Uses KotlinPoet to generate a named-port Kotlin wrapper class for a compiled GAPL design
     "lsp", // Language server wrapping analyzer for editor integrations
     "vscode-extension", // VSCode client for lsp
     "intellij-plugin", // IntelliJ-family client for lsp
