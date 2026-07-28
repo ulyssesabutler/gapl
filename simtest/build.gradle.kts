@@ -202,7 +202,7 @@ fun compileTestCase(testCase: TestCase, testProperties: TestProperties): Boolean
         println("    Compiling ${gapl.name} -> ${outV.relativeTo(project.projectDir)}")
 
         val command = createGaplCompileCommand(gapl, outV, testProperties)
-        println("      Using ${command.drop(1).joinToString(" ")}")
+        // println("      Using ${command.drop(1).joinToString(" ")}")
 
         val err = ByteArrayOutputStream()
         val result = exec {

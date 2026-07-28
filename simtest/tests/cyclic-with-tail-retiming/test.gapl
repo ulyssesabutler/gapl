@@ -10,18 +10,17 @@ function binary() i1: wire[32], i2: wire[32] => o: wire[32] {
 }
 
 function test() i: wire[32] => o: wire[32] {
-    declare cycle_end: wire[32];
+    declare cycle_exit: wire[32];
 
-    i, cycle_end
+    i, cycle_exit
         => declare cycle_entrance: binary()
         => unary()
         => register(wire[32])
         => unary()
-        => declare cycle_exit: wire[32]
-        => o;
+        => cycle_exit;
 
     cycle_exit
         => unary()
         => unary()
-        => cycle_end;
+        => o;
 }
