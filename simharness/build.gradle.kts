@@ -22,14 +22,14 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-val simtestTestsRoot = rootProject.projectDir.resolve("simtest/tests")
+val verilatorTestTestsRoot = rootProject.projectDir.resolve("verilator-test/tests")
 
-/** One simtest/tests/<name>/ directory that has opted into Kotlin simulation via a test.kt harness. */
+/** One verilator-test/tests/<name>/ directory that has opted into Kotlin simulation via a test.kt harness. */
 data class HarnessCase(val name: String, val dir: File) {
     val gaplFile get() = File(dir, "test.gapl")
     val sanitizedName get() = name.replace('-', '_')
 
-    // Every simtest fixture's top-level GAPL function is generically named "test" — relying on
+    // Every verilator-test fixture's top-level GAPL function is generically named "test" — relying on
     // WrapperGenerator's own auto-derived package/class name would collide across every fixture,
     // so package/class are always passed explicitly here, derived from the directory name instead.
     val packageName get() = "com.uabutler.simgen.generated.$sanitizedName"
@@ -37,7 +37,7 @@ data class HarnessCase(val name: String, val dir: File) {
 }
 
 fun discoverHarnessCases(): List<HarnessCase> =
-    simtestTestsRoot.listFiles()
+    verilatorTestTestsRoot.listFiles()
         ?.filter { it.isDirectory }
         ?.sortedBy { it.name }
         ?.map { HarnessCase(it.name, it) }
@@ -48,10 +48,10 @@ val generatedDir = layout.buildDirectory.dir("generated")
 
 val generateWrappers by tasks.registering {
     group = "simharness"
-    description = "Generate Kotlin simulation wrapper classes for simtest fixtures that opt in via a test.kt harness"
+    description = "Generate Kotlin simulation wrapper classes for verilator-test fixtures that opt in via a test.kt harness"
     dependsOn(":simgen:installDist")
 
-    inputs.files(fileTree(simtestTestsRoot) { include("*/test.gapl", "*/test.kt") })
+    inputs.files(fileTree(verilatorTestTestsRoot) { include("*/test.gapl", "*/test.kt") })
     outputs.dir(generatedDir)
 
     doLast {
@@ -81,16 +81,16 @@ sourceSets {
         kotlin.srcDir(generatedDir)
     }
     test {
-        // Pulls every simtest/tests/<name>/test.kt harness in directly from :simtest's own tree —
+        // Pulls every verilator-test/tests/<name>/test.kt harness in directly from :verilator-test's own tree —
         // Kotlin doesn't require directory-path-to-package matching, and a SourceDirectorySet only
         // picks up recognized extensions (.kt), so the sibling .gapl/.cpp/.properties/.yaml files
         // are automatically ignored. IMPORTANT: only kotlin.srcDir, not resources.srcDir.
-        kotlin.srcDir(simtestTestsRoot)
+        kotlin.srcDir(verilatorTestTestsRoot)
     }
 }
 
 // generateWrappers becomes a KotlinCompile input, so test/build already depend on it transitively —
-// no extra `tasks.named("build") { dependsOn(...) }` wiring needed, unlike simtest (a plain
+// no extra `tasks.named("build") { dependsOn(...) }` wiring needed, unlike verilator-test (a plain
 // `base`-plugin project with no Kotlin compile graph of its own to hook into).
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     dependsOn(generateWrappers)
@@ -104,7 +104,7 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 
-    // Lets test.kt harnesses locate simtest/tests/<name>/test.gapl reliably regardless of the test
+    // Lets test.kt harnesses locate verilator-test/tests/<name>/test.gapl reliably regardless of the test
     // task's own working directory.
     systemProperty("gaplRootDir", rootProject.projectDir.absolutePath)
 }

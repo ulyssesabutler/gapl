@@ -165,7 +165,7 @@ runnable `gapl` binary at `compiler/build/install/gapl/bin/gapl` without buildin
   helper), `compiler`'s is the real, full Verilog AST + serializer. Grepping "verilogir" across the
   repo can be misleading about which one actually renders anything.
 - **Compile time on large designs can be substantial and hasn't been profiled.** `LiteralSimplifier`
-  alone took ~198s compiling `simtest/tests/aes/test.gapl` (has a `TODO` there noting this, worth
+  alone took ~198s compiling `verilator-test/tests/aes/test.gapl` (has a `TODO` there noting this, worth
   checking `module.getConnectionsForNodeOutput`/`connect`/`disconnect` for hidden O(n²) behavior
   before assuming it's just "large designs are slow"). Not urgent, but real.
 

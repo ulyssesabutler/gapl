@@ -234,7 +234,7 @@ via `PredefinedFunction.search()`.
   relying on default `data class` `toString()`.
 - **Compile time on large designs hasn't been profiled.** `ModuleBuilder.kt` has a `TODO` noting the
   whole "Netlist Builder" stage (ordinary per-function building, plus the combinational-loop check)
-  took ~72s on `simtest/tests/aes/test.gapl` — not yet known which part is the actual bottleneck. Not
+  took ~72s on `verilator-test/tests/aes/test.gapl` — not yet known which part is the actual bottleneck. Not
   urgent, but worth knowing before assuming an unrelated change caused a slowdown.
 
 ## Testing conventions

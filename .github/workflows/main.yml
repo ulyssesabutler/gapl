@@ -12,7 +12,7 @@ jobs:
 
     env:
       # Set your one-shot Gradle command here
-      GRADLE_CMD: ./gradlew :simtest:runSimulation
+      GRADLE_CMD: ./gradlew :verilator-test:runSimulation
       # If you generate/compile C++ as part of the build, these help Gradle find compilers
       CC: gcc
       CXX: g++

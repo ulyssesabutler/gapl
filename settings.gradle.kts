@@ -28,8 +28,8 @@ include(
     "lsp", // Language server wrapping analyzer for editor integrations
     "vscode-extension", // VSCode client for lsp
     "intellij-plugin", // IntelliJ-family client for lsp
-    "simtest",
-    "simharness", // Kotlin-native test harness counterpart to simtest, driving designs through simgen-generated wrappers
+    "verilator-test",
+    "simharness", // Kotlin-native test harness counterpart to verilator-test, driving designs through simgen-generated wrappers
     "gapl-example", // Use compiler to convert this gapl code into verilog
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
     "netfpga", // Use generated verilog, along with a test harness, to test design on NetFPGA

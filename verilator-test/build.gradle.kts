@@ -243,7 +243,7 @@ fun simulateTestCase(testCase: TestCase, testProperties: TestProperties, variati
     val verilogDir = layout.buildDirectory.dir("tests/${testCase.qualifiedName}/verilog").get().asFile
     val verilogFiles = verilogDir.listFiles { f -> f.isFile && f.extension == "v" }?.toList().orEmpty()
     if (verilogFiles.isEmpty()) {
-        result("❌", "no generated Verilog found; run :simtest:generateVerilog first")
+        result("❌", "no generated Verilog found; run :verilator-test:generateVerilog first")
         return false
     }
 
@@ -297,7 +297,7 @@ fun simulateTestCase(testCase: TestCase, testProperties: TestProperties, variati
  * Compiles GAPL test sources to Verilog for each test case, one program/variation at a time.
  */
 tasks.register("generateVerilog") {
-    group = "simtest"
+    group = "verilator-test"
     description = "Compile GAPL test sources to Verilog for each test case"
     dependsOn(":compiler:installDist")
 
@@ -337,7 +337,7 @@ tasks.register("generateVerilog") {
  * per-file compile logging.
  */
 tasks.register("runSimulation") {
-    group = "simtest"
+    group = "verilator-test"
     description = "Compile and run C++ test wrappers with Verilator-generated models, one program/variation at a time"
     dependsOn("generateVerilog")
 

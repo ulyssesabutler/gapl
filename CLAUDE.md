@@ -45,9 +45,9 @@ Concretely, as Gradle subprojects:
   doesn't depend on it.
 - **`vscode-extension`** / **`intellij-plugin`** — thin editor clients that spawn and talk to `lsp`.
   Both are intentionally minimal (no real logic of their own) — see their own `CLAUDE.md` files.
-- **`simtest`** — Verilator-based simulation testing for compiler output; see `simtest/README.md`.
-  Each test lives in its own `simtest/tests/<name>/` directory with `.gapl` source plus a C++ test
-  harness.
+- **`verilator-test`** — Verilator-based simulation testing for compiler output; see
+  `verilator-test/README.md`. Each test lives in its own `verilator-test/tests/<name>/` directory
+  with `.gapl` source plus a C++ test harness.
 - **`gapl-example`** — example `.gapl` programs (`gapl-example/src/`) compiled to Verilog as part of
   the build, both as living examples and as an implicit regression surface (see Verification below).
 - **`basys`** / **`netfpga`** (+ `netfpga:hw-test`) — real FPGA hardware targets (Basys 3, NetFPGA),
@@ -76,9 +76,9 @@ Concretely, as Gradle subprojects:
 - **Regression-checking a change**: this codebase doesn't have a snapshot-testing framework, so the
   pattern used repeatedly (and worth continuing) for verifying a refactor didn't silently change
   compiler output is: `git archive <baseline-commit> | tar -x -C <scratch-dir>`, build
-  `:gapl-example:build` (and, if the change touches retiming, `:simtest:generateVerilog` too — several
-  `simtest/tests/*` fixtures specifically exercise `-retime`) in both the scratch checkout and the
-  current tree, then `diff -rq` the two `build/verilog` (or `build/tests/*/verilog`) output
+  `:gapl-example:build` (and, if the change touches retiming, `:verilator-test:generateVerilog` too —
+  several `verilator-test/tests/*` fixtures specifically exercise `-retime`) in both the scratch
+  checkout and the current tree, then `diff -rq` the two `build/verilog` (or `build/tests/*/verilog`) output
   directories. Byte-identical output is the bar for "this refactor didn't change behavior."
 - This repo is often worked in via git worktrees (`.claude/worktrees/` is gitignored) for parallel
   background sessions — if you're in one, it's an isolated checkout sharing the same underlying
