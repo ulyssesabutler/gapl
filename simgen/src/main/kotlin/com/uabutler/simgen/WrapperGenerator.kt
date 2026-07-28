@@ -24,10 +24,12 @@ import com.uabutler.util.StandardLibraryFunctions
  * to a live Engine instance built by recompiling the given GAPL source fresh at construction time.
  */
 object WrapperGenerator {
+    const val DEFAULT_PACKAGE_NAME = "com.uabutler.simgen.generated"
+
     fun generate(
         gaplSource: String,
         targetModuleName: String? = null,
-        packageName: String = "com.uabutler.simgen.generated",
+        packageName: String = DEFAULT_PACKAGE_NAME,
         className: String? = null,
     ): FileSpec {
         val analysis = Analyzer.analyzeFull(gaplSource)
