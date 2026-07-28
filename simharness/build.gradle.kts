@@ -9,12 +9,15 @@ repositories {
 }
 
 dependencies {
-    // All three needed as `implementation`, not just :simgen — the *generated* wrapper classes
+    // All needed as `implementation`, not just :simgen — the *generated* wrapper classes
     // (compiled as part of this project's own main source set) directly reference
-    // com.uabutler.Analyzer (:analyzer) and com.uabutler.simengine.Engine (:simengine), and
-    // `implementation` deps aren't transitively exposed to consumers.
+    // com.uabutler.Analyzer (:analyzer), com.uabutler.simengine.Engine (:simengine), and now
+    // com.uabutler.vcd.VcdWriter/com.uabutler.simtrace.VcdTracer (Phase 6 VCD tracing support),
+    // and `implementation` deps aren't transitively exposed to consumers.
     implementation(project(":analyzer"))
     implementation(project(":simengine"))
+    implementation(project(":vcd"))
+    implementation(project(":simtrace"))
     implementation(project(":simgen"))
     testImplementation(kotlin("test"))
 }

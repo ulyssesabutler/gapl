@@ -15,6 +15,8 @@ repositories {
 dependencies {
     implementation(project(":analyzer"))
     implementation(project(":simengine"))
+    implementation(project(":vcd"))
+    implementation(project(":simtrace"))
     implementation("com.squareup:kotlinpoet:2.0.0")
     implementation("com.github.ajalt.clikt:clikt:5.0.0")
     testImplementation(kotlin("test"))

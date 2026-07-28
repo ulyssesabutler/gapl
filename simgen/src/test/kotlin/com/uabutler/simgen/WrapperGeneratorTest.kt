@@ -87,4 +87,38 @@ class WrapperGeneratorTest {
         )
         assertTrue(file.toString().contains("`object`"))
     }
+
+    private val simpleFixture = """
+        function test() i: wire[8] => o: wire[8] {
+            i => o;
+        }
+    """.trimIndent()
+
+    @Test
+    fun `generated class implements AutoCloseable and accepts an optional vcdOutput parameter`() {
+        val text = WrapperGenerator.generate(simpleFixture).toString()
+
+        assertTrue(text.contains(": AutoCloseable"))
+        assertTrue(text.contains("vcdOutput: File? = null"))
+        assertTrue(text.contains("private val tracer: VcdTracer?"))
+        assertTrue(text.contains("private val vcdWriterSink: Writer?"))
+        assertTrue(text.contains("import java.io.File"))
+    }
+
+    @Test
+    fun `tick delegates to the tracer when active and to the engine directly otherwise`() {
+        val text = WrapperGenerator.generate(simpleFixture).toString()
+
+        assertTrue(text.contains("val activeTracer = tracer"))
+        assertTrue(text.contains("if (activeTracer != null)"))
+        assertTrue(text.contains("activeTracer.tick()"))
+    }
+
+    @Test
+    fun `close is overridden and closes the underlying vcd writer sink`() {
+        val text = WrapperGenerator.generate(simpleFixture).toString()
+
+        assertTrue(text.contains("override fun close()"))
+        assertTrue(text.contains("vcdWriterSink?.close()"))
+    }
 }

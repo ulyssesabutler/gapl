@@ -6,16 +6,22 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.asClassName
 import com.uabutler.Analyzer
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.util.InvocationGraph
 import com.uabutler.simengine.Engine
 import com.uabutler.simgen.runtime.InterfaceValidator
 import com.uabutler.simgen.runtime.PortDescriptor
+import com.uabutler.simtrace.VcdTracer
 import com.uabutler.util.StandardLibraryFunctions
+import com.uabutler.vcd.VcdWriter
+import java.io.File
+import java.io.Writer
 
 /**
  * Generates a thin, named-port Kotlin wrapper class for a compiled GAPL design — a real Kotlin
@@ -58,11 +64,26 @@ object WrapperGenerator {
         val outputPorts = PortInspector.outputPorts(module)
         val listOfBoolean = LIST.parameterizedBy(BOOLEAN)
 
+        val nullableFile = File::class.asClassName().copy(nullable = true)
+        val nullableTracer = VcdTracer::class.asClassName().copy(nullable = true)
+        val nullableWriter = Writer::class.asClassName().copy(nullable = true)
+
+        val vcdOutputParam = ParameterSpec.builder("vcdOutput", nullableFile)
+            .defaultValue("null")
+            .build()
+
         val constructor = FunSpec.constructorBuilder()
             .addParameter("gaplSource", String::class)
+            .addParameter(vcdOutputParam)
             .build()
 
         val engineProperty = PropertySpec.builder("engine", Engine::class)
+            .addModifiers(KModifier.PRIVATE)
+            .build()
+        val tracerProperty = PropertySpec.builder("tracer", nullableTracer)
+            .addModifiers(KModifier.PRIVATE)
+            .build()
+        val vcdWriterSinkProperty = PropertySpec.builder("vcdWriterSink", nullableWriter)
             .addModifiers(KModifier.PRIVATE)
             .build()
 
@@ -81,6 +102,14 @@ object WrapperGenerator {
             .unindent()
             .addStatement(")")
             .addStatement("engine = %T.build(analysis.modules!!, module.invocation)", Engine::class)
+            .beginControlFlow("if (vcdOutput != null)")
+            .addStatement("val sink = vcdOutput.bufferedWriter()")
+            .addStatement("vcdWriterSink = sink")
+            .addStatement("tracer = %T(engine, %T(sink)).also { it.dumpInitial() }", VcdTracer::class, VcdWriter::class)
+            .nextControlFlow("else")
+            .addStatement("vcdWriterSink = null")
+            .addStatement("tracer = null")
+            .endControlFlow()
             .build()
 
         val inputProperties = inputPorts.map { port ->
@@ -104,16 +133,33 @@ object WrapperGenerator {
         }
 
         val settleFun = FunSpec.builder("settle").addStatement("engine.settle()").build()
-        val tickFun = FunSpec.builder("tick").addStatement("engine.tick()").build()
+
+        val tickFun = FunSpec.builder("tick")
+            .addStatement("val activeTracer = tracer")
+            .beginControlFlow("if (activeTracer != null)")
+            .addStatement("activeTracer.tick()")
+            .nextControlFlow("else")
+            .addStatement("engine.tick()")
+            .endControlFlow()
+            .build()
+
+        val closeFun = FunSpec.builder("close")
+            .addModifiers(KModifier.OVERRIDE)
+            .addStatement("vcdWriterSink?.close()")
+            .build()
 
         val typeSpec = TypeSpec.classBuilder(className)
+            .addSuperinterface(AutoCloseable::class)
             .primaryConstructor(constructor)
             .addProperty(engineProperty)
+            .addProperty(tracerProperty)
+            .addProperty(vcdWriterSinkProperty)
             .addInitializerBlock(initBlock)
             .addProperties(inputProperties)
             .addProperties(outputProperties)
             .addFunction(settleFun)
             .addFunction(tickFun)
+            .addFunction(closeFun)
             .build()
 
         return FileSpec.builder(packageName, className).addType(typeSpec).build()

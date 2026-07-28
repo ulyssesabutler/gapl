@@ -8,6 +8,7 @@ import java.math.BigInteger
 import java.util.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Kotlin-native analogue of simtest/tests/simple-register/test.cpp: drives the design through the
@@ -46,6 +47,36 @@ class SimpleRegisterTest {
             assertEquals(value, sim.o.toIntValue(), "output should reflect this tick's input immediately after latching")
 
             previous = value
+        }
+    }
+
+    @Test
+    fun `vcdOutput traces real waveform output through the generated wrapper`() {
+        val vcdFile = File.createTempFile("simple-register", ".vcd")
+        try {
+            SimpleRegisterSimulator(gaplSource(), vcdOutput = vcdFile).use { sim ->
+                val rng = Random(6789)
+                repeat(3) {
+                    sim.i = bits(rng.nextInt(256), 8)
+                    sim.settle()
+                    sim.tick()
+                }
+            }
+
+            val vcdText = vcdFile.readText()
+
+            // Structural VCD format markers.
+            assertTrue(vcdText.contains("\$enddefinitions \$end"))
+            assertTrue(vcdText.contains("\$dumpvars"))
+            assertTrue(vcdText.contains("#1"))
+            assertTrue(vcdText.contains("#2"))
+            assertTrue(vcdText.contains("#3"))
+
+            // Top-level i/o ports traced under their exact GAPL port names.
+            assertTrue(vcdText.contains(" i \$end"))
+            assertTrue(vcdText.contains(" o \$end"))
+        } finally {
+            vcdFile.delete()
         }
     }
 }
