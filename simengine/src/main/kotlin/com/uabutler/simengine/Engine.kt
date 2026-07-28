@@ -11,7 +11,11 @@ import com.uabutler.simengine.plan.PlanCache
  * latches register state. No auto-settle-on-read/write — callers write inputs, call `settle()`
  * explicitly, then read outputs, keeping the model fully explicit and imperative.
  */
-class Engine private constructor(private val top: ModuleInstance) {
+class Engine private constructor(
+    /** Root of the instance tree — public so external walkers (e.g. a VCD tracer) can recurse
+     *  through [ModuleInstance.children] and read arbitrary wire values via [ModuleInstance.read]. */
+    val top: ModuleInstance,
+) {
     companion object {
         fun build(modules: List<Module>, topInvocation: Module.Invocation): Engine {
             val byInvocation = modules.associateBy { it.invocation }

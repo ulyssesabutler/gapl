@@ -23,6 +23,7 @@ include(
     "compiler", // Use analyzer to build gapl compiler
     "simengine", // Use analyzer's netlist IR to simulate a design directly, without going through Verilog
     "vcd", // Generic, GAPL-independent VCD waveform writer
+    "simtrace", // Wires simengine + vcd together: walks a running Engine's instance tree and emits real VCD output
     "lsp", // Language server wrapping analyzer for editor integrations
     "vscode-extension", // VSCode client for lsp
     "intellij-plugin", // IntelliJ-family client for lsp
