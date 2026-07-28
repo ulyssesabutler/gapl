@@ -1,0 +1,25 @@
+plugins {
+    kotlin("jvm") version "2.0.21"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation(project(":analyzer"))
+    testImplementation(kotlin("test"))
+}
+
+tasks.test {
+    useJUnitPlatform()
+
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+}

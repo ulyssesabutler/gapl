@@ -17,8 +17,8 @@ import com.uabutler.netlistir.util.NodeCopier.copyBodyNode
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.util.NodeCopier.copyInputNode
 import com.uabutler.netlistir.util.NodeCopier.copyOutputNode
-import com.uabutler.netlistir.util.IntegerRegisterFunction
 import com.uabutler.netlistir.util.RegisterFunction
+import com.uabutler.netlistir.util.isRegister
 import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
@@ -45,18 +45,14 @@ object NetlistLeisersonCircuitConverter {
         val connections: Collection<NonRegisterConnection>,
     )
 
-    // Both RegisterFunction (wire-based) and IntegerRegisterFunction (integer-based) are real,
-    // reachable register kinds - checking only the former would misclassify integer_register(...)
-    // as combinational and produce false-positive loop diagnostics on legitimate sequential circuits.
     internal fun isRegisterNode(node: Node): Boolean {
-        return node is PredefinedFunctionNode &&
-            (node.predefinedFunction is RegisterFunction || node.predefinedFunction is IntegerRegisterFunction)
+        return node is PredefinedFunctionNode && node.predefinedFunction.isRegister
     }
 
     internal fun getNonRegisterConnections(module: MutableModule): Collection<WeightedNonRegisterConnection> {
         val registerWires = module.getNodes()
             .filterIsInstance<PredefinedFunctionNode>()
-            .filter { it.predefinedFunction is RegisterFunction || it.predefinedFunction is IntegerRegisterFunction }
+            .filter { it.predefinedFunction.isRegister }
             .flatMap { it.outputWires().zip(it.inputWires()) }
             .associate { it }
 

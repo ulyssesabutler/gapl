@@ -240,6 +240,9 @@ data class IntegerRegisterFunction(
     outputs = listOf(IO("current", wireVector(size))),
 )
 
+val PredefinedFunction.isRegister: Boolean
+    get() = this is RegisterFunction || this is IntegerRegisterFunction
+
 data class MuxFunction(
     val outputStructure: InterfaceStructure,
     val inputCount: Int,
