@@ -31,12 +31,12 @@
             <option value="$PROJECT_DIR$/lsp" />
             <option value="$PROJECT_DIR$/netfpga" />
             <option value="$PROJECT_DIR$/netfpga/hw-test" />
+            <option value="$PROJECT_DIR$/sim-test" />
             <option value="$PROJECT_DIR$/simengine" />
             <option value="$PROJECT_DIR$/simgen" />
-            <option value="$PROJECT_DIR$/simharness" />
-            <option value="$PROJECT_DIR$/simtest" />
             <option value="$PROJECT_DIR$/simtrace" />
             <option value="$PROJECT_DIR$/vcd" />
+            <option value="$PROJECT_DIR$/verilator-test" />
             <option value="$PROJECT_DIR$/vscode-extension" />
           </set>
         </option>
