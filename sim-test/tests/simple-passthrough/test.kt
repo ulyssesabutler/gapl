@@ -1,4 +1,4 @@
-package com.uabutler.simharness.tests.simple_passthrough
+package com.uabutler.simtest.tests.simple_passthrough
 
 import com.uabutler.simengine.eval.bitsToUnsignedBigInteger
 import com.uabutler.simengine.eval.unsignedBigIntegerToBits
@@ -10,8 +10,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Kotlin-native analogue of simtest/tests/simple-passthrough/test.cpp: drives the design through
- * the simengine/simgen pipeline instead of a Verilator-compiled C++ model.
+ * Kotlin-native analogue of verilator-test/tests/simple-passthrough/test.cpp: drives the design
+ * through the simengine/simgen pipeline instead of a Verilator-compiled C++ model.
  */
 class SimplePassthroughTest {
 
@@ -20,8 +20,8 @@ class SimplePassthroughTest {
     private fun List<Boolean>.toIntValue(): Int = bitsToUnsignedBigInteger(this).toInt()
 
     private fun gaplSource(): String {
-        val rootDir = System.getProperty("gaplRootDir") ?: error("gaplRootDir system property not set")
-        return File(rootDir, "simtest/tests/simple-passthrough/test.gapl").readText()
+        val root = System.getProperty("simTestRoot") ?: error("simTestRoot system property not set")
+        return File(root, "tests/simple-passthrough/test.gapl").readText()
     }
 
     @Test

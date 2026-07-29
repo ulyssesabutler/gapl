@@ -22,14 +22,14 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-val verilatorTestTestsRoot = rootProject.projectDir.resolve("verilator-test/tests")
+val testsRoot = file("tests")
 
-/** One verilator-test/tests/<name>/ directory that has opted into Kotlin simulation via a test.kt harness. */
+/** One sim-test/tests/<name>/ directory that has opted into Kotlin simulation via a test.kt harness. */
 data class HarnessCase(val name: String, val dir: File) {
     val gaplFile get() = File(dir, "test.gapl")
     val sanitizedName get() = name.replace('-', '_')
 
-    // Every verilator-test fixture's top-level GAPL function is generically named "test" — relying on
+    // Every sim-test fixture's top-level GAPL function is generically named "test" — relying on
     // WrapperGenerator's own auto-derived package/class name would collide across every fixture,
     // so package/class are always passed explicitly here, derived from the directory name instead.
     val packageName get() = "com.uabutler.simgen.generated.$sanitizedName"
@@ -37,7 +37,7 @@ data class HarnessCase(val name: String, val dir: File) {
 }
 
 fun discoverHarnessCases(): List<HarnessCase> =
-    verilatorTestTestsRoot.listFiles()
+    testsRoot.listFiles()
         ?.filter { it.isDirectory }
         ?.sortedBy { it.name }
         ?.map { HarnessCase(it.name, it) }
@@ -47,11 +47,11 @@ fun discoverHarnessCases(): List<HarnessCase> =
 val generatedDir = layout.buildDirectory.dir("generated")
 
 val generateWrappers by tasks.registering {
-    group = "simharness"
-    description = "Generate Kotlin simulation wrapper classes for verilator-test fixtures that opt in via a test.kt harness"
+    group = "sim-test"
+    description = "Generate Kotlin simulation wrapper classes for sim-test fixtures that opt in via a test.kt harness"
     dependsOn(":simgen:installDist")
 
-    inputs.files(fileTree(verilatorTestTestsRoot) { include("*/test.gapl", "*/test.kt") })
+    inputs.files(fileTree(testsRoot) { include("*/test.gapl", "*/test.kt") })
     outputs.dir(generatedDir)
 
     doLast {
@@ -81,11 +81,12 @@ sourceSets {
         kotlin.srcDir(generatedDir)
     }
     test {
-        // Pulls every verilator-test/tests/<name>/test.kt harness in directly from :verilator-test's own tree —
-        // Kotlin doesn't require directory-path-to-package matching, and a SourceDirectorySet only
-        // picks up recognized extensions (.kt), so the sibling .gapl/.cpp/.properties/.yaml files
-        // are automatically ignored. IMPORTANT: only kotlin.srcDir, not resources.srcDir.
-        kotlin.srcDir(verilatorTestTestsRoot)
+        // Pulls every sim-test/tests/<name>/test.kt harness in directly from this project's own
+        // tests/ tree — Kotlin doesn't require directory-path-to-package matching, and a
+        // SourceDirectorySet only picks up recognized extensions (.kt), so the sibling
+        // .gapl/.cpp/.properties/.yaml files are automatically ignored. IMPORTANT: only
+        // kotlin.srcDir, not resources.srcDir.
+        kotlin.srcDir(testsRoot)
     }
 }
 
@@ -104,9 +105,17 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 
-    // Lets test.kt harnesses locate verilator-test/tests/<name>/test.gapl reliably regardless of the test
+    // Lets test.kt harnesses locate sim-test/tests/<name>/test.gapl reliably regardless of the test
     // task's own working directory.
-    systemProperty("gaplRootDir", rootProject.projectDir.absolutePath)
+    systemProperty("simTestRoot", project.projectDir.absolutePath)
+}
+
+// Mirrors :verilator-test:runSimulation's naming convention: one named, discoverable entry point
+// that generates wrappers, builds, and runs everything end-to-end.
+tasks.register("runSimulation") {
+    group = "sim-test"
+    description = "Generate wrappers, build, and run all sim-test fixtures end-to-end"
+    dependsOn("test")
 }
 
 kotlin {

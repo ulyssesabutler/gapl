@@ -1,4 +1,4 @@
-package com.uabutler.simharness.tests.simple_register
+package com.uabutler.simtest.tests.simple_register
 
 import com.uabutler.simengine.eval.bitsToUnsignedBigInteger
 import com.uabutler.simengine.eval.unsignedBigIntegerToBits
@@ -11,8 +11,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Kotlin-native analogue of simtest/tests/simple-register/test.cpp: drives the design through the
- * simengine/simgen pipeline instead of a Verilator-compiled C++ model. Uses Kotlin's own PRNG
+ * Kotlin-native analogue of verilator-test/tests/simple-register/test.cpp: drives the design through
+ * the simengine/simgen pipeline instead of a Verilator-compiled C++ model. Uses Kotlin's own PRNG
  * rather than the C++ mt19937 sequence bit-for-bit — Engine.tick()/settle() already established
  * parity with the Verilog ground truth at the simengine phase; this test's job is proving the
  * simgen-generated wrapper itself works end to end, not re-proving interpreter/Verilog parity.
@@ -24,8 +24,8 @@ class SimpleRegisterTest {
     private fun List<Boolean>.toIntValue(): Int = bitsToUnsignedBigInteger(this).toInt()
 
     private fun gaplSource(): String {
-        val rootDir = System.getProperty("gaplRootDir") ?: error("gaplRootDir system property not set")
-        return File(rootDir, "simtest/tests/simple-register/test.gapl").readText()
+        val root = System.getProperty("simTestRoot") ?: error("simTestRoot system property not set")
+        return File(root, "tests/simple-register/test.gapl").readText()
     }
 
     @Test

@@ -40,6 +40,14 @@ Concretely, as Gradle subprojects:
 - **`compiler`** — takes analyzer's netlist IR, runs a transformer pipeline (flattening, retiming,
   simplification passes), and serializes the result to Verilog. Also the `gapl` CLI's home. See
   `compiler/CLAUDE.md`.
+- **`simengine`** — interprets analyzer's untransformed netlist IR directly, simulating a GAPL design
+  without going through Verilog at all; depends only on `analyzer`, not `compiler`.
+- **`vcd`** — a small, standalone, GAPL-independent VCD waveform writer.
+- **`simtrace`** — wires `simengine` and `vcd` together: walks a running `Engine`'s instance tree and
+  emits real VCD output as it runs.
+- **`simgen`** — uses KotlinPoet to generate a named-port Kotlin wrapper class for a compiled GAPL
+  design, so a test can drive `simengine` through typed properties instead of `simengine`'s own
+  stringly-typed port API.
 - **`lsp`** — a thin LSP server wrapping `analyzer` (diagnostics, go-to-definition, semantic tokens)
   for editor integrations. No compiler/Verilog logic here — that's `compiler`'s job, and this module
   doesn't depend on it.
@@ -48,6 +56,10 @@ Concretely, as Gradle subprojects:
 - **`verilator-test`** — Verilator-based simulation testing for compiler output; see
   `verilator-test/README.md`. Each test lives in its own `verilator-test/tests/<name>/` directory
   with `.gapl` source plus a C++ test harness.
+- **`sim-test`** — the Kotlin-native counterpart to `verilator-test`: drives designs through
+  `simgen`-generated wrappers instead of a Verilator-compiled C++ model. Owns its own local
+  `sim-test/tests/<name>/` fixtures (`.gapl` + a `test.kt` harness), independent of
+  `verilator-test`'s own copies.
 - **`gapl-example`** — example `.gapl` programs (`gapl-example/src/`) compiled to Verilog as part of
   the build, both as living examples and as an implicit regression surface (see Verification below).
 - **`basys`** / **`netfpga`** (+ `netfpga:hw-test`) — real FPGA hardware targets (Basys 3, NetFPGA),
