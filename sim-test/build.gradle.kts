@@ -69,6 +69,12 @@ val generateWrappers by tasks.registering {
                     "--output-dir", outDir.absolutePath,
                     "--package", case.packageName,
                     "--class", case.className,
+                    // Every fixture's top-level GAPL function is named "test" (see HarnessCase's own
+                    // doc comment), but larger designs (aes, md5) define many internal helper
+                    // functions - if any turns out to be unreferenced dead code it would register as
+                    // an extra root module and break WrapperGenerator's single-root auto-selection.
+                    // Passing --module explicitly sidesteps that risk entirely.
+                    "--module", "test",
                 )
             }
             if (result.exitValue != 0) throw GradleException("Failed to generate wrapper for ${case.name}")
