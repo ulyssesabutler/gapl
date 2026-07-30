@@ -140,10 +140,10 @@ int main(int argc, char** argv) {
     for (int selectorShift = -1; selectorShift <= 3; ++selectorShift) {
         uint32_t selector;
 
-        if (selector == -1) {
+        if (selectorShift == -1) {
             selector = 0;
         } else {
-            selector = selector << selectorShift;
+            selector = 1u << selectorShift;
         }
 
         for (uint32_t lhs = 0; lhs <= 9; ++lhs) {
