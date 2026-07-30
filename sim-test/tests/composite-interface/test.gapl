@@ -1,0 +1,8 @@
+interface pair_type {
+    a: wire[8];
+    b: wire[4];
+}
+
+function test() i: pair_type[3] => o: pair_type[3] {
+    i => o;
+}

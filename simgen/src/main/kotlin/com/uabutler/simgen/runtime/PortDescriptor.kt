@@ -1,3 +1,5 @@
 package com.uabutler.simgen.runtime
 
-data class PortDescriptor(val name: String, val width: Int)
+import com.uabutler.simgen.PortShape
+
+data class PortDescriptor(val name: String, val shape: PortShape)

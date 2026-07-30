@@ -2,6 +2,7 @@ package com.uabutler.simgen.runtime
 
 import com.uabutler.Analyzer
 import com.uabutler.Analyzer.FullAnalysisResult
+import com.uabutler.simgen.PortShape
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,8 +19,8 @@ class InterfaceValidatorTest {
         }
     """.trimIndent()
 
-    private val expectedInputs = listOf(PortDescriptor("i", 8))
-    private val expectedOutputs = listOf(PortDescriptor("o", 8))
+    private val expectedInputs = listOf(PortDescriptor("i", PortShape.Leaf(8)))
+    private val expectedOutputs = listOf(PortDescriptor("o", PortShape.Leaf(8)))
 
     @Test
     fun `matching interface returns the module`() {
@@ -41,8 +42,8 @@ class InterfaceValidatorTest {
             InterfaceValidator.validate("test", changed.modules, changed.diagnostics, expectedInputs, expectedOutputs)
         }
         assertTrue(exception.message!!.contains("changed"))
-        assertTrue(exception.message!!.contains("PortDescriptor(name=i, width=8)")) // expected
-        assertTrue(exception.message!!.contains("PortDescriptor(name=i, width=4)")) // actual
+        assertTrue(exception.message!!.contains("PortDescriptor(name=i, shape=Leaf(width=8))")) // expected
+        assertTrue(exception.message!!.contains("PortDescriptor(name=i, shape=Leaf(width=4))")) // actual
     }
 
     @Test

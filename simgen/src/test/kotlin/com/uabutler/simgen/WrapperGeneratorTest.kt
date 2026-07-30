@@ -21,8 +21,8 @@ class WrapperGeneratorTest {
         assertTrue(text.contains("public var i: List<Boolean> = List(8) { false }"))
         assertTrue(text.contains("public val o: List<Boolean>"))
         assertTrue(text.contains("gaplFunctionName = \"test\""))
-        assertTrue(text.contains("expectedInputs = listOf(PortDescriptor(\"i\", 8))"))
-        assertTrue(text.contains("expectedOutputs = listOf(PortDescriptor(\"o\", 8))"))
+        assertTrue(text.contains("expectedInputs = listOf(PortDescriptor(\"i\", PortShape.Leaf(8)))"))
+        assertTrue(text.contains("expectedOutputs = listOf(PortDescriptor(\"o\", PortShape.Leaf(8)))"))
         assertTrue(text.contains("engine.writeInputPort(\"i\", value)"))
         assertTrue(text.contains("engine.readOutputPort(\"o\")"))
         assertTrue(text.contains("engine.settle()"))
@@ -120,5 +120,54 @@ class WrapperGeneratorTest {
 
         assertTrue(text.contains("override fun close()"))
         assertTrue(text.contains("vcdWriterSink?.close()"))
+    }
+
+    private val recordFixture = """
+        interface pair_type {
+            a: wire[8];
+            b: wire[4];
+        }
+
+        function test() i: pair_type => o: pair_type {
+            i => o;
+        }
+    """.trimIndent()
+
+    @Test
+    fun `record-shaped port generates a nested data class with PortValue conversion`() {
+        val text = WrapperGenerator.generate(recordFixture).toString()
+
+        assertTrue(text.contains("public var i: I = I(a = List(8) { false }, b = List(4) { false })"))
+        assertTrue(text.contains("engine.writeInputPort(\"i\", value.toPortValue())"))
+        assertTrue(text.contains("public val o: O"))
+        assertTrue(text.contains("get() = O.fromPortValue(engine.readOutputPortValue(\"o\"))"))
+        assertTrue(text.contains("public data class I("))
+        assertTrue(text.contains("public val a: List<Boolean>"))
+        assertTrue(text.contains("public val b: List<Boolean>"))
+        assertTrue(text.contains("public fun toPortValue(): PortValue = PortValue.Fields(mapOf(\"a\" to PortValue.Bits(a), \"b\" to PortValue.Bits(b)))"))
+        assertTrue(text.contains("public fun fromPortValue(`value`: PortValue): I {"))
+    }
+
+    private val vectorOfRecordFixture = """
+        interface pair_type {
+            a: wire[8];
+            b: wire[4];
+        }
+
+        function test() i: pair_type[3] => o: wire[8] {
+            i[0].a => o;
+        }
+    """.trimIndent()
+
+    @Test
+    fun `array-of-record port generates a List of the nested class, marshaled via PortValue Elements`() {
+        val text = WrapperGenerator.generate(vectorOfRecordFixture).toString()
+
+        assertTrue(text.contains("public var i: List<I> = List(3) { I(a = List(8) { false }, b = List(4) { false }) }"))
+        assertTrue(text.contains("engine.writeInputPort(\"i\", PortValue.Elements(value.map { it.toPortValue() }))"))
+        assertTrue(text.contains("public data class I("))
+        // The flat output port is untouched by the composite-input codegen path.
+        assertTrue(text.contains("public val o: List<Boolean>"))
+        assertTrue(text.contains("get() = engine.readOutputPort(\"o\")"))
     }
 }

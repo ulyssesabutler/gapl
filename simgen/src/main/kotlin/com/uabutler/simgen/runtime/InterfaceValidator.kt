@@ -26,8 +26,8 @@ object InterfaceValidator {
         val target = modules.firstOrNull { it.invocation.gaplFunctionName == gaplFunctionName }
             ?: error("Function '$gaplFunctionName' no longer exists in the current source — regenerate this wrapper.")
 
-        val actualInputs = PortInspector.inputPorts(target).map { PortDescriptor(it.name, it.width) }
-        val actualOutputs = PortInspector.outputPorts(target).map { PortDescriptor(it.name, it.width) }
+        val actualInputs = PortInspector.inputPorts(target).map { PortDescriptor(it.name, it.shape) }
+        val actualOutputs = PortInspector.outputPorts(target).map { PortDescriptor(it.name, it.shape) }
 
         if (actualInputs != expectedInputs || actualOutputs != expectedOutputs) {
             error(

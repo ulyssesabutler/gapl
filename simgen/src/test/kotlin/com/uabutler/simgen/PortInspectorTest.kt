@@ -23,8 +23,8 @@ class PortInspectorTest {
             }
             """.trimIndent(),
         )
-        assertEquals(listOf(FlatPort("i", 8)), PortInspector.inputPorts(module))
-        assertEquals(listOf(FlatPort("o", 8)), PortInspector.outputPorts(module))
+        assertEquals(listOf(Port("i", PortShape.Leaf(8))), PortInspector.inputPorts(module))
+        assertEquals(listOf(Port("o", PortShape.Leaf(8))), PortInspector.outputPorts(module))
     }
 
     @Test
@@ -37,7 +37,64 @@ class PortInspectorTest {
             }
             """.trimIndent(),
         )
-        assertEquals(listOf(FlatPort("i1", 8), FlatPort("i2", 4)), PortInspector.inputPorts(module))
-        assertEquals(listOf(FlatPort("o1", 8), FlatPort("o2", 4)), PortInspector.outputPorts(module))
+        assertEquals(listOf(Port("i1", PortShape.Leaf(8)), Port("i2", PortShape.Leaf(4))), PortInspector.inputPorts(module))
+        assertEquals(listOf(Port("o1", PortShape.Leaf(8)), Port("o2", PortShape.Leaf(4))), PortInspector.outputPorts(module))
+    }
+
+    @Test
+    fun `record-shaped port`() {
+        val module = compile(
+            """
+            interface pair_type {
+                a: wire[8];
+                b: wire[4];
+            }
+
+            function test() i: pair_type => o: wire[8] {
+                i.a => o;
+            }
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf(Port("i", PortShape.Record(mapOf("a" to PortShape.Leaf(8), "b" to PortShape.Leaf(4))))),
+            PortInspector.inputPorts(module),
+        )
+    }
+
+    @Test
+    fun `array of records is a genuine Vector shape, not collapsed`() {
+        val module = compile(
+            """
+            interface pair_type {
+                a: wire[8];
+                b: wire[4];
+            }
+
+            function test() i: pair_type[3] => o: wire[8] {
+                i[0].a => o;
+            }
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf(
+                Port(
+                    "i",
+                    PortShape.Vector(PortShape.Record(mapOf("a" to PortShape.Leaf(8), "b" to PortShape.Leaf(4))), 3),
+                )
+            ),
+            PortInspector.inputPorts(module),
+        )
+    }
+
+    @Test
+    fun `array of plain wires collapses to a single flat Leaf`() {
+        val module = compile(
+            """
+            function test() i: wire[8][3] => o: wire[8] {
+                i[0] => o;
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf(Port("i", PortShape.Leaf(24))), PortInspector.inputPorts(module))
     }
 }
