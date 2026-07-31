@@ -25,6 +25,7 @@ include(
     "vcd", // Generic, GAPL-independent VCD waveform writer
     "simtrace", // Wires simengine + vcd together: walks a running Engine's instance tree and emits real VCD output
     "simgen", // Uses KotlinPoet to generate a named-port Kotlin wrapper class for a compiled GAPL design
+    "interpreter", // JSON-driven CLI over simengine's Engine: cycle-by-cycle inputs/expected-outputs, no codegen
     "lsp", // Language server wrapping analyzer for editor integrations
     "vscode-extension", // VSCode client for lsp
     "intellij-plugin", // IntelliJ-family client for lsp
