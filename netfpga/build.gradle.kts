@@ -104,24 +104,34 @@ fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension +
 val compilerPath = project(":compiler")
     .layout.buildDirectory.file("install/gapl/bin/gapl")
 
-val testPropsFile = configSrcRoot.resolve("test.properties")
+// Compiler settings (retime, flatten, ...) are per-variation
+val compilePropsFile = configSrcRoot.resolve("compile.properties")
+val compileProps = Properties().apply {
+    compilePropsFile.inputStream().use { load(it) }
+}
+
+// Test vectors (testInputs, testExpectedOutputs) exercise processor.gapl itself, which is
+// shared by every variation of an application, so they live one level up from the variation
+// directory. Retiming/flattening are meant to be semantics-preserving, so the same vectors
+// must hold regardless of which variation is selected.
+val testPropsFile = gaplSrcRoot.resolve("test.properties")
 val testProps = Properties().apply {
     testPropsFile.inputStream().use { load(it) }
 }
 
 fun propString(name: String, default: String? = null): String? =
     providers.gradleProperty(name).orNull
-        ?: testProps.getProperty(name)
+        ?: compileProps.getProperty(name)
         ?: default
 
 fun propBool(name: String, default: Boolean = false): Boolean =
-    (providers.gradleProperty(name).orNull ?: testProps.getProperty(name))
+    (providers.gradleProperty(name).orNull ?: compileProps.getProperty(name))
         ?.trim()
         ?.toBooleanStrictOrNull()
         ?: default
 
-val testInputs = propString("testInputs")!!
-val testExpectedOutputs = propString("testExpectedOutputs")!!
+val testInputs = providers.gradleProperty("testInputs").orNull ?: testProps.getProperty("testInputs")!!
+val testExpectedOutputs = providers.gradleProperty("testExpectedOutputs").orNull ?: testProps.getProperty("testExpectedOutputs")!!
 
 val retime = propBool("retime", true)
 

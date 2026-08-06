@@ -20,12 +20,12 @@ val generatorBinary = layout.buildDirectory.file("bin/$executableName")
 val generatorConfigFile = project.file("generator.properties")
 
 val programName = findProperty("programName")!! as String
-val programVariationName = findProperty("programVariationName")!! as String
 
+// Test vectors are per-application (shared by every variation of the app's processor.gapl),
+// not per-variation.
 val gaplSrcRoot = layout.projectDirectory.dir("../src/$programName").asFile
-val configSrcRoot = layout.projectDirectory.dir("../src/$programName/$programVariationName").asFile
 
-val testPropsFile = configSrcRoot.resolve("test.properties")
+val testPropsFile = gaplSrcRoot.resolve("test.properties")
 val testProps = Properties().apply {
     testPropsFile.inputStream().use { load(it) }
 }
