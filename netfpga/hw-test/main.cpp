@@ -104,6 +104,11 @@ int main(int argc, char** argv)
     std::cout << "Using parameters..." << std::endl;
     print_options(options);
 
+    if (!options.dest_mac_addr.empty())
+    {
+        set_static_arp_entry(options.transmit_interface, options.dest_ip_addr, options.dest_mac_addr);
+    }
+
     std::cout << "Starting receiver threads" << std::endl;
     std::vector<std::thread> receivers;
     for (const std::string& interface_name: options.receive_interfaces)

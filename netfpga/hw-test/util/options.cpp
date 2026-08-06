@@ -15,6 +15,7 @@ void print_options(const options& opts)
     std::cout << "  Transmitting Interface:  " << opts.transmit_interface << std::endl;
     std::cout << "  Source IP Address:       " << opts.src_ip_addr << std::endl;
     std::cout << "  Destination IP Address:  " << opts.dest_ip_addr << std::endl;
+    std::cout << "  Destination MAC Address: " << (opts.dest_mac_addr.empty() ? "(none, no static ARP entry will be added)" : opts.dest_mac_addr) << std::endl;
     std::cout << "  Port:                    " << opts.port << std::endl;
     std::cout << "  Inputs:                  " << vec_to_string(opts.inputs) << std::endl;
     std::cout << "  Expected Outputs:        " << vec_to_string(opts.expected_outputs) << std::endl;
@@ -27,6 +28,7 @@ void print_help()
     std::cout << "  -r Receiving Interfaces (specify one or more)" << std::endl;
     std::cout << "  -s Source IP Address" << std::endl;
     std::cout << "  -d Destination IP Address" << std::endl;
+    std::cout << "  -m Destination MAC Address (optional; installs a static ARP entry so no live ARP reply is needed)" << std::endl;
     std::cout << "  -p Port" << std::endl;
     std::cout << "  -i Inputs (specify as hex strings)" << std::endl;
     std::cout << "  -o Expected Outputs (specify as hex strings)" << std::endl;
@@ -40,10 +42,11 @@ options get_options(int argc, char** argv)
     std::string transmit_interface;
     std::string src_ip_addr;
     std::string dest_ip_addr;
+    std::string dest_mac_addr;
     std::string port;
 
     int input;
-    while ((input = getopt(argc, argv, "s:d:t:r:p:i:o:h")) != -1)
+    while ((input = getopt(argc, argv, "s:d:t:r:p:i:o:m:h")) != -1)
     {
         switch (input)
         {
@@ -52,6 +55,9 @@ options get_options(int argc, char** argv)
                 break;
             case 'd':
                 dest_ip_addr = std::string(optarg);
+                break;
+            case 'm':
+                dest_mac_addr = std::string(optarg);
                 break;
             case 't':
                 transmit_interface = std::string(optarg);
@@ -99,6 +105,7 @@ options get_options(int argc, char** argv)
         .transmit_interface = std::move(transmit_interface),
         .src_ip_addr = std::move(src_ip_addr),
         .dest_ip_addr = std::move(dest_ip_addr),
+        .dest_mac_addr = std::move(dest_mac_addr),
         .inputs = std::move(inputs),
         .expected_outputs = std::move(expected_outputs),
         .port = std::stoi(port)

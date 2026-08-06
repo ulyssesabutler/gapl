@@ -13,7 +13,10 @@
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <net/if_arp.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <cstdio>
 
 ifreq create_interface_request(const char* interface_name)
 {
@@ -91,6 +94,50 @@ int create_transmit_socket(const std::string& interface_name)
     set_kernel_header_creation(socket_fd, false);
 
     return socket_fd;
+}
+
+void set_static_arp_entry(const std::string& interface_name, const std::string& dest_ip, const std::string& dest_mac)
+{
+    std::cout << "    Setting static ARP entry: " << dest_ip << " -> " << dest_mac << " on " << interface_name << std::endl;
+
+    unsigned int mac_bytes[6];
+    if (sscanf(dest_mac.c_str(), "%x:%x:%x:%x:%x:%x",
+               &mac_bytes[0], &mac_bytes[1], &mac_bytes[2],
+               &mac_bytes[3], &mac_bytes[4], &mac_bytes[5]) != 6)
+    {
+        std::cerr << "Failed to parse MAC address: " << dest_mac << std::endl;
+        exit(-1);
+    }
+
+    arpreq req{};
+
+    auto* protocol_addr = reinterpret_cast<sockaddr_in*>(&req.arp_pa);
+    protocol_addr->sin_family = AF_INET;
+    protocol_addr->sin_addr.s_addr = inet_addr(dest_ip.c_str());
+
+    req.arp_ha.sa_family = ARPHRD_ETHER;
+    for (int i = 0; i < 6; i++)
+        req.arp_ha.sa_data[i] = static_cast<unsigned char>(mac_bytes[i]);
+
+    // ATF_PERM: don't let this entry expire; ATF_COM: the hardware address is filled in (as
+    // opposed to a "publish" entry, which would answer ARP requests on the target's behalf)
+    req.arp_flags = ATF_PERM | ATF_COM;
+    strncpy(req.arp_dev, interface_name.c_str(), sizeof(req.arp_dev) - 1);
+
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0)
+    {
+        perror("Failed to create socket for static ARP entry");
+        exit(-1);
+    }
+
+    if (ioctl(sockfd, SIOCSARP, &req) < 0)
+    {
+        perror("Failed to set static ARP entry");
+        exit(-1);
+    }
+
+    close(sockfd);
 }
 
 int create_receive_socket(const std::string& interface_name)

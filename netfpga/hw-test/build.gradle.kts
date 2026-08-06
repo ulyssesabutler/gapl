@@ -85,10 +85,15 @@ fun loadGeneratorArgsFromConfig(): List<String> {
         "-p", prop("port"),
     )
 
+    // Optional: if present, the generator installs a static ARP entry for destinationIP itself
+    // (requires cap_net_admin, granted to the binary by grantCapabilities), so no manual `arp -s`
+    // step or live ARP reply is needed.
+    val destinationMac = (props.getProperty("destinationMac")?.let { listOf("-m", it) } ?: emptyList())
+
     val inputs = (testInputs?.split(",") ?: emptyList()).flatMap { listOf("-i", it) }
     val expectedOutputs = (testExpectedOutputs?.split(",") ?: emptyList()).flatMap { listOf("-o", it) }
 
-    return args + inputs + expectedOutputs
+    return args + destinationMac + inputs + expectedOutputs
 }
 
 val requiredCapabilities = "cap_net_raw,cap_net_admin=eip"
