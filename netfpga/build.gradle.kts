@@ -311,107 +311,153 @@ tasks.register<Copy>("installConstraints") {
     )
 }
 
-// :netfpga:makeInit ---
-// Runs `make` in $SUME_FOLDER (one-time; guarded by a stamp file)
-tasks.register<Exec>("makeInit") {
-    group = "netfpga"
-    description = "Initialize NetFPGA project by running make in \$SUME_FOLDER"
-    workingDir = rootProject.projectDir
-    exportNetfpgaEnv()
-    dependsOn("installGaplVerilog")
-    dependsOn("installConstraints")
+// ---- NetFPGA IP-core packaging ----
+//
+// Every vendored core Makefile under lib/hw/{std,contrib,xilinx}/cores/*/ is a thin `all: clean`
+// wrapper around a single `vivado -mode {batch,tcl} -source <core>.tcl` call - `make` itself is
+// never incremental here, it wipes and repackages every core on every invocation. Gradle instead
+// invokes the same underlying Vivado scripts directly, with real inputs/outputs (each core's
+// `hdl/` + its `.tcl` script as inputs, the `component.xml`/`xgui/` it packages as outputs - verified
+// against an actual successful build), so these only rerun when something they depend on changed.
+
+data class NetfpgaCoreBuild(
+    val taskSuffix: String,
+    val relativeDir: String,
+    val tclFile: String,
+    val vivadoMode: String = "batch",
+)
+
+// Mirrors packet-processor/Makefile's `sume:` target (the active, uncommented lines only)
+val netfpgaStdCoreBuilds = listOf(
+    NetfpgaCoreBuild("NfEndianessManager", "lib/hw/contrib/cores/nf_endianess_manager_v1_0_0", "nf_endianess_manager.tcl"),
+    NetfpgaCoreBuild("FallthroughSmallFifo", "lib/hw/std/cores/fallthrough_small_fifo_v1_0_0", "fallthrough_small_fifo.tcl"),
+    NetfpgaCoreBuild("AxisFifo", "lib/hw/std/cores/axis_fifo_v1_0_0", "axis_fifo.tcl"),
+    NetfpgaCoreBuild("InputArbiter", "lib/hw/std/cores/input_arbiter_v1_0_0", "input_arbiter.tcl"),
+    NetfpgaCoreBuild("OutputQueues", "lib/hw/std/cores/output_queues_v1_0_0", "output_queues.tcl"),
+    NetfpgaCoreBuild("RouterOutputPortLookup", "lib/hw/std/cores/router_output_port_lookup_v1_0_0", "router_output_port_lookup.tcl"),
+    NetfpgaCoreBuild("SwitchOutputPortLookup", "lib/hw/std/cores/switch_output_port_lookup_v1_0_1", "switch_output_port_lookup.tcl"),
+    NetfpgaCoreBuild("SwitchLiteOutputPortLookup", "lib/hw/std/cores/switch_lite_output_port_lookup_v1_0_0", "switch_lite_output_port_lookup.tcl"),
+    NetfpgaCoreBuild("NicOutputPortLookup", "lib/hw/std/cores/nic_output_port_lookup_v1_0_0", "nic_output_port_lookup.tcl"),
+    NetfpgaCoreBuild("NfAxisConverter", "lib/hw/std/cores/nf_axis_converter_v1_0_0", "nf_axis_converter.tcl"),
+    NetfpgaCoreBuild("NfRiffaDma", "lib/hw/std/cores/nf_riffa_dma_v1_0_0", "nf_riffa_dma_tcl.tcl"),
+    NetfpgaCoreBuild("Barrier", "lib/hw/std/cores/barrier_v1_0_0", "barrier.tcl"),
+    NetfpgaCoreBuild("AxisSimRecord", "lib/hw/std/cores/axis_sim_record_v1_0_0", "axis_sim_record.tcl"),
+    NetfpgaCoreBuild("AxisSimStim", "lib/hw/std/cores/axis_sim_stim_v1_0_0", "axis_sim_stim.tcl"),
+    NetfpgaCoreBuild("AxiSimTransactor", "lib/hw/std/cores/axi_sim_transactor_v1_0_0", "axi_sim_transactor.tcl"),
+    NetfpgaCoreBuild("BarrierGluelogic", "lib/hw/std/cores/barrier_gluelogic_v1_0_0", "barrier_gluelogic.tcl"),
+    NetfpgaCoreBuild("Identifier", "lib/hw/std/cores/identifier_v1_0_0", "nf_identifier.tcl"),
+    NetfpgaCoreBuild("Nf10geAttachment", "lib/hw/std/cores/nf_10ge_attachment_v1_0_0", "nf_10ge_attachment_tcl.tcl"),
+    NetfpgaCoreBuild("Nf10geInterfaceShared", "lib/hw/std/cores/nf_10ge_interface_shared_v1_0_0", "nf_10ge_interface_shared.tcl"),
+    NetfpgaCoreBuild("Nf10geInterface", "lib/hw/std/cores/nf_10ge_interface_v1_0_0", "nf_10ge_interface.tcl"),
+    NetfpgaCoreBuild("NicOutputQueues", "lib/hw/std/cores/nic_output_queues_v1_0_0", "output_queues.tcl"),
+)
+
+fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
+    tasks.register<Exec>("packageCore${build.taskSuffix}") {
+        group = "netfpga-init"
+        description = "Package ${build.relativeDir} as a Vivado IP core (${build.tclFile})"
+
+        val coreDir = file("$sumeFolder/${build.relativeDir}")
+        workingDir = coreDir
+        exportNetfpgaEnv()
+
+        inputs.dir(coreDir.resolve("hdl"))
+        inputs.file(coreDir.resolve(build.tclFile))
+        outputs.file(coreDir.resolve("component.xml"))
+        outputs.dir(coreDir.resolve("xgui"))
+
+        commandLine(bash("""
+            set -euo pipefail
+            [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+            source "$vivadoSettings"
+            vivado -mode ${build.vivadoMode} -source ${build.tclFile}
+        """.trimIndent()))
+    }
+
+val netfpgaStdCoreBuildTasks = netfpgaStdCoreBuilds.map { registerNetfpgaCoreBuildTask(it) }
+
+// lib/sw/std/hwtestlib is a two-line `cc` compile - cheap regardless, kept simple
+tasks.register<Exec>("buildHwTestLib") {
+    group = "netfpga-init"
+    description = "Compile the NetFPGA hw-test C library (lib/sw/std/hwtestlib)"
+
+    val dir = file("$sumeFolder/lib/sw/std/hwtestlib")
+    workingDir = dir
+    inputs.file(dir.resolve("sume_reg.c"))
+    outputs.file(dir.resolve("libsume.so"))
 
     commandLine(bash("""
         set -euo pipefail
-        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
-        source "$vivadoSettings"
-
-        [ -d "${'$'}SUME_FOLDER" ] || { echo "SUME_FOLDER not found: ${'$'}SUME_FOLDER" >&2; exit 2; }
-        echo "[netfpga:init] SUME_FOLDER=${'$'}SUME_FOLDER"
-        make -C "${'$'}SUME_FOLDER"
+        cc -c -Wall -Werror -fPIC sume_reg.c -I../driver/sume_riffa_v1_0_0/
+        cc -shared -o libsume.so sume_reg.o
     """.trimIndent()))
 }
 
-// Build Xilinx CAM/TCAM IPs locally
-tasks.register<Exec>("makeIPs") {
+tasks.register("makeInit") {
     group = "netfpga"
-    description = "Check required ZIPs and build CAM/TCAM IPs in xilinx cores"
-    workingDir = rootProject.projectDir
-    exportNetfpgaEnv()
-
-    // Resolve the two IP directories under the vendored SUME folder
-    val ipRoot = xilinxIpFolder // e.g. $SUME_FOLDER/lib/hw/xilinx/cores
-    val tcamDir = "$ipRoot/tcam_v1_1_0"
-    val camDir  = "$ipRoot/cam_v1_1_0"
-    val requiredZip = "xapp1151_Param_CAM.zip"
-
-    commandLine(bash("""
-        set -euo pipefail
-
-        # Source Vivado environment
-        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
-        source "$vivadoSettings"
-
-        echo "[netfpga:makeIPs] SUME_FOLDER=${'$'}SUME_FOLDER"
-        echo "[netfpga:makeIPs] IP root: $ipRoot"
-
-        # Ensure dirs exist
-        for d in "$tcamDir" "$camDir"; do
-          [ -d "${'$'}d" ] || { echo "ERROR: IP directory not found: ${'$'}d" >&2; exit 3; }
-        done
-
-        # Verify required ZIP exists in both
-        for d in "$tcamDir" "$camDir"; do
-          if [ ! -f "${'$'}d/$requiredZip" ]; then
-            echo "ERROR: Missing ${requiredZip} in ${'$'}d" >&2
-            echo "Please place '${requiredZip}' into:" >&2
-            echo "  $tcamDir" >&2
-            echo "  $camDir"  >&2
-            exit 4
-          fi
-        done
-
-        # Build sequence for each: make, make sim, make
-        for d in "$tcamDir" "$camDir"; do
-          echo "[netfpga:makeIPs] Building in ${'$'}d"
-          make -C "${'$'}d" update
-          make -C "${'$'}d" sim
-          make -C "${'$'}d"
-        done
-
-        echo "[netfpga:makeIPs] Done."
-    """.trimIndent()))
+    description = "Package every NetFPGA std/contrib IP core and the hw-test C library " +
+        "(each task only rebuilds when its own sources changed)"
+    dependsOn(netfpgaStdCoreBuildTasks)
+    dependsOn("buildHwTestLib")
 }
 
-tasks.register<Exec>("remakeIPs") {
+// ---- Xilinx CAM/TCAM IPs ----
+//
+// These require a vendor zip (xapp1151_Param_CAM.zip) placed manually - see README.md - which is
+// then extracted once into hdl/vhdl/{tcam,cam}/. That extraction is itself now a tracked Gradle
+// task (inputs = the zip, outputs = the extracted .vhd sources), so placing the zip and running
+// this is a true one-time step: rerunning later is a no-op unless the zip actually changes.
+
+val xappZipName = "xapp1151_Param_CAM.zip"
+
+fun registerXappExtractTask(name: String, coreDirName: String): TaskProvider<Exec> {
+    val coreDir = file("$xilinxIpFolder/$coreDirName")
+    val zipFile = coreDir.resolve(xappZipName)
+    val vhdlOutDir = coreDir.resolve("hdl/vhdl/$name")
+
+    return tasks.register<Exec>("extract${name.replaceFirstChar { it.uppercase() }}VendorSources") {
+        group = "netfpga-init"
+        description = "Extract vendor $name VHDL sources from $xappZipName"
+        workingDir = coreDir
+
+        inputs.file(zipFile)
+        outputs.dir(vhdlOutDir)
+
+        doFirst {
+            if (!zipFile.exists()) {
+                throw GradleException(
+                    "Missing $xappZipName in ${coreDir.absolutePath} - see netfpga/README.md for " +
+                        "how to obtain it (a one-time manual download due to Xilinx licensing)."
+                )
+            }
+        }
+
+        commandLine(bash("""
+            set -euo pipefail
+            rm -rf xapp1151_cam_v1_1
+            unzip -o $xappZipName
+            bash ./scripts/run_update_lib.sh
+            cp -f ./xapp1151_cam_v1_1/src/vhdl/*.vhd ./hdl/vhdl/$name/
+        """.trimIndent()))
+    }
+}
+
+val extractTcamVendorSources = registerXappExtractTask("tcam", "tcam_v1_1_0")
+val extractCamVendorSources = registerXappExtractTask("cam", "cam_v1_1_0")
+
+val packageCoreTcam = registerNetfpgaCoreBuildTask(
+    NetfpgaCoreBuild("Tcam", "lib/hw/xilinx/cores/tcam_v1_1_0", "tcam.tcl", vivadoMode = "tcl")
+).apply { configure { dependsOn(extractTcamVendorSources) } }
+
+val packageCoreCam = registerNetfpgaCoreBuildTask(
+    NetfpgaCoreBuild("Cam", "lib/hw/xilinx/cores/cam_v1_1_0", "cam.tcl", vivadoMode = "tcl")
+).apply { configure { dependsOn(extractCamVendorSources) } }
+
+tasks.register("makeIPs") {
     group = "netfpga"
-    description = "Check required ZIPs and build CAM/TCAM IPs in xilinx cores"
-    workingDir = rootProject.projectDir
-    exportNetfpgaEnv()
-
-    // Resolve the two IP directories under the vendored SUME folder
-    val ipRoot = xilinxIpFolder // e.g. $SUME_FOLDER/lib/hw/xilinx/cores
-    val tcamDir = "$ipRoot/tcam_v1_1_0"
-    val camDir  = "$ipRoot/cam_v1_1_0"
-
-    commandLine(bash("""
-        set -euo pipefail
-
-        # Source Vivado environment
-        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
-        source "$vivadoSettings"
-
-        # Ensure dirs exist
-        for d in "$tcamDir" "$camDir"; do
-          [ -d "${'$'}d" ] || { echo "ERROR: IP directory not found: ${'$'}d" >&2; exit 3; }
-        done
-
-        # Build sequence for each: make, make sim, make
-        for d in "$tcamDir" "$camDir"; do
-          echo "[netfpga:makeIPs] Building in ${'$'}d"
-          make -C "${'$'}d"
-        done
-    """.trimIndent()))
+    description = "Package the Xilinx CAM/TCAM IP cores from the vendor zip " +
+        "(only re-extracts/rebuilds what's stale - safe to depend on from every build)"
+    dependsOn(packageCoreTcam, packageCoreCam)
 }
 
 
@@ -421,7 +467,7 @@ tasks.register<Exec>("makeBuild") {
     description = "Run make in \$NF_DESIGN_DIR after sourcing Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
-    dependsOn("installGaplVerilog")
+    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs")
 
     commandLine(bash("""
         set -euo pipefail
@@ -439,7 +485,7 @@ tasks.register<Exec>("runSimulation") {
     description = "Run tools/scripts/nf_test.py sim with NetFPGA env and Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
-    dependsOn("installGaplVerilog")
+    dependsOn("installGaplVerilog", "makeInit", "makeIPs")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("netfpgaSimTestMajor") as String?) ?: "simple"
@@ -687,11 +733,11 @@ tasks.register<Exec>("rebuildAndTest") {
     workingDir = rootProject.rootDir
 
     // Linux/macOS
+    // makeInit/makeIPs are no longer separate manual steps - :netfpga:build and :netfpga:runSimulation
+    // now dependOn them directly and only rebuild what's actually stale.
     commandLine("bash", "-lc", """
         set -euo pipefail
         ./gradlew clean
-        ./gradlew :netfpga:makeInit
-        ./gradlew :netfpga:remakeIPs
         ./gradlew :netfpga:build
         ./gradlew :netfpga:programFPGA
         ./gradlew :netfpga:runKernelTest

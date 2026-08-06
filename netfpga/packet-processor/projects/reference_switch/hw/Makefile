@@ -142,8 +142,8 @@ simgui: simclean identifier
 	$(SUME_FOLDER)/tools/scripts/nf_sim_reconcile_axi_logs.py
 	$(SUME_FOLDER)/tools/scripts/nf_sim_registers_axi_logs.py
 
-simclean: 
-	rm -rf proj_* vivado*.* *.*~ .Xil* $(NF_DESIGN_DIR)/hw/ip_repo/ $(NF_DESIGN_DIR)/hw/project/
+simclean:
+	rm -rf proj_* vivado*.* *.*~ .Xil* $(NF_DESIGN_DIR)/hw/ip_repo/ $(NF_DESIGN_DIR)/hw/project_sim/
 	rm -rf *[0-9]_{stim,expected,log}.axi
 	rm -f *.axi
 	rm -f portconfig.sim

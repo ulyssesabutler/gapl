@@ -34,23 +34,24 @@ Specifically, you can edit the `src/packet_body_processor.gapl` file.
 
 ## Initial setup
 
-1. Build the NetFPGA to setup the project
-- `./gradlew :netfpga:makeInit`
-- This will load the Vivado settings using the file specified in `gradle.properties`, and then run `make` in the main NetFPGA project.
-- This is expected to take a while, normally, 5-10 minutes.
+`./gradlew :netfpga:build` and `./gradlew :netfpga:runSimulation` automatically pull in everything
+below as prerequisites (`makeInit`, `makeIPs`, GAPL compilation, constraints) - each one only
+rebuilds the pieces whose sources actually changed, so you don't need to run them manually or in
+a specific order. The only genuinely manual, one-time step is placing the CAM/TCAM vendor zip:
 
-2. Build the CAM and TCAM IPs
+1. Download the CAM/TCAM IPs
 - This is a closed-source submodule that is not distributed by NetFPGA, but can be downloaded from Xilinx.
 - Download the [module](https://www.xilinx.com/member/forms/download/design-license.html?cid=154257&filename=xapp1151_Param_CAM.zip).
-- If the IPs have not been built before
-    - Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/tcam_v1_1_0`.
-    - Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/cam_v1_1_0`.
-    - Run `./gradlew :netfpga:makeIPs`
-- If the IPs have been built before
-    - Run `./gradlew :netfpga:remakeIPs`
+- Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/tcam_v1_1_0`.
+- Copy the `xapp1151_Param_CAM.zip` file into `packet-processor/lib/hw/xilinx/cores/cam_v1_1_0`.
 
-3. Build the packet processor
+2. Build the packet processor
 - `./gradlew :netfpga:build`
+- The first run packages every NetFPGA std/contrib IP core and the CAM/TCAM IPs (`makeInit`/`makeIPs`,
+  run automatically) before building the design - expect this first run to take a while (normally
+  5-10 minutes). Subsequent runs skip anything that hasn't changed.
+- To run these steps by hand instead (e.g. to pre-warm them without a full build), `./gradlew
+  :netfpga:makeInit` and `./gradlew :netfpga:makeIPs` are still available directly.
 
 ## Simulation
 

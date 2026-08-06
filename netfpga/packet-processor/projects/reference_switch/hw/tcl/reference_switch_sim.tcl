@@ -32,7 +32,11 @@ set design $::env(NF_PROJECT_NAME)
 set top top_sim
 set sim_top top_tb
 set device  xc7vx690t-3-ffg1761
-set proj_dir ./project
+set proj_dir ./project_sim
+# GAPL: kept separate from create_project.tcl's ./project so that running a simulation
+# (whose Makefile target always cleans this dir first) doesn't destroy a synthesized/
+# implemented bitstream project, and vice versa. Keep this in sync with hw/Makefile's
+# simclean target if this ever changes.
 set public_repo_dir $::env(SUME_FOLDER)/lib/hw/
 set xilinx_repo_dir $::env(XILINX_PATH)/data/ip/xilinx/
 set repo_dir ./ip_repo
