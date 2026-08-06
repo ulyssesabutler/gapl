@@ -50,3 +50,19 @@ There are a few different validations we need to do, but currently don't.
   git repo/submodule). The files still declare `package retiming` rather than a package matching
   their directory - harmless (Kotlin doesn't require the two to match), but worth cleaning up
   if these are ever touched again.
+
+## NetFPGA build (Gradle)
+- `netfpga/build.gradle.kts`'s per-core IP packaging tasks (`packageCore*`, registered via
+  `registerNetfpgaCoreBuildTask`) declare `component.xml`/`xgui/` as Gradle `outputs`, so that
+  `makeInit`/`makeIPs` skip re-invoking Vivado when nothing changed. This assumes Vivado's
+  `ipx::save_core` produces deterministic output content for the same input RTL/tcl - if it
+  actually embeds something nondeterministic (a timestamp is the common culprit for Vivado IP
+  packaging), Gradle would see the output as "changed since last recorded" on every run and
+  re-execute every one of these ~23 tasks unconditionally, defeating the incremental-build point
+  of the whole exercise (though not causing incorrect behavior - re-running Vivado is still safe).
+  Unverified: this repo's sandbox has no Vivado install to check against. Confirm empirically by
+  running `:netfpga:makeInit` twice in a row with nothing changed and checking whether the
+  `packageCore*` tasks report `UP-TO-DATE` the second time; if not, likely fix is normalizing/
+  stripping the nondeterministic field(s) from `component.xml` before Gradle fingerprints it
+  (e.g. via a `normalizeLineEndings`-style content filter, or excluding the offending field with
+  a custom `FileNormalizer`), rather than accepting an always-reruns task.
