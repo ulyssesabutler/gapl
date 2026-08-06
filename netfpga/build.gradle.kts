@@ -325,6 +325,13 @@ data class NetfpgaCoreBuild(
     val relativeDir: String,
     val tclFile: String,
     val vivadoMode: String = "batch",
+    // Paths (relative to the core dir) to delete before each run. Only needed where the .tcl
+    // script itself does `file copy -force <dir>/ <dest>/` to pull in a sibling core's sources:
+    // Tcl's file copy does NOT merge into an already-existing destination directory - on a repeat
+    // run it nests the source under it instead, colliding with what the previous run left behind
+    // and erroring out. The vendored Makefiles' `clean:` targets deleted these first for exactly
+    // this reason; everything else here relies on `create_project -force` for idempotency instead.
+    val preCleanPaths: List<String> = emptyList(),
 )
 
 // Mirrors packet-processor/Makefile's `sume:` target (the active, uncommented lines only)
@@ -342,8 +349,8 @@ val netfpgaStdCoreBuilds = listOf(
     NetfpgaCoreBuild("NfRiffaDma", "lib/hw/std/cores/nf_riffa_dma_v1_0_0", "nf_riffa_dma_tcl.tcl"),
     NetfpgaCoreBuild("Barrier", "lib/hw/std/cores/barrier_v1_0_0", "barrier.tcl"),
     NetfpgaCoreBuild("AxisSimRecord", "lib/hw/std/cores/axis_sim_record_v1_0_0", "axis_sim_record.tcl"),
-    NetfpgaCoreBuild("AxisSimStim", "lib/hw/std/cores/axis_sim_stim_v1_0_0", "axis_sim_stim.tcl"),
-    NetfpgaCoreBuild("AxiSimTransactor", "lib/hw/std/cores/axi_sim_transactor_v1_0_0", "axi_sim_transactor.tcl"),
+    NetfpgaCoreBuild("AxisSimStim", "lib/hw/std/cores/axis_sim_stim_v1_0_0", "axis_sim_stim.tcl", preCleanPaths = listOf("hdl/axis_sim_pkg")),
+    NetfpgaCoreBuild("AxiSimTransactor", "lib/hw/std/cores/axi_sim_transactor_v1_0_0", "axi_sim_transactor.tcl", preCleanPaths = listOf("hdl/axis_sim_pkg")),
     NetfpgaCoreBuild("BarrierGluelogic", "lib/hw/std/cores/barrier_gluelogic_v1_0_0", "barrier_gluelogic.tcl"),
     NetfpgaCoreBuild("Identifier", "lib/hw/std/cores/identifier_v1_0_0", "nf_identifier.tcl"),
     NetfpgaCoreBuild("Nf10geAttachment", "lib/hw/std/cores/nf_10ge_attachment_v1_0_0", "nf_10ge_attachment_tcl.tcl"),
@@ -365,6 +372,10 @@ fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
         inputs.file(coreDir.resolve(build.tclFile))
         outputs.file(coreDir.resolve("component.xml"))
         outputs.dir(coreDir.resolve("xgui"))
+
+        doFirst {
+            build.preCleanPaths.forEach { delete(coreDir.resolve(it)) }
+        }
 
         commandLine(bash("""
             set -euo pipefail
