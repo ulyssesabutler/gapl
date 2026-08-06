@@ -485,7 +485,9 @@ tasks.register<Exec>("runSimulation") {
     description = "Run tools/scripts/nf_test.py sim with NetFPGA env and Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
-    dependsOn("installGaplVerilog", "makeInit", "makeIPs")
+    // reference_switch_sim.tcl reads hw/constraints/nf_sume_general.xdc into a constraints
+    // fileset just like create_project.tcl does, so simulation needs it installed too.
+    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("netfpgaSimTestMajor") as String?) ?: "simple"
