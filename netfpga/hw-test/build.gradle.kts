@@ -91,10 +91,41 @@ fun loadGeneratorArgsFromConfig(): List<String> {
     return args + inputs + expectedOutputs
 }
 
+val requiredCapabilities = "cap_net_raw,cap_net_admin=eip"
+
+fun hasRequiredCapabilities(binary: java.io.File): Boolean {
+    if (!binary.exists()) return false
+    return try {
+        val process = ProcessBuilder("getcap", binary.absolutePath).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+        output.contains(requiredCapabilities)
+    } catch (e: java.io.IOException) {
+        false
+    }
+}
+
+tasks.register<Exec>("grantCapabilities") {
+    group = "application"
+    description = "Grant the generator binary raw-socket capabilities via setcap, so it can run without sudo"
+    dependsOn("buildTest")
+
+    val binary = generatorBinary.get().asFile
+
+    // Re-running buildTest produces a new binary file, which loses any previously granted
+    // capabilities, so this can't just track buildTest's up-to-date-ness - it has to check
+    // the binary itself.
+    outputs.upToDateWhen { hasRequiredCapabilities(binary) }
+
+    doFirst {
+        commandLine("sudo", "setcap", requiredCapabilities, binary.absolutePath)
+    }
+}
+
 tasks.register<Exec>("runTest") {
     group = "application"
     description = "Run the traffic generator using generator.properties"
-    dependsOn("buildTest")
+    dependsOn("grantCapabilities")
 
     // Changing the config should make Gradle rerun this
     inputs.file(generatorConfigFile)
