@@ -130,3 +130,40 @@ There are a few different validations we need to do, but currently don't.
   face the identical `NEEDS_REFRESH`-cascade problem for the same unexplained reason, so validate
   that concern *before* investing in it, e.g. by testing whether a manually-invoked `read_checkpoint`
   based flow shows the same top-level-run cascade behavior on a small throwaway example first.
+
+- **Update - a real, clean partial win landed despite the Vivado-internal mystery staying
+  unresolved**: gave `makeBuild` (`netfpga/build.gradle.kts`) real `inputs`/`outputs` (RTL under
+  `hw/hdl/**`, constraints, the gapl_kernel core's `component.xml`), so Gradle itself skips
+  invoking `make`/Vivado at all when nothing tracked changed - independent of whatever Vivado's
+  own internals do. Verified with real Vivado: a repeat build with nothing changed went from ~40
+  minutes to **11 seconds** (`43 actionable tasks: 43 up-to-date`). This doesn't fix the "Vivado
+  always relaunches everything internally" mystery, but it does mean the common "I built this
+  exact thing already, nothing changed, build again" case is now genuinely fast - a real
+  usability win even though the "switch applications quickly" goal (which requires Vivado itself
+  to be selective) remains unmet.
+
+- **Confirmed Step 3.0's answer directly**: switching applications (regex -> md5) does *not* skip
+  `control_sub`'s sub-runs - same full relaunch as the "nothing changed" case (28+ `control_sub_*`
+  matches in the log, `gapl_kernel_ip_synth_1` also relaunched). Consistent with the `NEEDS_REFRESH`
+  finding above: since even *zero* changes triggers full relaunch, this was the expected outcome,
+  not new information - but it's now been directly verified for the actual app-switch scenario
+  rather than inferred. Build still succeeded and produced a correct, differently-sized bitstream
+  (regex: 9,367,088 bytes vs md5: 9,721,052 bytes - real evidence of different kernel content, not
+  a stale reuse), so correctness held even though performance for this case did not improve.
+
+- **Found a latent bug while confirming the above, currently harmless only by accident**: the
+  conditional `.xci` refresh check added to `run_synth.tcl` (compares `component.xml`'s mtime
+  against the project's `gapl_kernel_ip.xci` mtime, only calls `upgrade_ip`/`generate_target` when
+  the former is newer) incorrectly decided "already up to date, skip" on the md5 switch, even
+  though the packaged core's content had just genuinely changed. Observed cause: the `.xci`'s
+  mtime was *itself* ~59 seconds newer than the freshly-regenerated `component.xml` - something
+  (possibly `open_project` itself touching IP metadata on load) bumps the `.xci`'s mtime
+  independent of actual content changes, defeating a simple mtime comparison. This is harmless
+  *today* only because Vivado's own blanket "relaunch everything" behavior means
+  `gapl_kernel_ip_synth_1` gets resynthesized from the (always-fresh, since
+  `packageCoreGaplKernel`'s `doFirst` unconditionally copies current content) source files
+  regardless of whether the `.xci` itself got refreshed. If the `NEEDS_REFRESH`-cascade mystery
+  above ever gets fixed and Vivado starts being genuinely selective, this check would need to be
+  content-hash-based (or otherwise more reliable than mtime) rather than timestamp-based, or it
+  could silently reintroduce the "switching apps builds the stale kernel" correctness bug it was
+  written to prevent.
