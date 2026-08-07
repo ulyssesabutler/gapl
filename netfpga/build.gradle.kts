@@ -332,31 +332,42 @@ data class NetfpgaCoreBuild(
     // and erroring out. The vendored Makefiles' `clean:` targets deleted these first for exactly
     // this reason; everything else here relies on `create_project -force` for idempotency instead.
     val preCleanPaths: List<String> = emptyList(),
+    // taskSuffix values of other cores (in this list, or Tcam/Cam registered separately below)
+    // whose packaging must complete first, extracted by reading every core's `ipx::add_subcore`
+    // calls (including the two that resolve the VLNV dynamically via `get_ipdefs`) and keeping
+    // only the ones referencing another one of our own packaged cores - a real dependency graph,
+    // not the Makefile's incidental line order, so genuinely-independent cores can build in
+    // parallel (with `--parallel`) while the real chains still wait correctly. See git history
+    // for the concrete "IP is locked ... subcore(s) not found" failure that motivated this.
+    val mustRunAfterCores: List<String> = emptyList(),
 )
 
 // Mirrors packet-processor/Makefile's `sume:` target (the active, uncommented lines only)
 val netfpgaStdCoreBuilds = listOf(
     NetfpgaCoreBuild("NfEndianessManager", "lib/hw/contrib/cores/nf_endianess_manager_v1_0_0", "nf_endianess_manager.tcl"),
     NetfpgaCoreBuild("FallthroughSmallFifo", "lib/hw/std/cores/fallthrough_small_fifo_v1_0_0", "fallthrough_small_fifo.tcl"),
-    NetfpgaCoreBuild("AxisFifo", "lib/hw/std/cores/axis_fifo_v1_0_0", "axis_fifo.tcl"),
-    NetfpgaCoreBuild("InputArbiter", "lib/hw/std/cores/input_arbiter_v1_0_0", "input_arbiter.tcl"),
-    NetfpgaCoreBuild("OutputQueues", "lib/hw/std/cores/output_queues_v1_0_0", "output_queues.tcl"),
-    NetfpgaCoreBuild("RouterOutputPortLookup", "lib/hw/std/cores/router_output_port_lookup_v1_0_0", "router_output_port_lookup.tcl"),
-    NetfpgaCoreBuild("SwitchOutputPortLookup", "lib/hw/std/cores/switch_output_port_lookup_v1_0_1", "switch_output_port_lookup.tcl"),
-    NetfpgaCoreBuild("SwitchLiteOutputPortLookup", "lib/hw/std/cores/switch_lite_output_port_lookup_v1_0_0", "switch_lite_output_port_lookup.tcl"),
-    NetfpgaCoreBuild("NicOutputPortLookup", "lib/hw/std/cores/nic_output_port_lookup_v1_0_0", "nic_output_port_lookup.tcl"),
-    NetfpgaCoreBuild("NfAxisConverter", "lib/hw/std/cores/nf_axis_converter_v1_0_0", "nf_axis_converter.tcl"),
-    NetfpgaCoreBuild("NfRiffaDma", "lib/hw/std/cores/nf_riffa_dma_v1_0_0", "nf_riffa_dma_tcl.tcl"),
+    NetfpgaCoreBuild("AxisFifo", "lib/hw/std/cores/axis_fifo_v1_0_0", "axis_fifo.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    NetfpgaCoreBuild("InputArbiter", "lib/hw/std/cores/input_arbiter_v1_0_0", "input_arbiter.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    NetfpgaCoreBuild("OutputQueues", "lib/hw/std/cores/output_queues_v1_0_0", "output_queues.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    // Also depends on Tcam/Cam (xilinx:xilinx:{tcam,cam}:1.10 subcores) - wired below, once those
+    // tasks exist.
+    NetfpgaCoreBuild("RouterOutputPortLookup", "lib/hw/std/cores/router_output_port_lookup_v1_0_0", "router_output_port_lookup.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    // Also depends on Cam (xilinx:xilinx:cam:1.10 subcore) - wired below.
+    NetfpgaCoreBuild("SwitchOutputPortLookup", "lib/hw/std/cores/switch_output_port_lookup_v1_0_1", "switch_output_port_lookup.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    NetfpgaCoreBuild("SwitchLiteOutputPortLookup", "lib/hw/std/cores/switch_lite_output_port_lookup_v1_0_0", "switch_lite_output_port_lookup.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    NetfpgaCoreBuild("NicOutputPortLookup", "lib/hw/std/cores/nic_output_port_lookup_v1_0_0", "nic_output_port_lookup.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
+    NetfpgaCoreBuild("NfAxisConverter", "lib/hw/std/cores/nf_axis_converter_v1_0_0", "nf_axis_converter.tcl", mustRunAfterCores = listOf("AxisFifo", "FallthroughSmallFifo")),
+    NetfpgaCoreBuild("NfRiffaDma", "lib/hw/std/cores/nf_riffa_dma_v1_0_0", "nf_riffa_dma_tcl.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
     NetfpgaCoreBuild("Barrier", "lib/hw/std/cores/barrier_v1_0_0", "barrier.tcl"),
     NetfpgaCoreBuild("AxisSimRecord", "lib/hw/std/cores/axis_sim_record_v1_0_0", "axis_sim_record.tcl"),
     NetfpgaCoreBuild("AxisSimStim", "lib/hw/std/cores/axis_sim_stim_v1_0_0", "axis_sim_stim.tcl", preCleanPaths = listOf("hdl/axis_sim_pkg")),
     NetfpgaCoreBuild("AxiSimTransactor", "lib/hw/std/cores/axi_sim_transactor_v1_0_0", "axi_sim_transactor.tcl", preCleanPaths = listOf("hdl/axis_sim_pkg")),
     NetfpgaCoreBuild("BarrierGluelogic", "lib/hw/std/cores/barrier_gluelogic_v1_0_0", "barrier_gluelogic.tcl"),
     NetfpgaCoreBuild("Identifier", "lib/hw/std/cores/identifier_v1_0_0", "nf_identifier.tcl"),
-    NetfpgaCoreBuild("Nf10geAttachment", "lib/hw/std/cores/nf_10ge_attachment_v1_0_0", "nf_10ge_attachment_tcl.tcl"),
-    NetfpgaCoreBuild("Nf10geInterfaceShared", "lib/hw/std/cores/nf_10ge_interface_shared_v1_0_0", "nf_10ge_interface_shared.tcl"),
-    NetfpgaCoreBuild("Nf10geInterface", "lib/hw/std/cores/nf_10ge_interface_v1_0_0", "nf_10ge_interface.tcl"),
-    NetfpgaCoreBuild("NicOutputQueues", "lib/hw/std/cores/nic_output_queues_v1_0_0", "output_queues.tcl"),
+    NetfpgaCoreBuild("Nf10geAttachment", "lib/hw/std/cores/nf_10ge_attachment_v1_0_0", "nf_10ge_attachment_tcl.tcl", mustRunAfterCores = listOf("NfAxisConverter", "FallthroughSmallFifo")),
+    NetfpgaCoreBuild("Nf10geInterfaceShared", "lib/hw/std/cores/nf_10ge_interface_shared_v1_0_0", "nf_10ge_interface_shared.tcl", mustRunAfterCores = listOf("NfAxisConverter", "Nf10geAttachment", "FallthroughSmallFifo")),
+    NetfpgaCoreBuild("Nf10geInterface", "lib/hw/std/cores/nf_10ge_interface_v1_0_0", "nf_10ge_interface.tcl", mustRunAfterCores = listOf("NfAxisConverter", "Nf10geAttachment", "FallthroughSmallFifo")),
+    NetfpgaCoreBuild("NicOutputQueues", "lib/hw/std/cores/nic_output_queues_v1_0_0", "output_queues.tcl", mustRunAfterCores = listOf("FallthroughSmallFifo")),
 )
 
 fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
@@ -385,19 +396,21 @@ fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
         """.trimIndent()))
     }
 
-val netfpgaStdCoreBuildTasks = netfpgaStdCoreBuilds.map { registerNetfpgaCoreBuildTask(it) }
+val netfpgaStdCoreBuildTasksBySuffix = netfpgaStdCoreBuilds.associateWith { registerNetfpgaCoreBuildTask(it) }
+    .mapKeys { (build, _) -> build.taskSuffix }
+val netfpgaStdCoreBuildTasks = netfpgaStdCoreBuildTasksBySuffix.values.toList()
 
-// Several cores' IP-XACT packaging (`ipx::add_subcore` in their .tcl) references other cores by
-// VLNV (e.g. nf_10ge_interface depends on nf_axis_converter, nf_10g_attachment, and
-// fallthrough_small_fifo; fallthrough_small_fifo itself is a subcore of ~9 others) and needs them
-// already registered in the IP catalog at package time - otherwise the dependency reference gets
-// saved as broken, which later shows up as "IP is locked ... subcore(s) not found" when
-// create_project.tcl tries to instantiate it. The vendored Makefile's `sume:` target built these
-// serially in an order that respects this; Gradle doesn't order independent sibling tasks on its
-// own, so pin them to the same relative order here. mustRunAfter (not dependsOn) only constrains
-// ordering among tasks that are already both scheduled to run - it doesn't force a rebuild of an
-// otherwise-up-to-date core just because an earlier one in the list needs to rebuild.
-netfpgaStdCoreBuildTasks.zipWithNext { earlier, later -> later.configure { mustRunAfter(earlier) } }
+// Wire each core's real subcore dependencies (see NetfpgaCoreBuild.mustRunAfterCores) as Gradle
+// ordering constraints. mustRunAfter (not dependsOn) only constrains ordering among tasks that
+// are already both scheduled to run - it doesn't force a rebuild of an otherwise-up-to-date core
+// just because one of its dependencies needs to rebuild, and it doesn't prevent unrelated cores
+// from running in parallel under --parallel.
+netfpgaStdCoreBuilds.forEach { build ->
+    val task = netfpgaStdCoreBuildTasksBySuffix.getValue(build.taskSuffix)
+    build.mustRunAfterCores.forEach { dep ->
+        task.configure { mustRunAfter(netfpgaStdCoreBuildTasksBySuffix.getValue(dep)) }
+    }
+}
 
 // lib/sw/std/hwtestlib is a two-line `cc` compile - cheap regardless, kept simple
 tasks.register<Exec>("buildHwTestLib") {
@@ -475,6 +488,12 @@ val packageCoreTcam = registerNetfpgaCoreBuildTask(
 val packageCoreCam = registerNetfpgaCoreBuildTask(
     NetfpgaCoreBuild("Cam", "lib/hw/xilinx/cores/cam_v1_1_0", "cam.tcl", vivadoMode = "tcl")
 ).apply { configure { dependsOn(extractCamVendorSources) } }
+
+// router_output_port_lookup and switch_output_port_lookup declare xilinx:xilinx:{tcam,cam}:1.10
+// as subcores (matching Tcam/Cam's own registered VLNV) - same ordering hazard as the std-core
+// dependencies above, just crossing from makeIPs into makeInit's task set.
+netfpgaStdCoreBuildTasksBySuffix.getValue("RouterOutputPortLookup").configure { mustRunAfter(packageCoreTcam, packageCoreCam) }
+netfpgaStdCoreBuildTasksBySuffix.getValue("SwitchOutputPortLookup").configure { mustRunAfter(packageCoreCam) }
 
 tasks.register("makeIPs") {
     group = "netfpga"
