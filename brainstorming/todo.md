@@ -241,3 +241,39 @@ There are a few different validations we need to do, but currently don't.
     scenario it's designed for. This is the "cheaper, lower-effort alternative" mentioned back when
     this whole investigation started and was never actually tried - worth trying now, on the
     implementation side specifically, before considering the bigger checkpoint/blackbox rewrite.
+
+- **Update - implemented and tested incremental compile for `impl_1` (commit `e72d30b`), decisive
+  negative result**. `run_impl.tcl` now preserves the routed `.dcp` outside the run directory after
+  each successful implementation and sets `incremental_checkpoint` from it on the next run, when
+  available. Ran two real builds back to back (same app, nothing else changed) to isolate the
+  effect:
+  - Baseline (no prior checkpoint, full P&R): `place_design` 4m49s, `route_design` 4m9s, total
+    `make` wall-clock 54m35s.
+  - With the incremental checkpoint available and confirmed used (`GAPL: found previous routed
+    checkpoint, using as incremental_checkpoint`): `place_design` 4m34s, `route_design` 4m5s, total
+    `make` wall-clock ~51-52 minutes.
+  - The difference (~15s on placement, ~4s on routing, out of ~9 minutes combined) is noise, not a
+    real effect. Incremental compile as configured here provides **no meaningful speedup**. Most
+    likely explanation: since `synth_1` has no skip-if-unchanged behavior of its own (established
+    above), the netlist it produces each time - even for logically identical RTL - is regenerated
+    from scratch and likely differs enough at the cell/instance-name level that Vivado's
+    incremental placement algorithm can't recognize much as truly matching the previous checkpoint,
+    so it ends up doing close to a full placement anyway. Not investigated further (e.g. whether a
+    stricter/different incremental-compile mode, or `write_checkpoint -cell`-level granularity,
+    would do better) - diminishing returns for the effort already spent, and this alone wouldn't
+    have addressed the synthesis-side cascade either.
+
+**Where this leaves the whole investigation**: every readily-actionable lever has now been tried
+and measured with real Vivado data. Summary of the actual cost breakdown for a full rebuild with
+nothing logically changed (~51-55 minutes total): ~12 minutes synthesis (all 30+ sub-runs, run in
+parallel via `-jobs 8` - genuinely redone every time, `launch_runs` has no skip-if-unchanged
+behavior for this project structure in any tested configuration) + ~9 minutes place & route
+(likewise always redone in full, incremental checkpointing doesn't help) + the remainder in
+bitstream generation, reporting, and the SDK/ELF export steps. The Gradle-level fix (11s no-op when
+*nothing* Gradle-tracked changed) remains the one clean, working win. Getting below the ~51-55
+minute floor for a genuine application switch would require the full checkpoint/blackbox rewrite
+discussed with the user - and even that would only remove the ~12 minute synthesis portion (based
+on everything measured here), not the larger ~9+ minute place-and-route-and-beyond portion, since
+incremental placement reuse has now also been shown not to work in this configuration. Realistic
+expected improvement from the big rewrite, if it works at all: roughly 51-55 min -> ~40-43 min for
+an application switch, not a total elimination of the wait.
