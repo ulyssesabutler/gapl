@@ -206,3 +206,38 @@ There are a few different validations we need to do, but currently don't.
   - The `identifier_ip` checkpoint fix is kept (real, if small, improvement; commit
     `7f015cf`/message references this investigation) even though it didn't solve the bigger
     problem - no reason to revert a correct, defensible change.
+
+- **Update - tested candidate 3 (same-session persistence) directly, decisive negative, but with an
+  important, more valuable discovery alongside it**:
+  - Ran `launch_runs synth_1` to completion once (from `reset_run`, a clean baseline), then called
+    `launch_runs synth_1` *again* immediately - same Vivado process, no `open_project`, nothing
+    touched in between. It still threw `ERROR: [Common 17-69] Command failed: Run 'synth_1' needs
+    to be reset before launching.` So this rules out "fresh session vs. persistent session" as the
+    explanation entirely - it's not about how Vivado is invoked.
+  - This also clarifies the actual mechanism: `launch_runs`, at least for this top-level flat run,
+    appears to have **no built-in "skip if nothing changed" logic at all** - it isn't that Vivado
+    checks staleness and gets it wrong, it's that calling `launch_runs` on an already-`Complete!`
+    run unconditionally either (a) errors demanding `reset_run` (same session) or (b) silently
+    redoes the work in full (fresh session, no error) - never "recognizes nothing changed and
+    skips." The GUI's well-known "click Generate Bitstream twice, second time is instant" behavior
+    is most likely implemented by the GUI itself deciding *not to call* `launch_runs` at all when
+    it judges nothing changed, not by `launch_runs` doing that judgment internally. This matches
+    everything observed all session: Gradle's own tracking (which does exactly this - decides not
+    to invoke `make`/Vivado at all - and works, 11s confirmed) is structurally the right kind of
+    fix; Vivado's own command surface doesn't do this for you.
+  - **Important reframing of the actual cost, found while checking Phase 1's per-run timing**:
+    individual sub-runs *did* take their genuine full ~2-3 minutes each in this test's "full redo"
+    (confirmed via each one's own `synth_design: Time` log line matching their original synthesis
+    time - not a fast skip), but because `launch_runs -jobs 8` runs them in parallel, the *wall-clock*
+    cost of a full synthesis redo is only ~12 minutes, not 40+. The ~44-59 minute full-build times
+    measured earlier include both synthesis (~12 min) *and* implementation (place & route +
+    bitstream) - and this investigation has so far only tested synthesis in isolation.
+    Implementation is almost certainly the larger, still-unexamined cost, and it's a *different*
+    problem from the synthesis-cascade one investigated above: `impl_1` depends on `synth_1`'s
+    output netlist, and since `synth_1` has no skip-if-unchanged behavior either, `impl_1` would
+    plausibly always see a "new" netlist and always redo full place & route - **unless** Vivado's
+    incremental compile feature (`incremental_checkpoint` on `impl_1`, reusing prior *placement*
+    even against a nominally-new-but-logically-similar netlist) helps here, which is exactly the
+    scenario it's designed for. This is the "cheaper, lower-effort alternative" mentioned back when
+    this whole investigation started and was never actually tried - worth trying now, on the
+    implementation side specifically, before considering the bigger checkpoint/blackbox rewrite.
