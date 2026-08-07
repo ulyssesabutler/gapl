@@ -167,3 +167,42 @@ There are a few different validations we need to do, but currently don't.
   content-hash-based (or otherwise more reliable than mtime) rather than timestamp-based, or it
   could silently reintroduce the "switching apps builds the stale kernel" correctness bug it was
   written to prevent.
+
+- **Root cause of the full-relaunch mystery found (partially) and tested to a decisive negative
+  result** - asked to keep investigating after the write-up above, found the actual mechanism
+  rather than a property to interpret:
+  - `identifier_ip` (a `blk_mem_gen` IP in `create_project.tcl`, `generate_synth_checkpoint false`
+    like most cores here) has `CONFIG.Coe_File` pointing at `create_ip/id_rom16x32.coe`, which
+    `hw/Makefile`'s `identifier:` target regenerates on *every* `make` invocation (a bare
+    prerequisite of `project:`, not conditionally skipped) using `tools/scripts/epoch.sh` -
+    literally `date +%s`, a fresh Unix timestamp baked in every single build by design. Confirmed
+    empirically: three consecutive `make identifier` runs produced three different file hashes.
+  - Confirmed this is *the* mechanism (not a coincidence) via direct, non-full-build testing: with
+    `identifier_ip` not yet checkpointed, `launch_runs synth_1` in a fresh session throws
+    `ERROR: Run 'synth_1' needs to be reset before launching`, immediately after
+    `Generating 'Synthesis' target for IP 'identifier_ip'`. This is almost certainly why the
+    original vendored script had unconditional `reset_run` - it was compensating for exactly this.
+  - **Fix attempted**: gave `identifier_ip` a checkpoint too (removed its
+    `generate_synth_checkpoint false`, same technique as `gapl_kernel_ip`), isolating its
+    unavoidable per-build churn into its own tiny sub-run (`identifier_ip_synth_1`) instead of
+    feeding directly into the flat top-level elaboration. Ran a real build to establish it (59m8s,
+    succeeded, `identifier_ip_synth_1` confirmed as its own run).
+  - **Result: did not fix the cascade.** Ran the actual `make`/Vivado flow again directly (bypassing
+    Gradle, which otherwise correctly no-ops since `id_rom16x32.coe` isn't a Gradle-tracked input)
+    with `identifier_ip` now isolated - all 30+ `control_sub_*_synth_1` sub-runs still relaunched
+    identically to before. So identifier_ip's churn was real, confirmed, and worth fixing on its
+    own merits (smaller, more correct blast radius for an unavoidable per-build change), but it was
+    **not** the (sole) explanation for the full-project cascade.
+  - **Updated conclusion**: this now looks more like candidate 2 from the original assessment - the
+    top-level `synth_1` run cascades a full relaunch of everything underneath it whenever anything
+    changes (even one small, now-isolated IP), regardless of individual sub-run `NEEDS_REFRESH`
+    status, as an architectural property of how `launch_runs` treats this flat-top-level-plus-many-
+    IPs project structure - not a property-tuning or timestamp-avoidance bug. The one remaining
+    untested candidate (candidate 3: does a fresh `-mode batch` process per build fail to trust
+    persisted staleness state that a long-lived session would correctly use?) is not cheaply
+    testable - it requires a full real synthesis to complete once before a same-session second
+    `launch_runs` call means anything, i.e. the same ~40-60 minute cost as everything else here, not
+    the near-free cost of the tests that ruled out the other two candidates.
+  - The `identifier_ip` checkpoint fix is kept (real, if small, improvement; commit
+    `7f015cf`/message references this investigation) even though it didn't solve the bigger
+    problem - no reason to revert a correct, defensible change.
