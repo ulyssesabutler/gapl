@@ -180,8 +180,20 @@ read_verilog "./hdl/packet_processor/packet_packer.v"
 read_verilog "./hdl/packet_processor/packet_processor.v"
 
 # GAPL: Ensure gradle.properties, reference_switch_sim.tcl, create_project.tcl are updated together
-read_verilog "./hdl/GAPLprocessor.v"
-read_verilog "./hdl/gapl_wrapper.v"
+#
+# The GAPL kernel is packaged as its own IP (lib/hw/contrib/cores/gapl_kernel_v1_0_0/) instead of
+# being read as raw RTL like everything else here. Deliberately NOT setting
+# generate_synth_checkpoint false for this one - every other create_ip call in this file disables
+# it, but here we want the opposite: Vivado synthesizes the kernel once and caches the checkpoint,
+# only re-synthesizing when GAPLprocessor.v (i.e. the selected application) actually changes,
+# instead of paying full synthesis cost for the largest RTL in this design on every build.
+#
+# -module_name can't be `gapl_wrapper` (Vivado rejects it: "reserved", since that's already the
+# packaged IP's own internal top-level module name) - gapl_kernel_ip instead, matching every other
+# create_ip call's naming in this file. packet_processor.v's instantiation was updated to match.
+create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
+reset_target all [get_ips gapl_kernel_ip]
+generate_target all [get_ips gapl_kernel_ip]
 
 read_verilog "./hdl/nf_datapath.v"
 read_verilog "./hdl/top.v"

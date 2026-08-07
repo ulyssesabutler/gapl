@@ -30,7 +30,7 @@ set design [lindex $argv 0]
 set jobs   [lindex $argv 1]
 
 open_project project/${design}.xpr
-reset_run impl_1
+# GAPL: see run_synth.tcl - no unconditional reset_run here either, for the same reason.
 launch_runs impl_1 -to_step write_bitstream -jobs ${jobs}
 wait_on_run impl_1
 

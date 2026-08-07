@@ -502,6 +502,67 @@ tasks.register("makeIPs") {
     dependsOn(packageCoreTcam, packageCoreCam)
 }
 
+// ---- GAPL kernel checkpointed IP ----
+//
+// Packaged like every other core, but with Vivado's synthesis checkpoint left enabled (see
+// create_project.tcl and lib/hw/contrib/cores/gapl_kernel_v1_0_0/gapl_kernel.tcl for why). This
+// task's inputs are the freshly-installed GAPLprocessor.v (varies per application/variation) and
+// the static gapl_wrapper.v, so it - and therefore the expensive synthesis checkpoint it produces
+// - only reruns when the selected application actually changes.
+val gaplKernelCoreDir = file("$sumeFolder/lib/hw/contrib/cores/gapl_kernel_v1_0_0")
+
+tasks.register<Exec>("packageCoreGaplKernel") {
+    group = "netfpga-init"
+    description = "Package the compiled GAPL kernel as its own Vivado IP core (synthesis checkpoint enabled)"
+    dependsOn("installGaplVerilog")
+    // axis_queue.v (one of the copied util deps below) instantiates fallthrough_small_fifo as a
+    // subcore reference (see gapl_kernel.tcl) - same ordering hazard as the std-core dependency
+    // graph above, needs that core's component.xml already registered in the IP catalog.
+    mustRunAfter(netfpgaStdCoreBuildTasksBySuffix.getValue("FallthroughSmallFifo"))
+
+    val installedGaplProcessor = file("$nfDesignDir/hw/hdl/GAPLprocessor.v")
+    val installedGaplWrapper = file("$nfDesignDir/hw/hdl/gapl_wrapper.v")
+    // gapl_wrapper.v isn't actually a self-contained leaf - it internally instantiates these
+    // static NetFPGA infra utility modules (found the hard way: an OOC synthesis run for this IP
+    // is an isolated compile scope containing only what's copied into this core's own hdl/, so
+    // without these, Vivado can't find them - "module 'axis_pad_output' not found"). They're
+    // static (not per-application), so no need to reinstall them each time, just keep in sync
+    // with what gapl_wrapper.v actually instantiates.
+    val staticUtilDeps = listOf(
+        "util/axis/axis_pad_output.v",
+        "util/axis/axis_mutual_exclusion.v",
+        "util/axis/axis_queue.v",
+        "util/processor_controller.v",
+        "util/reverse_bytes.v",
+    )
+    val coreHdlDir = gaplKernelCoreDir.resolve("hdl")
+
+    workingDir = gaplKernelCoreDir
+    exportNetfpgaEnv()
+
+    inputs.file(installedGaplProcessor)
+    inputs.file(installedGaplWrapper)
+    inputs.files(staticUtilDeps.map { file("$nfDesignDir/hw/hdl/$it") })
+    inputs.file(gaplKernelCoreDir.resolve("gapl_kernel.tcl"))
+    outputs.file(gaplKernelCoreDir.resolve("component.xml"))
+    outputs.dir(gaplKernelCoreDir.resolve("xgui"))
+
+    doFirst {
+        coreHdlDir.mkdirs()
+        installedGaplProcessor.copyTo(coreHdlDir.resolve("GAPLprocessor.v"), overwrite = true)
+        installedGaplWrapper.copyTo(coreHdlDir.resolve("gapl_wrapper.v"), overwrite = true)
+        staticUtilDeps.forEach {
+            file("$nfDesignDir/hw/hdl/$it").copyTo(coreHdlDir.resolve(File(it).name), overwrite = true)
+        }
+    }
+
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+        vivado -mode batch -source gapl_kernel.tcl
+    """.trimIndent()))
+}
 
 // :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
 tasks.register<Exec>("makeBuild") {
@@ -509,7 +570,7 @@ tasks.register<Exec>("makeBuild") {
     description = "Run make in \$NF_DESIGN_DIR after sourcing Vivado"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
-    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs")
+    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
     commandLine(bash("""
         set -euo pipefail

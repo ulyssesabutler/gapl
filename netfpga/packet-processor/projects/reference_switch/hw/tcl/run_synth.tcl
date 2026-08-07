@@ -30,7 +30,9 @@ set design [lindex $argv 0]
 set jobs   [lindex $argv 1]
 
 open_project project/${design}.xpr
-reset_run synth_1
+# GAPL: no reset_run here - Vivado's own run staleness tracking (source/constraint/IP content
+# hashes since the last successful synth_1) already makes launch_runs a fast no-op when nothing
+# changed. Force-resetting unconditionally on every build was throwing that away.
 launch_runs synth_1 -jobs ${jobs}
 wait_on_run synth_1
 

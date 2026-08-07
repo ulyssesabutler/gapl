@@ -1,7 +1,14 @@
 module gapl_wrapper
 #(
     parameter TDATA_WIDTH  = 256,
-    localparam TKEEP_WIDTH = TDATA_WIDTH / 8
+    // GAPL: was `localparam` - Vivado's IP-XACT packager (ipx::package_project, used to package
+    // this module as its own checkpointed IP core, see lib/hw/contrib/cores/gapl_kernel_v1_0_0/)
+    // excludes localparams from its port-width parameter model entirely, so a port width expression
+    // referencing one ("[TKEEP_WIDTH-1:0]") fails to resolve during packaging ("Undefined parameter
+    // TKEEP_WIDTH"). `parameter` is included in that model. Nothing instantiates gapl_wrapper with
+    // an explicit .TKEEP_WIDTH(...) override (only .TDATA_WIDTH is ever passed), so this keeps the
+    // exact same always-derived-from-TDATA_WIDTH behavior, just packageable.
+    parameter TKEEP_WIDTH = TDATA_WIDTH / 8
 ) (
     // Global Ports
     input  wire                     axis_aclk,

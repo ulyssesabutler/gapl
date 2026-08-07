@@ -100,7 +100,20 @@ module packet_processor
     reg                      gapl_out_tready;
     wire                     gapl_out_tlast;
 
-    gapl_wrapper #( .TDATA_WIDTH(TDATA_WIDTH) ) gapl
+    // GAPL: instantiates the gapl_kernel IP (lib/hw/contrib/cores/gapl_kernel_v1_0_0/), not the
+    // raw gapl_wrapper module directly - create_ip's -module_name can't reuse "gapl_wrapper" since
+    // that's already the packaged IP's own internal top-level module name (Vivado rejects it as
+    // reserved). See create_project.tcl's create_ip call for this IP.
+    //
+    // No #(.TDATA_WIDTH(...)) override here: packaged Vivado IPs aren't meant to be instantiated
+    // with Verilog-style parameter overrides in RTL (the auto-generated stub doesn't even declare
+    // a parameter list - "does not have any parameter 'TDATA_WIDTH' used as named parameter
+    // override" if you try). IP parameter values are configured on the .xci itself instead, same
+    // as every other create_ip call in create_project.tcl (e.g. clk_wiz_ip's CONFIG.* properties).
+    // Moot here anyway - TDATA_WIDTH is 256 everywhere in this design, never actually overridden
+    // at any instantiation site (packet_processor itself is instantiated plain in nf_datapath.v
+    // too), which is exactly what the IP's packaged default already is.
+    gapl_kernel_ip gapl
     (
         .axis_aclk(axis_aclk),
         .axis_resetn(axis_resetn),
