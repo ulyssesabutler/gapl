@@ -580,6 +580,7 @@ tasks.register<Exec>("makeBuild") {
     // the Gradle layer for repeated builds where nothing tracked here changed.
     inputs.dir(file("$nfDesignDir/hw/hdl"))
     inputs.dir(file("$nfDesignDir/hw/constraints"))
+    inputs.dir(file("$nfDesignDir/hw/tcl"))
     inputs.file(gaplKernelCoreDir.resolve("component.xml"))
     outputs.file(file("$nfDesignDir/bitfiles/$nfProjectName.bit"))
 
