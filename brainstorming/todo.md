@@ -66,3 +66,24 @@ There are a few different validations we need to do, but currently don't.
   stripping the nondeterministic field(s) from `component.xml` before Gradle fingerprints it
   (e.g. via a `normalizeLineEndings`-style content filter, or excluding the offending field with
   a custom `FileNormalizer`), rather than accepting an always-reruns task.
+  UPDATE: turns out this machine (a later session) does have Vivado, and real `:netfpga:build`
+  runs have repeatedly shown the bulk of `packageCore*` tasks reporting `UP-TO-DATE` on repeat
+  invocations (e.g. "43 actionable tasks: 2 executed, 41 up-to-date"), so this concern appears
+  unfounded in practice - not rigorously isolated/re-verified in a clean two-runs-in-a-row test,
+  but no longer looks like a real problem.
+
+## NetFPGA partial synthesis (see the "partial synthesis" plan discussed with the user)
+- `:netfpga:build` now produces a real bitstream end-to-end (verified: 36m42s,
+  `reference_switch.bit`), with the GAPL kernel packaged as its own checkpointed IP
+  (`lib/hw/contrib/cores/gapl_kernel_v1_0_0/`) so its synthesis is cached across builds where
+  `GAPLprocessor.v` doesn't change. Real timing data shows this only saves ~2 minutes though -
+  the NetFPGA `control_sub` block design (PCIe/MicroBlaze/crossbars/DMA, 30+ IP sub-synthesis
+  runs) dominates the ~30-40 minute build, not GAPL. Open question, cheap to test: does removing
+  the unconditional `reset_run` (also done this session, in `run_synth.tcl`/`run_impl.tcl`) mean
+  Vivado's own native run-staleness tracking already skips all the `control_sub_*_synth_1`
+  sub-runs for free when only the GAPL app changes (since none of them depend on
+  `GAPLprocessor.v`)? If so, the harder "checkpoint everything except GAPL, blackbox + read_checkpoint
+  reinject" architecture (discussed but not yet built) is unnecessary. Test by switching
+  `programName`/`programVariationName` to a different app, rebuilding, and grepping the new
+  build's log for which `Launched ...` runs actually got relaunched vs. skipped, comparing
+  against the first build's `Launched ...` list.
