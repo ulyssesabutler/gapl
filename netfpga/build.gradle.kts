@@ -572,6 +572,17 @@ tasks.register<Exec>("makeBuild") {
     exportNetfpgaEnv()
     dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
+    // Gradle-level incrementality independent of Vivado's own internal run-staleness tracking
+    // (which turned out unreliable in practice for a true no-op across separate batch invocations -
+    // see brainstorming/todo.md for the investigation). This can't make Vivado itself skip
+    // resynthesizing when something real changes, and it can't see any Vivado-internal staleness
+    // reason that isn't reflected in these files - but it does guarantee an instant, true no-op at
+    // the Gradle layer for repeated builds where nothing tracked here changed.
+    inputs.dir(file("$nfDesignDir/hw/hdl"))
+    inputs.dir(file("$nfDesignDir/hw/constraints"))
+    inputs.file(gaplKernelCoreDir.resolve("component.xml"))
+    outputs.file(file("$nfDesignDir/bitfiles/$nfProjectName.bit"))
+
     commandLine(bash("""
         set -euo pipefail
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
