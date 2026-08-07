@@ -121,9 +121,20 @@ generate_target all [get_ips proc_sys_reset_ip]
 
 
 #Add ID block
+#
+# GAPL: deliberately NOT setting generate_synth_checkpoint false here, unlike every other create_ip
+# call in this file. id_rom16x32.coe (this IP's CONFIG.Coe_File) embeds a fresh Unix timestamp on
+# every single `make` invocation (hw/Makefile's `identifier:` target -> tools/scripts/epoch.sh),
+# by design - confirmed by diffing its content across consecutive `make identifier` runs. With
+# generate_synth_checkpoint false, that per-build churn feeds directly into the flat top-level
+# synth_1 elaboration (no isolating checkpoint), and Vivado then refuses to launch_runs synth_1
+# without an explicit reset_run - "Run 'synth_1' needs to be reset before launching" - which is
+# almost certainly why reset_run was unconditional in the original vendored script, and forces a
+# full resynthesis of everything else in the design too, every single build, as a side effect.
+# Leaving the checkpoint enabled isolates identifier_ip's unavoidable per-build churn into its own
+# tiny, fast sub-run instead of dragging down the whole top-level run's staleness status.
 create_ip -name blk_mem_gen -vendor xilinx.com -library ip -version 8.4 -module_name identifier_ip
 set_property -dict [list CONFIG.Interface_Type {AXI4} CONFIG.AXI_Type {AXI4_Lite} CONFIG.AXI_Slave_Type {Memory_Slave} CONFIG.Use_AXI_ID {false} CONFIG.Load_Init_File {true} CONFIG.Coe_File {/../../../../../../create_ip/id_rom16x32.coe} CONFIG.Fill_Remaining_Memory_Locations {true} CONFIG.Remaining_Memory_Locations {DEADDEAD} CONFIG.Memory_Type {Simple_Dual_Port_RAM} CONFIG.Use_Byte_Write_Enable {true} CONFIG.Byte_Size {8} CONFIG.Assume_Synchronous_Clk {true} CONFIG.Write_Width_A {32} CONFIG.Write_Depth_A {4096} CONFIG.Read_Width_A {32} CONFIG.Operating_Mode_A {READ_FIRST} CONFIG.Write_Width_B {32} CONFIG.Read_Width_B {32} CONFIG.Operating_Mode_B {READ_FIRST} CONFIG.Enable_B {Use_ENB_Pin} CONFIG.Register_PortA_Output_of_Memory_Primitives {false} CONFIG.Register_PortB_Output_of_Memory_Primitives {false} CONFIG.Use_RSTB_Pin {true} CONFIG.Reset_Type {ASYNC} CONFIG.Port_A_Write_Rate {50} CONFIG.Port_B_Clock {100} CONFIG.Port_B_Enable_Rate {100}] [get_ips identifier_ip]
-set_property generate_synth_checkpoint false [get_files identifier_ip.xci]
 reset_target all [get_ips identifier_ip]
 generate_target all [get_ips identifier_ip]
 
