@@ -387,6 +387,18 @@ fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
 
 val netfpgaStdCoreBuildTasks = netfpgaStdCoreBuilds.map { registerNetfpgaCoreBuildTask(it) }
 
+// Several cores' IP-XACT packaging (`ipx::add_subcore` in their .tcl) references other cores by
+// VLNV (e.g. nf_10ge_interface depends on nf_axis_converter, nf_10g_attachment, and
+// fallthrough_small_fifo; fallthrough_small_fifo itself is a subcore of ~9 others) and needs them
+// already registered in the IP catalog at package time - otherwise the dependency reference gets
+// saved as broken, which later shows up as "IP is locked ... subcore(s) not found" when
+// create_project.tcl tries to instantiate it. The vendored Makefile's `sume:` target built these
+// serially in an order that respects this; Gradle doesn't order independent sibling tasks on its
+// own, so pin them to the same relative order here. mustRunAfter (not dependsOn) only constrains
+// ordering among tasks that are already both scheduled to run - it doesn't force a rebuild of an
+// otherwise-up-to-date core just because an earlier one in the list needs to rebuild.
+netfpgaStdCoreBuildTasks.zipWithNext { earlier, later -> later.configure { mustRunAfter(earlier) } }
+
 // lib/sw/std/hwtestlib is a two-line `cc` compile - cheap regardless, kept simple
 tasks.register<Exec>("buildHwTestLib") {
     group = "netfpga-init"
