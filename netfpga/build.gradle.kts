@@ -564,13 +564,58 @@ tasks.register<Exec>("packageCoreGaplKernel") {
     """.trimIndent()))
 }
 
-// :netfpga:build -> make in $NF_DESIGN_DIR after sourcing Vivado
-tasks.register<Exec>("makeBuild") {
+// The static NetFPGA "shell" (everything except the selected GAPL application) synthesized on its
+// own via create_project+run_synth, deliberately bypassing the project-level Makefile's `all: clean`
+// target - that target unconditionally deletes hw/project/ before rebuilding, which is why nothing
+// about Vivado's own Design Runs staleness tracking ever got a chance to help even after Phase 1's
+// checkpointed-IP work: there was never a persistent project for it to apply to. Verified directly
+// against real Vivado that once hw/project/ is left in place, `synth_1`'s completed status persists
+// correctly across separate `vivado -mode batch` sessions, so this task only needs to rerun
+// launch_runs synth_1's ~12 min of work when something in the static shell actually changed - a pure
+// GAPL application switch leaves every input below untouched, so Gradle skips this task entirely.
+//
+// Deliberately excludes GAPLprocessor.v from the hdl inputs (the one file that varies per
+// application) and depends on packageCoreGaplKernel for *ordering* only (dependsOn, not
+// inputs.file/inputs.dir) - not its component.xml content - since top-level shell synthesis only
+// needs the GAPL kernel IP's port interface (stable across applications) to exist in the IP catalog,
+// not its internal logic (which stays a synthesis-checkpointed black box until makeBuild's
+// run_impl-time link_design stitches in whichever application is currently installed).
+tasks.register<Exec>("makeSynthShell") {
     group = "netfpga"
-    description = "Run make in \$NF_DESIGN_DIR after sourcing Vivado"
+    description = "Synthesize the static NetFPGA shell (create_project + run_synth), skipped when nothing static changed"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
     dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
+
+    inputs.files(fileTree(file("$nfDesignDir/hw/hdl")) { exclude("GAPLprocessor.v") })
+    inputs.dir(file("$nfDesignDir/hw/constraints"))
+    inputs.dir(file("$nfDesignDir/hw/tcl"))
+    outputs.file(file("$nfDesignDir/hw/project/$nfProjectName.runs/synth_1/top.dcp"))
+
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+        [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
+        echo "[netfpga] SUME_FOLDER=${'$'}SUME_FOLDER"
+        echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
+        make -C "${'$'}NF_DESIGN_DIR/hw" identifier create_project run_synth
+    """.trimIndent()))
+}
+
+// :netfpga:build -> everything downstream of the static shell: refresh the GAPL kernel's own OOC
+// checkpoint, implement, and export - the part that must rerun on every application switch, but no
+// longer pays synth_1's ~12 min since makeSynthShell above only reruns when the shell itself changed.
+// Deliberately calls the hw/-level and sw/-level make targets directly (run_impl, export_to_sdk,
+// project, load_elf) rather than the project-level Makefile's `all`, to avoid its `clean`
+// prerequisite - see makeSynthShell's comment above for why that matters. `all` itself is left
+// untouched for anyone who wants a guaranteed from-scratch build.
+tasks.register<Exec>("makeBuild") {
+    group = "netfpga"
+    description = "Refresh the GAPL kernel checkpoint, implement, and export - reuses the shell synthesized by makeSynthShell"
+    workingDir = rootProject.projectDir
+    exportNetfpgaEnv()
+    dependsOn("makeSynthShell")
 
     // Gradle-level incrementality independent of Vivado's own internal run-staleness tracking
     // (which turned out unreliable in practice for a true no-op across separate batch invocations -
@@ -578,10 +623,11 @@ tasks.register<Exec>("makeBuild") {
     // resynthesizing when something real changes, and it can't see any Vivado-internal staleness
     // reason that isn't reflected in these files - but it does guarantee an instant, true no-op at
     // the Gradle layer for repeated builds where nothing tracked here changed.
-    inputs.dir(file("$nfDesignDir/hw/hdl"))
-    inputs.dir(file("$nfDesignDir/hw/constraints"))
-    inputs.dir(file("$nfDesignDir/hw/tcl"))
     inputs.file(gaplKernelCoreDir.resolve("component.xml"))
+    // run_impl.tcl/load_elf.tcl/export_hardware.tcl aren't rerun by makeSynthShell (that task only
+    // tracks them to decide whether the *shell* needs resynthesizing) - track them here too, or
+    // editing this step's own Tcl wouldn't invalidate this task's cached result.
+    inputs.dir(file("$nfDesignDir/hw/tcl"))
     outputs.file(file("$nfDesignDir/bitfiles/$nfProjectName.bit"))
 
     commandLine(bash("""
@@ -591,7 +637,11 @@ tasks.register<Exec>("makeBuild") {
         [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
         echo "[netfpga] SUME_FOLDER=${'$'}SUME_FOLDER"
         echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
-        make -C "${'$'}NF_DESIGN_DIR"
+        make -C "${'$'}NF_DESIGN_DIR/hw" identifier
+        make -C "${'$'}NF_DESIGN_DIR/hw" run_impl
+        make -C "${'$'}NF_DESIGN_DIR/hw" export_to_sdk
+        make -C "${'$'}NF_DESIGN_DIR/sw/embedded" project
+        make -C "${'$'}NF_DESIGN_DIR/hw" load_elf
     """.trimIndent()))
 }
 

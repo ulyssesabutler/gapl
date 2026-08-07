@@ -36,8 +36,18 @@
 #
 
 
-set design [lindex $argv 0] 
+set design [lindex $argv 0]
 set ws "SDK_Workspace"
+
+# GAPL: wait_on_run does not throw on a failed run (see run_impl.tcl for how this was found to
+# silently swallow a real failure) - check explicitly so a failed impl_1 relaunch here fails the
+# build instead of falling through to write_bitstream against a stale/incomplete design.
+proc gapl_fail_if_run_failed {run_name} {
+    set progress [get_property PROGRESS [get_runs $run_name]]
+    if {$progress ne "100%"} {
+        error "GAPL: run '$run_name' did not complete successfully (progress: $progress) - see its runme.log"
+    }
+}
 
 # open project
 puts "\nOpening $design XPR project\n"
@@ -63,6 +73,7 @@ if {[llength [get_files app.elf]]} {
 reset_run impl_1 -prev_step
 launch_runs impl_1 -to_step write_bitstream
 wait_on_run impl_1
+gapl_fail_if_run_failed impl_1
 open_run impl_1
 write_bitstream -force ../bitfiles/$design.bit
 

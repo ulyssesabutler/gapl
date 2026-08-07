@@ -63,7 +63,7 @@ all:
 project: identifier create_project run_synth run_impl
 
 create_project:
-	@if test -d project/; then \
+	@if test -f project/${PROJ}.xpr; then \
                 echo ${PROJ} "already exists"; \
         else \
                 vivado -mode ${MODE} -source \
