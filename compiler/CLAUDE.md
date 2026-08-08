@@ -164,10 +164,14 @@ runnable `gapl` binary at `compiler/build/install/gapl/bin/gapl` without buildin
 - **Two unrelated `verilogir` packages exist** — `../analyzer`'s is nearly empty (one shared naming
   helper), `compiler`'s is the real, full Verilog AST + serializer. Grepping "verilogir" across the
   repo can be misleading about which one actually renders anything.
-- **Compile time on large designs can be substantial and hasn't been profiled.** `LiteralSimplifier`
-  alone took ~198s compiling `verilator-test/tests/aes/test.gapl` (has a `TODO` there noting this, worth
-  checking `module.getConnectionsForNodeOutput`/`connect`/`disconnect` for hidden O(n²) behavior
-  before assuming it's just "large designs are slow"). Not urgent, but real.
+- **`Module.toMutableModule()` and `MutableModule.connect()`/`disconnect()` are on the hot path of
+  every transformer.** Both used to be O(n²) (immutable `List + List`/`List - element` accumulation
+  instead of a mutable list) - `LiteralSimplifier` alone took ~840s compiling netfpga's aes processor
+  before this was fixed, mostly from `toMutableModule()`'s defensive full-module copy (called at the
+  start of most transformers) rather than anything LiteralSimplifier itself does. Fixed now (see
+  `Module.kt`/`MutableModule.kt`), but worth remembering if a future change reintroduces an immutable
+  accumulation pattern in either of these - they're called on the whole flattened netlist, so an O(n²)
+  regression there is easy to not notice on small test fixtures and very noticeable on a real design.
 
 ## Testing
 

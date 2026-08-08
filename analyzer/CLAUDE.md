@@ -134,16 +134,18 @@ convert between the netlist IR and this graph representation — register nodes 
 compute per-edge register-hop weight, non-register connections become graph edges.
 
 `netlistir/builder/util/CombinationalLoopDetector.kt` (`findCombinationalLoops`, called from
-`ModuleBuilder.buildAllModules` after a clean build) is the payoff: builds hierarchical graphs for
-every module, restricts to **root modules only** (nothing else calls them — flattening a root's graph
-already recursively inlines its whole reachable call tree, so this is both complete and
-non-duplicative across call-nesting levels), takes the zero-weight subgraph of the flattened result,
-and runs Tarjan's SCC on it. Loop nodes are ranked deterministically (real name over
+`ModuleBuilder.buildAllModules` after a clean build) is the payoff — but does **not** use the
+hierarchical flattening machinery above for this; it computes bottom-up port-reachability summaries
+per module instead (see the file's own doc comment for the full design and why: an earlier
+implementation that did flatten via `HierarchicalLeisersonCircuitGraph` took 696s on netfpga's aes
+processor, since it re-flattened a shared child graph once per call site rather than once per
+distinct module). Loop nodes are ranked deterministically (real name over
 `AnonymousIdentifierGenerator`-synthesized name; a declared `BodyNode` over a function's own
 `IONode` parameter, since parameter names are inherently generic — reused identically on every call;
 alphabetical as a final tie-break) specifically so the same textual bug rediscovered through different
 generic instantiations produces byte-identical diagnostics and collapses via `DiagnosticsCollector`'s
-dedup (below) instead of showing up once per instantiation.
+dedup (below) instead of showing up once per instantiation. The hierarchical flattening machinery
+above is still live code — `compiler`'s retiming pass depends on it — just no longer used here.
 
 ## Diagnostics system (`diagnostics/`)
 
@@ -232,10 +234,16 @@ via `PredefinedFunction.search()`.
   renders anything passed as an `identityProps` entry as `ClassName@identityHash` instead of
   recursing. Any new IR type with a parent back-reference should follow this pattern rather than
   relying on default `data class` `toString()`.
-- **Compile time on large designs hasn't been profiled.** `ModuleBuilder.kt` has a `TODO` noting the
-  whole "Netlist Builder" stage (ordinary per-function building, plus the combinational-loop check)
-  took ~72s on `verilator-test/tests/aes/test.gapl` — not yet known which part is the actual bottleneck. Not
-  urgent, but worth knowing before assuming an unrelated change caused a slowdown.
+- **The Netlist Builder's combinational-loop check works at named-port granularity, not per-bit.**
+  `CombinationalLoopDetector.kt`'s bottom-up port-reachability-summary approach (replacing an earlier
+  full-flattening implementation that took 696s on netfpga's aes processor) assumes every bit of one
+  port has the same zero-weight reachability to every bit of another. True for how GAPL functions are
+  actually written, and the same coarseness the old per-node approach already assumed — but a
+  function that combinationally connects some bits of a port to another while registering the rest
+  would be under-analyzed at the port level. Not currently possible to express in GAPL as far as this
+  was checked, but worth knowing if that ever changes. See the file's own doc comment for the full
+  design (why per-bit tracking was tried and reverted — it regressed a design without deep call reuse
+  from ~19s to ~154s before being collapsed to port granularity).
 
 ## Testing conventions
 

@@ -99,18 +99,14 @@ class ModuleBuilder(
         val modules = moduleInstantiationTracker.getModules()
         Logger.info { "Built module count: ${modules.size}" }
 
-        // TODO: Profiled (see netfpga-perf-analysis investigation) - the module-build loop above
-        //   is never the bottleneck (sub-second even on large designs). The Combinational Loop
-        //   Check below is: it took 696s compiling netfpga's aes processor, because
-        //   HierarchicalLeisersonCircuitGraph.flattenToWeightedGraph() recursively re-flattens a
-        //   shared child graph once per call site instead of once per distinct module, so work
-        //   scales with the number of root-to-leaf paths through the invocation DAG rather than
-        //   the number of distinct modules - exponential for designs with call reuse nested
-        //   several levels deep (aes's per-round/per-byte helper reuse hits this hard). Fixing
-        //   this needs a real algorithm change - bottom-up port-reachability summaries per module
-        //   (mirroring HierarchicalMinimalRegisterSolver's own summary approach) instead of full
-        //   inlining - not just a data-structure swap like the two bugs this stage's Transformers
-        //   sibling had (see LiteralSimplifier.kt / Module.toMutableModule()).
+        // Profiled (see netfpga-perf-analysis investigation) - the module-build loop above is
+        // never the bottleneck (sub-second even on large designs). The Combinational Loop Check
+        // below used to be: an earlier version of findCombinationalLoops recursively flattened the
+        // whole call tree, which re-flattened a shared child graph once per call site instead of
+        // once per distinct module, so work scaled with the number of root-to-leaf paths through
+        // the invocation DAG - 696s compiling netfpga's aes processor. See
+        // CombinationalLoopDetector.kt's own doc comment for the bottom-up port-reachability-summary
+        // approach that replaced it (~0.05s on the same design, byte-identical Verilog output).
         // The recursive-invocation check must run, and must be clean, before the combinational-loop
         // check below: that check builds a whole-program graph via the same converter compiler's
         // retiming pass uses, which requires the invocation graph to be a DAG (it topologically sorts
