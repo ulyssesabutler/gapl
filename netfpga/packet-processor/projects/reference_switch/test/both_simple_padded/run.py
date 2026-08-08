@@ -52,10 +52,16 @@ for i in range(4):
     routerMAC.append("00:ca:fe:00:00:0%d"%(i+1))
     routerIP.append("192.168.%s.40"%i)
 
-with open("../../../../gradle.properties") as f:
-    netfpgaProps = javaproperties.load(f)
-
-programName = netfpgaProps.get("programName")
+# GAPL: prefer PROGRAM_NAME (set by netfpga/build.gradle.kts's exportNetfpgaEnv from the actually-
+# resolved -PprogramName/gradle.properties value) over re-reading gradle.properties directly - a
+# -PprogramName override on the command line otherwise silently only affected which app Gradle
+# compiled/packaged, not which app's test.properties this script read, since gradle.properties
+# itself is never modified by a -P override.
+programName = os.environ.get("PROGRAM_NAME")
+if not programName:
+    with open("../../../../gradle.properties") as f:
+        netfpgaProps = javaproperties.load(f)
+    programName = netfpgaProps.get("programName")
 
 with open("../../../../src/" + programName + "/test.properties") as f:
     testProps = javaproperties.load(f)

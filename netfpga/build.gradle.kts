@@ -152,6 +152,12 @@ fun Exec.exportNetfpgaEnv() {
             "XILINX_PATH"      to (xilinxPath ?: ""),
             "VITIS_PATH"       to (vitisPath  ?: ""),
             "NF_PROJECT_NAME"  to nfProjectName,
+            // GAPL: resolved the same way as every other setting here - -PprogramName overrides
+            // gradle.properties. run.py (test/*/run.py) prefers this over its own gradle.properties
+            // read for exactly that reason: a -PprogramName override on the command line otherwise
+            // silently only affected which app Gradle compiled/packaged, not which app's
+            // test.properties the Python test harness actually read.
+            "PROGRAM_NAME"     to (programName ?: ""),
             "PROJECTS"         to projects,
             "CONTRIB_PROJECTS" to contribProjects,
             "IP_FOLDER"        to ipFolder,
