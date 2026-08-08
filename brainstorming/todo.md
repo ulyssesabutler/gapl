@@ -277,3 +277,53 @@ on everything measured here), not the larger ~9+ minute place-and-route-and-beyo
 incremental placement reuse has now also been shown not to work in this configuration. Realistic
 expected improvement from the big rewrite, if it works at all: roughly 51-55 min -> ~40-43 min for
 an application switch, not a total elimination of the wait.
+
+**Update - Stage A (the synthesis-side rewrite) implemented, landed, and validated (commit
+`4a15b8a`)**. The actual root cause turned out simpler than the checkpoint/blackbox design
+originally scoped above: the real build entrypoint (`make -C $NF_DESIGN_DIR`, invoked by Gradle's
+`makeBuild`) resolves to the project Makefile's `all: clean` target, which unconditionally deletes
+`hw/project/` before every real build - so Vivado's own Design Runs staleness tracking never got a
+chance to help, because there was never a persistent project for it to apply to. Confirmed directly
+against real Vivado that once `hw/project/` is left in place, `synth_1`'s completed status persists
+correctly across separate `vivado -mode batch` sessions, and a single sub-run
+(`gapl_kernel_ip_synth_1`) can be `reset_run`/`launch_runs`/`wait_on_run`ed in complete isolation
+without disturbing `synth_1`'s own status - `impl_1`'s `link_design` step then picks up the
+refreshed sub-run checkpoint automatically with zero unresolved black-box warnings. No manual
+`update_design -black_box`/`read_checkpoint -cell` choreography needed in production.
+
+Fix: split Gradle's `makeBuild` into `makeSynthShell` (static-shell-only inputs, calls
+`make -C hw create_project run_synth`) and `makeBuild` (app-specific inputs, calls
+`make -C hw run_impl export_to_sdk` + `make -C sw project` + `make -C hw load_elf` - bypassing the
+project Makefile's `all`/`clean` entirely). **Measured result: two real, different-app switches
+(md5->regex, regex->cms) completed in 39m6s and 40m49s**, vs the ~51-55 min baseline - close to the
+~40-43 min prediction above. Three real bugs found and fixed along the way (see
+`netfpga/packet-processor/projects/reference_switch/hw/tcl/run_impl.tcl` and `hw/Makefile` comments
+for full detail): `wait_on_run` doesn't throw on a failed run (added explicit `PROGRESS` checks);
+Gradle pre-creates a task's declared output directory before running its action, which broke
+`create_project`'s naive `test -d project/` existence check (fixed to check for the actual `.xpr`
+file); and refreshing `identifier_ip`'s cached IP output products broke Vivado elaboration outright
+(`module 'identifier_ip' not found`) - reverted, its build-timestamp ROM is now deliberately left
+unrefreshed after initial project creation (cosmetic, not load-bearing).
+
+**Update - Stage B (pblock reservation + `lock_design` for place & route) tried against real
+Vivado, negative result, not pursued further**. Re-tested `incremental_checkpoint` first under
+Stage A's now-genuinely-stable shell (on the theory it might now help, since the "previous routed"
+reference finally matches a real prior build) - still no benefit (`place_design` 4m35s vs 4m34s
+baseline, identical; Vivado logs "Incremental flow is disabled" in both). Then built the full
+pblock design: sized a pblock to `gapl_kernel_ip`'s real footprint (8354 LUTs, 1121 FFs, 8 BRAM
+tiles, 0 DSPs - tiny relative to the device), `lock_design`d the other 129,895 static cells,
+left `gapl_kernel_ip`'s 14,429 cells free, then blackboxed/reinjected a genuinely different
+application's fresh netlist and ran real `opt_design`/`place_design`/`route_design`. Vivado's log
+confirmed the locking was recognized and engaged incremental placement
+(`Running Incremental Placer in ECO mode for unplaced cells`, `High Reuse Mode`) - but wall-clock
+showed **no improvement**: `place_design` 4m17s (vs 4m34s/4m35s baseline, essentially unchanged),
+`route_design` 6m10s (vs 4m09s baseline - *slower*). Likely explanation: `place_design`/
+`route_design`'s fixed costs (global floorplanning, timing/congestion analysis, device-wide
+legalization) scale with total design complexity, not with how many cells are actually free to
+move - locking ~90% of a large, densely interconnected design doesn't proportionally shrink
+runtime the way skipping ~30 independent synthesis sub-runs did for Stage A. Not pursuing further
+for now; if revisited, Vivado's actual Dynamic Function eXchange (DFX)/reconfigurable-partition
+flow (this license does include `PartialReconfiguration`, confirmed in `~/.Xilinx/Xilinx.lic`) is
+the more promising next avenue over further `lock_design` tuning, but is a materially bigger,
+more specialized effort - not a quick follow-up test using the same mechanisms already tried.
+Stage A's ~12-16 min savings stands as the landed, validated result.
