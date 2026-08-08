@@ -13,6 +13,7 @@ import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.util.InvocationGraph
+import com.uabutler.util.Logger
 
 class ModuleBuilder(
     val program: ProgramNode,
@@ -70,33 +71,46 @@ class ModuleBuilder(
         /* This loop just builds any unbuilt modules. While building those modules, we might add additional module
          * instantiations. Those that haven't been encountered yet will be built on the next run.
          */
-        do {
-            val preLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
+        // Split out from the previously-monolithic "Netlist Builder" timer so the module-build
+        // loop and the two whole-program loop checks below show up as separate phases - see the
+        // TODO below on why this granularity matters.
+        Logger.run("Building Modules", Logger.Level.INFO) {
+            do {
+                val preLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
 
-            preLoopIncompleteModules.forEach {
-                try {
-                    val module = buildModule(it)
+                preLoopIncompleteModules.forEach {
+                    try {
+                        val module = buildModule(it)
 
-                    moduleInstantiationTracker.addBuiltModule(
-                        instantiation = it.moduleInvocation,
-                        module = module
-                    )
-                } catch (e: BuilderDiagnosticException) {
-                    diagnosticsCollector.report(e.diagnostic)
-                    moduleInstantiationTracker.markFailed(it.moduleInvocation)
+                        moduleInstantiationTracker.addBuiltModule(
+                            instantiation = it.moduleInvocation,
+                            module = module
+                        )
+                    } catch (e: BuilderDiagnosticException) {
+                        diagnosticsCollector.report(e.diagnostic)
+                        moduleInstantiationTracker.markFailed(it.moduleInvocation)
+                    }
                 }
-            }
 
-            val postLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
-        } while (postLoopIncompleteModules.isNotEmpty())
+                val postLoopIncompleteModules = moduleInstantiationTracker.getUnbuiltModules()
+            } while (postLoopIncompleteModules.isNotEmpty())
+        }
 
         val modules = moduleInstantiationTracker.getModules()
+        Logger.info { "Built module count: ${modules.size}" }
 
-        // TODO: The whole "Netlist Builder" stage (this loop above, plus the loop checks below) took
-        //   ~72s compiling simtest/tests/aes/test.gapl (a large design). Not yet profiled which part
-        //   is actually the bottleneck - could be the ordinary per-function build loop above scaling
-        //   poorly for a design this size, or the loop checks' whole-program graph flattening below,
-        //   or both. Not urgent, but worth a look if this stage keeps showing up as slow.
+        // TODO: Profiled (see netfpga-perf-analysis investigation) - the module-build loop above
+        //   is never the bottleneck (sub-second even on large designs). The Combinational Loop
+        //   Check below is: it took 696s compiling netfpga's aes processor, because
+        //   HierarchicalLeisersonCircuitGraph.flattenToWeightedGraph() recursively re-flattens a
+        //   shared child graph once per call site instead of once per distinct module, so work
+        //   scales with the number of root-to-leaf paths through the invocation DAG rather than
+        //   the number of distinct modules - exponential for designs with call reuse nested
+        //   several levels deep (aes's per-round/per-byte helper reuse hits this hard). Fixing
+        //   this needs a real algorithm change - bottom-up port-reachability summaries per module
+        //   (mirroring HierarchicalMinimalRegisterSolver's own summary approach) instead of full
+        //   inlining - not just a data-structure swap like the two bugs this stage's Transformers
+        //   sibling had (see LiteralSimplifier.kt / Module.toMutableModule()).
         // The recursive-invocation check must run, and must be clean, before the combinational-loop
         // check below: that check builds a whole-program graph via the same converter compiler's
         // retiming pass uses, which requires the invocation graph to be a DAG (it topologically sorts
@@ -107,9 +121,13 @@ class ModuleBuilder(
         // structurally incomplete - skip rather than risk those crashes analyzing something already
         // known to be broken.
         if (diagnosticsCollector.diagnostics().isEmpty()) {
-            val foundRecursiveInvocation = validateNoRecursiveInvocation(modules)
+            val foundRecursiveInvocation = Logger.run("Recursive Invocation Check", Logger.Level.INFO) {
+                validateNoRecursiveInvocation(modules)
+            }
             if (!foundRecursiveInvocation) {
-                validateNoCombinationalLoops(modules)
+                Logger.run("Combinational Loop Check", Logger.Level.INFO) {
+                    validateNoCombinationalLoops(modules)
+                }
             }
         }
 
