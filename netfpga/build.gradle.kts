@@ -652,7 +652,11 @@ tasks.register<Exec>("runSimulation") {
     exportNetfpgaEnv()
     // reference_switch_sim.tcl reads hw/constraints/nf_sume_general.xdc into a constraints
     // fileset just like create_project.tcl does, so simulation needs it installed too.
-    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs")
+    // packageCoreGaplKernel: reference_switch_sim.tcl now create_ips gapl_kernel_ip from
+    // lib/hw/contrib/cores/gapl_kernel_v1_0_0 (see that file) just like create_project.tcl does -
+    // without this dependency, a pure application switch could simulate a stale previously-packaged
+    // kernel instead of the currently-installed one.
+    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("netfpgaSimTestMajor") as String?) ?: "simple"

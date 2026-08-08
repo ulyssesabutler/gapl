@@ -210,8 +210,16 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_packer.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_processor.v"
 
 # GAPL: Ensure gradle.properties, reference_switch_sim.tcl, create_project.tcl are updated together
+#
+# Mirrors create_project.tcl's gapl_kernel_ip creation - packet_processor.v instantiates the
+# packaged IP by that name (see its own comment at the instantiation site), not gapl_wrapper
+# directly, so just reading gapl_wrapper.v raw (as this file used to do) leaves "gapl_kernel_ip"
+# undefined and elaboration fails with "Module <gapl_kernel_ip> not found". This was missed when
+# the kernel got packaged as an IP for create_project.tcl's synthesis-checkpoint flow.
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/GAPLprocessor.v"
-read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/gapl_wrapper.v"
+create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
+reset_target all [get_ips gapl_kernel_ip]
+generate_target all [get_ips gapl_kernel_ip]
 
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/nf_datapath.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_sim.v"
