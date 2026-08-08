@@ -327,3 +327,65 @@ flow (this license does include `PartialReconfiguration`, confirmed in `~/.Xilin
 the more promising next avenue over further `lock_design` tuning, but is a materially bigger,
 more specialized effort - not a quick follow-up test using the same mechanisms already tried.
 Stage A's ~12-16 min savings stands as the landed, validated result.
+
+**Update - parallelization tested against real Vivado on a 24-core/32GB machine (`prague`),
+mixed result: per-build core scaling is a bust, but running builds concurrently is a genuine win.**
+First confirmed the Vivado license (`Vivado_ML_Enterprise_Edition`, includes `PartialReconfiguration`)
+is actually valid on this machine - its `HOSTID=7085c295efd3` matches this machine's own MAC
+(`70:85:c2:95:ef:d3`, `ip link show`), and a real `create_project` succeeded under both the
+installed 2024.2 and the project's actual 2020.1 toolchain with no license error.
+
+*Hypothesis 1 (full-shell synthesis scales with `-jobs`) - refuted, root cause identified.* Ran a
+genuine cold `makeSynthShell` (fresh project, ~35 sub-runs + top-level `synth_1`, all launched
+together) end to end: 19m57s total, `wait_on_run synth_1` itself 11m51s at the default
+`-jobs 24` (`JOBS=$(shell nproc)` in `hw/Makefile` already auto-detects core count, no code change
+needed to raise it). But per-run timestamps in `project/*.runs/*/runme.log` showed all ~35 OOC
+sub-runs (`control_sub_*`, `gapl_kernel_ip_synth_1`, `identifier_ip_synth_1`) launched at the same
+instant and *finished within a few minutes* - they were never the bottleneck. The **single
+top-level `synth_1` run** (the main datapath's own RTL elaboration/optimization, a serial process
+not split across `-jobs`) ran the entire 11m51s by itself. Confirmed by resetting all runs and
+relaunching the full batch twice more, warm, varying only `-jobs`: `-jobs 8` -> 8m36s, `-jobs 24` ->
+7m41s - a real but modest ~11% difference, not the multiple-x speedup "~30 independent sub-runs"
+would predict, because most of that time is the one thing `-jobs` can't parallelize. (A synth_1-only
+reset+relaunch, with no other runs queued, showed *zero* difference between `-jobs 8` and
+`-jobs 24`, as expected - `-jobs` only matters when multiple runs are actually queued together.)
+Side finding: this warm-project run_synth time (~7-8 min) is well under the ~12-16 min figure from
+the original 8-core/7.6GB machine, but that's not attributable to `-jobs`/core count per the above -
+likely just less memory pressure or a faster CPU, not investigated further.
+
+*Hypothesis 2 (single build's place & route scales with more cores) - refuted directly.* `-jobs` on
+`launch_runs` doesn't control a single run's internal thread count at all (it only governs how many
+separate runs execute concurrently) - the actual lever is `set_param general.maxThreads`. Explicitly
+capped to 8 vs 24 on the same warm project, same design: `place_design` 3m03s vs 3m14s,
+`route_design` 2m16s vs 2m11s - statistically identical, confirming place & route in this Vivado
+version doesn't scale past ~8 threads regardless of what's available, matching the doc's own prior
+caution from the Stage B pblock testing. (Absolute times here, ~3 min place / ~2 min route, are well
+under the original machine's 4m34s/4m09s baseline - real, but again a machine/memory-pressure effect,
+not a core-count effect, since capping to 8 threads reproduced it exactly.)
+
+*Hypothesis 3 (concurrent multi-build throughput) - confirmed, clean win.* Duplicated the completed
+project directory (`cp -r project project_copy2`, 528MB) and ran two `impl_1` (place & route)
+sub-processes concurrently, each explicitly capped to `general.maxThreads 6` (12 threads total,
+leaving headroom on 24 cores) with ~26GB memory available. Both finished with **individually
+identical** timing to a solo run (`place_design` ~3m02s/3m03s, `route_design` ~2m18s/2m19s,
+`write_bitstream` ~0m50s/0m51s each) and the combined wall-clock for *both* running together was
+11m32s - essentially the same as one solo run's total time. Genuine ~2x throughput for free, with
+zero measured slowdown to either build, when per-build thread counts are explicitly capped rather
+than left to Vivado's default auto-detection (which would have both builds independently try to
+grab all 24 cores and oversubscribe). Caveat: this machine is also a live interactive desktop, not
+a dedicated build box - available memory swung from 9.6GB to 26GB across this session depending on
+what else (Firefox, KDE) was running, so the safe concurrency level in practice depends on that
+headroom at build time, not just core count; budget per-build memory (~5.5-5.8GB peak RSS observed
+here) and thread count (~6-8, past which a single build stops benefiting anyway per Hypothesis 2)
+explicitly rather than assuming `nproc`-derived defaults are safe to run N-at-a-time.
+
+**Practical implication for `netfpga/build.gradle.kts`**: raising the shell's default `-jobs` further
+isn't worth doing (modest win, and the Makefile already auto-detects `nproc`). The one *actionable*
+lever from this investigation is explicit concurrency - if there's ever a need to build multiple
+GAPL applications' bitstreams in one sitting (e.g. regression-testing several apps), running them as
+concurrent `vivado` invocations with an explicit `general.maxThreads` cap per build (~6-8) is a real,
+measured ~2x-or-better throughput win over running them sequentially, not just a plausible theory -
+but nothing in the current Gradle task graph does this today; `makeSynthShell`/`makeBuild` are
+single-project, single-build tasks, and wiring up N-at-a-time concurrent builds (separate project
+directories, capped thread counts, careful memory budgeting against whatever else the host machine
+is doing) would be new work, not a config tweak.

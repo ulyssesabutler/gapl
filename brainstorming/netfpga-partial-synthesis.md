@@ -107,43 +107,40 @@ partitions - not a quick follow-up test using the mechanisms already tried.
 **Stage A's ~12-16 min savings stands as the landed, validated result** (~51-55 min → ~39-41 min
 for a genuine application switch).
 
-## Next planned work: testing parallelization on a bigger machine
+## Status: parallelization on a 24-core/32GB machine - tested against real Vivado, mixed result
 
-The original machine this work was done on has only 8 CPU cores and 7.6GB RAM - both already
-close to saturated by a single Vivado build (`-jobs 8` matches `nproc`; place & route alone peaks
-around 5GB RSS). A second machine is available with 24 cores, 32GB RAM, 64GB swap, using
-(reportedly) the same Vivado license.
+License first confirmed genuinely valid on the new machine (`prague`, 24 cores/32GB/64GB swap) -
+its `HOSTID=7085c295efd3` matches the machine's own MAC (`70:85:c2:95:ef:d3`), not just a copied
+file, and a real `create_project` succeeded under both installed Vivado versions.
 
-**Before relying on anything below: verify the license is actually valid on that machine.** The
-license file inspected on the original machine (`~/.Xilinx/Xilinx.lic`) grants
-`Vivado_ML_Enterprise_Edition` as **node-locked** (tied to that specific machine's `HOSTID`) and
-marked `uncounted` (no concurrency limit enforced *by the license*, once it's valid on a given
-host). "Same license" needs to mean a matching entry for the *new* machine's own hostid (or a
-genuinely floating/network license), not literally the same file copied over - check
-`~/.Xilinx/Xilinx.lic` (or wherever `XILINXD_LICENSE_FILE`/`LM_LICENSE_FILE` point) on the new
-machine before assuming this works.
+- **Full-shell synthesis scaling with `-jobs` - refuted.** The ~30 independent OOC sub-runs
+  (`control_sub_*`, `gapl_kernel_ip_synth_1`, etc.) all launch together and finish within a few
+  minutes regardless of `-jobs` - they were never the bottleneck. The single top-level `synth_1` run
+  (the main datapath's own serial synthesis) dominates the ~7-12 min wall-clock and isn't split
+  across `-jobs` at all. A controlled warm A/B (`-jobs 8` vs `-jobs 24`, all runs reset together)
+  showed only ~11% difference (8m36s vs 7m41s), not a multiple-x speedup.
+- **Single build's place & route scaling with more cores - refuted.** `-jobs` on `launch_runs`
+  doesn't govern a single run's internal threading at all; that's `general.maxThreads`. Capped
+  explicitly to 8 vs 24: `place_design` 3m03s vs 3m14s, `route_design` 2m16s vs 2m11s - statistically
+  identical. Place & route in this Vivado version doesn't scale past ~8 threads, confirming the
+  Stage B pblock testing's earlier observation.
+- **Concurrent multi-build throughput - confirmed, the one clean win.** Two `impl_1` place & route
+  runs launched simultaneously (separate project copies, each capped to `general.maxThreads 6`)
+  finished with individually identical timing to a solo run, and combined wall-clock for both
+  together (11m32s) matched one solo run's total time - genuine ~2x throughput for free, provided
+  per-build thread count is explicitly capped (not left to Vivado's `nproc`-derived default, which
+  would oversubscribe) and memory headroom is budgeted per build (~5.5-5.8GB peak RSS observed) -
+  this machine is also a live interactive desktop, so available memory varies with what else is
+  running, not just its 32GB nameplate figure.
 
-**Hypotheses to test, roughly in order of expected payoff** - treat these as hypotheses, not
-conclusions; this whole investigation has repeatedly shown plausible Vivado theories (incremental
-checkpointing, pblock locking) measuring flat or negative in practice, so nothing here should be
-assumed without a real, timed build to confirm it:
-
-1. **Full-shell synthesis (`makeSynthShell`, the rare ~12-16 min path)** should scale well with more
-   cores. It launches ~30 independent OOC sub-run syntheses via `launch_runs -jobs N`
-   (`run_synth.tcl`), which is genuinely embarrassingly parallel - on 8 cores those queue in
-   batches; on 24 cores most could run simultaneously. Test: force a shell rebuild (e.g. touch
-   something in `hw/hdl` excluding `GAPLprocessor.v`, or just do a truly clean build) with `-jobs`
-   raised to match the new core count, and compare wall-clock against the ~12-16 min baseline.
-2. **A single build's place & route (`run_impl.tcl`, the ~9 min dominant per-switch cost)** is a
-   weaker bet. Vivado's core placement/routing algorithms don't scale much past ~8 threads in
-   practice from what's been observed here, so going from 8 to 24 cores for *one* build's place &
-   route will likely help some but probably not proportionally. Measure, don't assume.
-3. **Running multiple full builds concurrently** (e.g., testing several GAPL applications in
-   parallel) becomes resource-plausible with 32GB RAM (~5GB/instance observed here) and 24 cores,
-   but only if each build's `-jobs`/thread count is explicitly capped (e.g., `-jobs 6` × 4 concurrent
-   builds) - otherwise each build will try to grab all 24 cores by default via Vivado's own
-   auto-detection, and you'll get CPU oversubscription instead of a speedup. This is the most
-   speculative of the three and the one most worth a real timed test before investing further.
+No code changes landed from this round - it answers "is parallelization worth pursuing" rather than
+implementing anything. The actionable takeaway: raising `-jobs` further isn't worth it (the
+Makefile's `JOBS=$(shell nproc)` already gets the (small) available win automatically); the real
+lever is running multiple full builds concurrently with explicit thread/memory budgeting, which
+would need new Gradle/script work to wire up (nothing today drives N-at-a-time builds) and is only
+worth doing if there's an actual use case for building several GAPL applications in one sitting
+(e.g. regression-testing many apps) rather than the single-application iteration loop Stage A
+already optimized. Full detail, numbers, and log excerpts: `brainstorming/todo.md`.
 
 ## Relevant source
 
