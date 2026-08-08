@@ -748,6 +748,10 @@ tasks.register<Exec>("makeClean") {
         [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
         make -s -C "${'$'}SUME_FOLDER" clean
         make -s -C "${'$'}NF_DESIGN_DIR" clean
+        # GAPL: run_impl.tcl's routed-checkpoint cache for incremental_checkpoint reuse - lives one
+        # level above hw/ (see run_impl.tcl's incremental_dcp_dir), so neither vendored Makefile
+        # target above (which only touch hw/ and test/) ever removes it.
+        rm -rf "${'$'}NF_DESIGN_DIR/incremental"
     """.trimIndent()))
 }
 
