@@ -379,7 +379,17 @@ fun registerNetfpgaCoreBuildTask(build: NetfpgaCoreBuild) =
         workingDir = coreDir
         exportNetfpgaEnv()
 
-        inputs.dir(coreDir.resolve("hdl"))
+        // preCleanPaths (e.g. hdl/axis_sim_pkg) are deleted and then recreated by the task's own
+        // tcl script every time it runs (see preCleanPaths' own doc comment) - if included in the
+        // declared "hdl" input, the directory's on-disk content after execution never matches the
+        // pre-execution snapshot from the run before, so Gradle can never converge to UP-TO-DATE:
+        // the task would rebuild on every single invocation forever, confirmed against a real back
+        // -to-back rerun. Excluding them from the input snapshot lets Gradle actually cache this.
+        inputs.files(fileTree(coreDir.resolve("hdl")) {
+            exclude(build.preCleanPaths.mapNotNull {
+                it.removePrefix("hdl/").takeIf { relative -> relative != it }?.let { relative -> "$relative/**" }
+            })
+        })
         inputs.file(coreDir.resolve(build.tclFile))
         outputs.file(coreDir.resolve("component.xml"))
         outputs.dir(coreDir.resolve("xgui"))

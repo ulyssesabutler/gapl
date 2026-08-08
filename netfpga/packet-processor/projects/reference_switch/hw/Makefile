@@ -122,28 +122,32 @@ identifier:
 	mv -f id_rom16x32.coe ../hw/create_ip/
 	mv -f rom_data.txt ../hw/create_ip/
 
-sim:	simclean identifier
+sim:	simcleantestio identifier
 	cp -f $(NF_DESIGN_DIR)/test/reg_defines_${NF_PROJECT_NAME}.py $(NF_DESIGN_DIR)/test/${TESTNAME}/reg_defines_${NF_PROJECT_NAME}.py
 	vivado -mode batch -source ../../../projects/${PROJ}/hw/tcl/${NF_PROJECT_NAME}_sim.tcl -tclargs ${TESTNAME}
 	$(SUME_FOLDER)/tools/scripts/nf_sim_reconcile_axi_logs.py
 	$(SUME_FOLDER)/tools/scripts/nf_sim_registers_axi_logs.py
- 
-reg: 	
+
+reg:
 	vivado -mode batch -source $(NF_DESIGN_DIR)/hw/tcl/${NF_PROJECT_NAME}_defines.tcl
-	vivado -mode batch -source $(NF_DESIGN_DIR)/hw/tcl/export_registers.tcl	
+	vivado -mode batch -source $(NF_DESIGN_DIR)/hw/tcl/export_registers.tcl
 	cd ../sw/embedded/src  && cp ../../../../../tools/scripts/xparam2regdefines.py . && python xparam2regdefines.py
 	cd ../sw/embedded/src  && rm -f xparam2regdefines.py && mv reg_defines.h ../
 	cd ../sw/embedded && cp ../../../../tools/scripts/python_parser.py . && python python_parser.py
-	cd ../sw/embedded && rm -f python_parser.py && mv reg_defines.py ../../test/reg_defines_${NF_PROJECT_NAME}.py 
-	
-simgui: simclean identifier
+	cd ../sw/embedded && rm -f python_parser.py && mv reg_defines.py ../../test/reg_defines_${NF_PROJECT_NAME}.py
+
+simgui: simcleantestio identifier
 	cp -f $(NF_DESIGN_DIR)/test/reg_defines_reference_switch.py $(NF_DESIGN_DIR)/test/${TESTNAME}/reg_defines_reference_switch.py
 	vivado -mode gui -source ../../../projects/${PROJ}/hw/tcl/${NF_PROJECT_NAME}_sim.tcl -tclargs ${TESTNAME}
 	$(SUME_FOLDER)/tools/scripts/nf_sim_reconcile_axi_logs.py
 	$(SUME_FOLDER)/tools/scripts/nf_sim_registers_axi_logs.py
 
-simclean:
-	rm -rf proj_* vivado*.* *.*~ .Xil* $(NF_DESIGN_DIR)/hw/ip_repo/ $(NF_DESIGN_DIR)/hw/project_sim/
+# GAPL: everything simclean does except wiping project_sim/ip_repo - sim/simgui use this instead so
+# reference_switch_sim.tcl (see its own comments) can reuse an existing project_sim across runs
+# instead of paying for a full create_project + create_ip/generate_target of every sim IP on every
+# single invocation. simclean itself (used by clean/distclean) still does the full wipe.
+simcleantestio:
+	rm -rf proj_* vivado*.* *.*~ .Xil*
 	rm -rf *[0-9]_{stim,expected,log}.axi
 	rm -f *.axi
 	rm -f portconfig.sim
@@ -155,10 +159,13 @@ simclean:
 	rm -rf ../test/seed
 	rm -rf ../test/*.sim
 	rm -rf ../test/proj_*
-	rm -rf ../test/ip_repo
 	rm -f ../test/vivado*.*
 	rm -f ../test/*_*_*/reg_defines_${NF_PROJECT_NAME}.py
 	rm -f ../test/*_*_*/reg_defines_${NF_PROJECT_NAME}.pyc
+
+simclean: simcleantestio
+	rm -rf $(NF_DESIGN_DIR)/hw/ip_repo/ $(NF_DESIGN_DIR)/hw/project_sim/
+	rm -rf ../test/ip_repo
 
 distclean: clean
 

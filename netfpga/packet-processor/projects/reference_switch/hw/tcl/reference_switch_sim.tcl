@@ -53,109 +53,174 @@ set test_name [lindex $argv 0]
 source $::env(NF_DESIGN_DIR)/hw/tcl/$::env(NF_PROJECT_NAME)_defines.tcl
 
 # Build project.
-create_project -name ${design} -force -dir "$::env(NF_DESIGN_DIR)/hw/${proj_dir}" -part ${device}
-set_property source_mgmt_mode DisplayOnly [current_project]  
-set_property top ${top} [current_fileset]
-puts "Creating User Datapath reference project"
+#
+# GAPL: reuse an existing sim project instead of paying for a full create_project +
+# create_ip/generate_target of every sim IP + control_sub's block design on every single
+# invocation - see hw/Makefile's simcleantestio (used by sim/simgui instead of simclean) for the
+# other half of this: it no longer deletes project_sim/ip_repo between runs. Every create_ip block
+# below is existence-guarded (`get_ips -quiet <name>`) so this is safe whether reusing or creating
+# fresh. gapl_kernel_ip is the one deliberate exception - see its own comment below.
+set project_file "$::env(NF_DESIGN_DIR)/hw/${proj_dir}/${design}.xpr"
+if {[file exists $project_file]} {
+    puts "GAPL: found existing sim project, reusing: $project_file"
+    open_project $project_file
+} else {
+    create_project -name ${design} -force -dir "$::env(NF_DESIGN_DIR)/hw/${proj_dir}" -part ${device}
+    set_property source_mgmt_mode DisplayOnly [current_project]
+    set_property top ${top} [current_fileset]
+    puts "Creating User Datapath reference project"
 
-create_fileset -constrset -quiet constraints
+    create_fileset -constrset -quiet constraints
+    add_files -fileset constraints -norecurse ${bit_settings}
+    add_files -fileset constraints -norecurse ${project_constraints}
+    add_files -fileset constraints -norecurse ${nf_10g_constraints}
+    set_property is_enabled true [get_files ${project_constraints}]
+    set_property is_enabled true [get_files ${bit_settings}]
+    set_property is_enabled true [get_files ${project_constraints}]
+}
+
+# GAPL: unlike project_sim itself, ip_repo is NOT persisted across runs - it's just a disposable
+# local mirror of lib/hw/ for Vivado's ip_repo_paths mechanism, and it's how a freshly-packaged
+# gapl_kernel_ip (or any other core) actually reaches this project's IP catalog. Tried `-force`
+# instead of delete+recreate first, on the assumption it'd make the copy idempotent against an
+# already-populated ip_repo/ from a prior run - confirmed against real Vivado that it doesn't:
+# `file copy -force` still errors ("file already exists") when a destination subdirectory of the
+# same name already exists, the same nested-directory-merge quirk documented on preCleanPaths in
+# netfpga/build.gradle.kts. Deleting first sidesteps it entirely, and is cheap (local disk copy).
+file delete -force ${repo_dir}
 file copy ${public_repo_dir}/ ${repo_dir}
 set_property ip_repo_paths ${repo_dir} [current_fileset]
-add_files -fileset constraints -norecurse ${bit_settings}
-add_files -fileset constraints -norecurse ${project_constraints}
-add_files -fileset constraints -norecurse ${nf_10g_constraints}
-set_property is_enabled true [get_files ${project_constraints}]
-set_property is_enabled true [get_files ${bit_settings}]
-set_property is_enabled true [get_files ${project_constraints}]
 
 update_ip_catalog
-create_ip -name switch_output_port_lookup -vendor NetFPGA -library NetFPGA -module_name output_port_lookup_ip
-set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_PORT_LOOKUP_BASEADDR] [get_ips output_port_lookup_ip]
-set_property generate_synth_checkpoint false [get_files output_port_lookup_ip.xci]
-reset_target all [get_ips output_port_lookup_ip]
-generate_target all [get_ips output_port_lookup_ip]
-create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
-set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_ip]
-set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
-reset_target all [get_ips input_arbiter_ip]
-generate_target all [get_ips input_arbiter_ip]
-create_ip -name output_queues -vendor NetFPGA -library NetFPGA -module_name output_queues_ip
-set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_QUEUES_BASEADDR] [get_ips output_queues_ip]
-set_property generate_synth_checkpoint false [get_files output_queues_ip.xci]
-reset_target all [get_ips output_queues_ip]
-generate_target all [get_ips output_queues_ip]
+if {[get_ips -quiet output_port_lookup_ip] eq ""} {
+    create_ip -name switch_output_port_lookup -vendor NetFPGA -library NetFPGA -module_name output_port_lookup_ip
+    set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_PORT_LOOKUP_BASEADDR] [get_ips output_port_lookup_ip]
+    set_property generate_synth_checkpoint false [get_files output_port_lookup_ip.xci]
+    reset_target all [get_ips output_port_lookup_ip]
+    generate_target all [get_ips output_port_lookup_ip]
+}
+if {[get_ips -quiet input_arbiter_ip] eq ""} {
+    create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
+    set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_ip]
+    set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
+    reset_target all [get_ips input_arbiter_ip]
+    generate_target all [get_ips input_arbiter_ip]
+}
+if {[get_ips -quiet output_queues_ip] eq ""} {
+    create_ip -name output_queues -vendor NetFPGA -library NetFPGA -module_name output_queues_ip
+    set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_QUEUES_BASEADDR] [get_ips output_queues_ip]
+    set_property generate_synth_checkpoint false [get_files output_queues_ip.xci]
+    reset_target all [get_ips output_queues_ip]
+    generate_target all [get_ips output_queues_ip]
+}
 
 #Add ID block
-create_ip -name blk_mem_gen -vendor xilinx.com -library ip -version 8.4 -module_name identifier_ip
-set_property -dict [list CONFIG.Interface_Type {AXI4} CONFIG.AXI_Type {AXI4_Lite} CONFIG.AXI_Slave_Type {Memory_Slave} CONFIG.Use_AXI_ID {false} CONFIG.Load_Init_File {true} CONFIG.Coe_File {/../../../../../../create_ip/id_rom16x32.coe} CONFIG.Fill_Remaining_Memory_Locations {true} CONFIG.Remaining_Memory_Locations {DEADDEAD} CONFIG.Memory_Type {Simple_Dual_Port_RAM} CONFIG.Use_Byte_Write_Enable {true} CONFIG.Byte_Size {8} CONFIG.Assume_Synchronous_Clk {true} CONFIG.Write_Width_A {32} CONFIG.Write_Depth_A {1024} CONFIG.Read_Width_A {32} CONFIG.Operating_Mode_A {READ_FIRST} CONFIG.Write_Width_B {32} CONFIG.Read_Width_B {32} CONFIG.Operating_Mode_B {READ_FIRST} CONFIG.Enable_B {Use_ENB_Pin} CONFIG.Register_PortA_Output_of_Memory_Primitives {false} CONFIG.Register_PortB_Output_of_Memory_Primitives {false} CONFIG.Use_RSTB_Pin {true} CONFIG.Reset_Type {ASYNC} CONFIG.Port_A_Write_Rate {50} CONFIG.Port_B_Clock {100} CONFIG.Port_B_Enable_Rate {100}] [get_ips identifier_ip]
-set_property generate_synth_checkpoint false [get_files identifier_ip.xci]
-reset_target all [get_ips identifier_ip]
-generate_target all [get_ips identifier_ip]
+if {[get_ips -quiet identifier_ip] eq ""} {
+    create_ip -name blk_mem_gen -vendor xilinx.com -library ip -version 8.4 -module_name identifier_ip
+    set_property -dict [list CONFIG.Interface_Type {AXI4} CONFIG.AXI_Type {AXI4_Lite} CONFIG.AXI_Slave_Type {Memory_Slave} CONFIG.Use_AXI_ID {false} CONFIG.Load_Init_File {true} CONFIG.Coe_File {/../../../../../../create_ip/id_rom16x32.coe} CONFIG.Fill_Remaining_Memory_Locations {true} CONFIG.Remaining_Memory_Locations {DEADDEAD} CONFIG.Memory_Type {Simple_Dual_Port_RAM} CONFIG.Use_Byte_Write_Enable {true} CONFIG.Byte_Size {8} CONFIG.Assume_Synchronous_Clk {true} CONFIG.Write_Width_A {32} CONFIG.Write_Depth_A {1024} CONFIG.Read_Width_A {32} CONFIG.Operating_Mode_A {READ_FIRST} CONFIG.Write_Width_B {32} CONFIG.Read_Width_B {32} CONFIG.Operating_Mode_B {READ_FIRST} CONFIG.Enable_B {Use_ENB_Pin} CONFIG.Register_PortA_Output_of_Memory_Primitives {false} CONFIG.Register_PortB_Output_of_Memory_Primitives {false} CONFIG.Use_RSTB_Pin {true} CONFIG.Reset_Type {ASYNC} CONFIG.Port_A_Write_Rate {50} CONFIG.Port_B_Clock {100} CONFIG.Port_B_Enable_Rate {100}] [get_ips identifier_ip]
+    set_property generate_synth_checkpoint false [get_files identifier_ip.xci]
+    reset_target all [get_ips identifier_ip]
+    generate_target all [get_ips identifier_ip]
+}
 
-create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name clk_wiz_ip
-set_property -dict [list CONFIG.PRIM_IN_FREQ {200.00} CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {100.000} CONFIG.USE_SAFE_CLOCK_STARTUP {true} CONFIG.RESET_TYPE {ACTIVE_LOW} CONFIG.CLKIN1_JITTER_PS {50.0} CONFIG.CLKOUT1_DRIVES {BUFGCE} CONFIG.CLKOUT2_DRIVES {BUFGCE} CONFIG.CLKOUT3_DRIVES {BUFGCE} CONFIG.CLKOUT4_DRIVES {BUFGCE} CONFIG.CLKOUT5_DRIVES {BUFGCE} CONFIG.CLKOUT6_DRIVES {BUFGCE} CONFIG.CLKOUT7_DRIVES {BUFGCE} CONFIG.MMCM_CLKFBOUT_MULT_F {5.000} CONFIG.MMCM_CLKIN1_PERIOD {5.0} CONFIG.MMCM_CLKOUT0_DIVIDE_F {10.000} CONFIG.RESET_PORT {resetn} CONFIG.CLKOUT1_JITTER {98.146} CONFIG.CLKOUT1_PHASE_ERROR {89.971}] [get_ips clk_wiz_ip]
-set_property generate_synth_checkpoint false [get_files clk_wiz_ip.xci]
-reset_target all [get_ips clk_wiz_ip]
-generate_target all [get_ips clk_wiz_ip]
+if {[get_ips -quiet clk_wiz_ip] eq ""} {
+    create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name clk_wiz_ip
+    set_property -dict [list CONFIG.PRIM_IN_FREQ {200.00} CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {100.000} CONFIG.USE_SAFE_CLOCK_STARTUP {true} CONFIG.RESET_TYPE {ACTIVE_LOW} CONFIG.CLKIN1_JITTER_PS {50.0} CONFIG.CLKOUT1_DRIVES {BUFGCE} CONFIG.CLKOUT2_DRIVES {BUFGCE} CONFIG.CLKOUT3_DRIVES {BUFGCE} CONFIG.CLKOUT4_DRIVES {BUFGCE} CONFIG.CLKOUT5_DRIVES {BUFGCE} CONFIG.CLKOUT6_DRIVES {BUFGCE} CONFIG.CLKOUT7_DRIVES {BUFGCE} CONFIG.MMCM_CLKFBOUT_MULT_F {5.000} CONFIG.MMCM_CLKIN1_PERIOD {5.0} CONFIG.MMCM_CLKOUT0_DIVIDE_F {10.000} CONFIG.RESET_PORT {resetn} CONFIG.CLKOUT1_JITTER {98.146} CONFIG.CLKOUT1_PHASE_ERROR {89.971}] [get_ips clk_wiz_ip]
+    set_property generate_synth_checkpoint false [get_files clk_wiz_ip.xci]
+    reset_target all [get_ips clk_wiz_ip]
+    generate_target all [get_ips clk_wiz_ip]
+}
 
+if {[get_ips -quiet barrier_ip] eq ""} {
+    create_ip -name barrier -vendor NetFPGA -library NetFPGA -module_name barrier_ip
+    reset_target all [get_ips barrier_ip]
+    generate_target all [get_ips barrier_ip]
+}
 
-create_ip -name barrier -vendor NetFPGA -library NetFPGA -module_name barrier_ip
-reset_target all [get_ips barrier_ip]
-generate_target all [get_ips barrier_ip]
+if {[get_ips -quiet axis_sim_record_ip0] eq ""} {
+    create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip0
+    set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_0_log.axi] [get_ips axis_sim_record_ip0]
+    reset_target all [get_ips axis_sim_record_ip0]
+    generate_target all [get_ips axis_sim_record_ip0]
+}
 
-create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip0
-set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_0_log.axi] [get_ips axis_sim_record_ip0]
-reset_target all [get_ips axis_sim_record_ip0]
-generate_target all [get_ips axis_sim_record_ip0]
+if {[get_ips -quiet axis_sim_record_ip1] eq ""} {
+    create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip1
+    set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_1_log.axi] [get_ips axis_sim_record_ip1]
+    reset_target all [get_ips axis_sim_record_ip1]
+    generate_target all [get_ips axis_sim_record_ip1]
+}
 
-create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip1
-set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_1_log.axi] [get_ips axis_sim_record_ip1]
-reset_target all [get_ips axis_sim_record_ip1]
-generate_target all [get_ips axis_sim_record_ip1]
+if {[get_ips -quiet axis_sim_record_ip2] eq ""} {
+    create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip2
+    set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_2_log.axi] [get_ips axis_sim_record_ip2]
+    reset_target all [get_ips axis_sim_record_ip2]
+    generate_target all [get_ips axis_sim_record_ip2]
+}
 
-create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip2
-set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_2_log.axi] [get_ips axis_sim_record_ip2]
-reset_target all [get_ips axis_sim_record_ip2]
-generate_target all [get_ips axis_sim_record_ip2]
+if {[get_ips -quiet axis_sim_record_ip3] eq ""} {
+    create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip3
+    set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_3_log.axi] [get_ips axis_sim_record_ip3]
+    reset_target all [get_ips axis_sim_record_ip3]
+    generate_target all [get_ips axis_sim_record_ip3]
+}
 
-create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip3
-set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/nf_interface_3_log.axi] [get_ips axis_sim_record_ip3]
-reset_target all [get_ips axis_sim_record_ip3]
-generate_target all [get_ips axis_sim_record_ip3]
+if {[get_ips -quiet axis_sim_record_ip4] eq ""} {
+    create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip4
+    set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/dma_0_log.axi] [get_ips axis_sim_record_ip4]
+    reset_target all [get_ips axis_sim_record_ip4]
+    generate_target all [get_ips axis_sim_record_ip4]
+}
 
-create_ip -name axis_sim_record -vendor NetFPGA -library NetFPGA -module_name axis_sim_record_ip4
-set_property -dict [list CONFIG.OUTPUT_FILE $::env(NF_DESIGN_DIR)/test/dma_0_log.axi] [get_ips axis_sim_record_ip4]
-reset_target all [get_ips axis_sim_record_ip4]
-generate_target all [get_ips axis_sim_record_ip4]
+if {[get_ips -quiet axis_sim_stim_ip0] eq ""} {
+    create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip0
+    set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_0_stim.axi] [get_ips axis_sim_stim_ip0]
+    generate_target all [get_ips axis_sim_stim_ip0]
+}
 
-create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip0
-set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_0_stim.axi] [get_ips axis_sim_stim_ip0]
-generate_target all [get_ips axis_sim_stim_ip0]
+if {[get_ips -quiet axis_sim_stim_ip1] eq ""} {
+    create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip1
+    set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_1_stim.axi] [get_ips axis_sim_stim_ip1]
+    generate_target all [get_ips axis_sim_stim_ip1]
+}
 
-create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip1
-set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_1_stim.axi] [get_ips axis_sim_stim_ip1]
-generate_target all [get_ips axis_sim_stim_ip1]
+if {[get_ips -quiet axis_sim_stim_ip2] eq ""} {
+    create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip2
+    set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_2_stim.axi] [get_ips axis_sim_stim_ip2]
+    generate_target all [get_ips axis_sim_stim_ip2]
+}
 
-create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip2
-set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_2_stim.axi] [get_ips axis_sim_stim_ip2]
-generate_target all [get_ips axis_sim_stim_ip2]
+if {[get_ips -quiet axis_sim_stim_ip3] eq ""} {
+    create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip3
+    set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_3_stim.axi] [get_ips axis_sim_stim_ip3]
+    generate_target all [get_ips axis_sim_stim_ip3]
+}
 
-create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip3
-set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/nf_interface_3_stim.axi] [get_ips axis_sim_stim_ip3]
-generate_target all [get_ips axis_sim_stim_ip3]
+if {[get_ips -quiet axis_sim_stim_ip4] eq ""} {
+    create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip4
+    set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/dma_0_stim.axi] [get_ips axis_sim_stim_ip4]
+    generate_target all [get_ips axis_sim_stim_ip4]
+}
 
-create_ip -name axis_sim_stim -vendor NetFPGA -library NetFPGA -module_name axis_sim_stim_ip4
-set_property -dict [list CONFIG.input_file $::env(NF_DESIGN_DIR)/test/dma_0_stim.axi] [get_ips axis_sim_stim_ip4]
-generate_target all [get_ips axis_sim_stim_ip4]
-
-create_ip -name axi_sim_transactor -vendor NetFPGA -library NetFPGA -module_name axi_sim_transactor_ip
-set_property -dict [list CONFIG.STIM_FILE $::env(NF_DESIGN_DIR)/test/reg_stim.axi CONFIG.EXPECT_FILE $::env(NF_DESIGN_DIR)/test/reg_expect.axi CONFIG.LOG_FILE $::env(NF_DESIGN_DIR)/test/reg_stim.log] [get_ips axi_sim_transactor_ip]
-reset_target all [get_ips axi_sim_transactor_ip]
-generate_target all [get_ips axi_sim_transactor_ip]
+if {[get_ips -quiet axi_sim_transactor_ip] eq ""} {
+    create_ip -name axi_sim_transactor -vendor NetFPGA -library NetFPGA -module_name axi_sim_transactor_ip
+    set_property -dict [list CONFIG.STIM_FILE $::env(NF_DESIGN_DIR)/test/reg_stim.axi CONFIG.EXPECT_FILE $::env(NF_DESIGN_DIR)/test/reg_expect.axi CONFIG.LOG_FILE $::env(NF_DESIGN_DIR)/test/reg_stim.log] [get_ips axi_sim_transactor_ip]
+    reset_target all [get_ips axi_sim_transactor_ip]
+    generate_target all [get_ips axi_sim_transactor_ip]
+}
 
 update_ip_catalog
 
-source $::env(NF_DESIGN_DIR)/hw/tcl/control_sub_sim.tcl
+# GAPL: control_sub is a static block design (MicroBlaze control subsystem), independent of the
+# selected GAPL application - guarded the same way as the create_ip blocks above, since
+# control_sub_sim.tcl's own create_bd_design would error on a reused project that already has it.
+# Checks the same thing control_sub_sim.tcl's own vendored boilerplate checks internally
+# (get_files -quiet ${design_name}.bd, see its own "USE CASES" comment) - get_bd_designs was tried
+# first and confirmed against real Vivado NOT to reflect a block design already on disk in a
+# reopened project (it errored with "Design <control_sub> already exists" despite the guard).
+if {[get_files -quiet control_sub.bd] eq ""} {
+    source $::env(NF_DESIGN_DIR)/hw/tcl/control_sub_sim.tcl
+}
 
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/axi_clocking.v"
 
@@ -216,8 +281,19 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_processor.v"
 # directly, so just reading gapl_wrapper.v raw (as this file used to do) leaves "gapl_kernel_ip"
 # undefined and elaboration fails with "Module <gapl_kernel_ip> not found". This was missed when
 # the kernel got packaged as an IP for create_project.tcl's synthesis-checkpoint flow.
+#
+# Unlike every other IP above, this one is NOT existence-guarded before reset_target/generate_target
+# - its content varies per GAPL application (packageCoreGaplKernel in netfpga/build.gradle.kts only
+# reruns when the selected application actually changes), so on a reused project, skipping this the
+# way the static IPs above are skipped would silently keep simulating whichever application's kernel
+# was packaged when this IP was first created in this project - the same class of stale-kernel bug
+# already found and fixed once for the hw build (brainstorming/netfpga-partial-synthesis.md, Phase
+# 1). create_ip itself is still guarded (it errors if already present), but reset_target/
+# generate_target always rerun to pick up whatever packageCoreGaplKernel most recently produced.
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/GAPLprocessor.v"
-create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
+if {[get_ips -quiet gapl_kernel_ip] eq ""} {
+    create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
+}
 reset_target all [get_ips gapl_kernel_ip]
 generate_target all [get_ips gapl_kernel_ip]
 
