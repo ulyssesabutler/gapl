@@ -57,9 +57,12 @@ object LiteralSimplifier: Transformer {
         }
     }
 
-    // TODO: This stage alone took ~198s compiling simtest/tests/aes/test.gapl (a large design with
-    //   many literal nodes) - worth profiling module.getConnectionsForNodeOutput/connect/disconnect
-    //   for hidden O(n^2) behavior before assuming this is just "large designs are slow." Not urgent.
+    // Profiled (see netfpga-perf-analysis investigation): this stage's own connect()/disconnect()
+    // calls were a real O(n^2) source (fixed in MutableModule.connect/disconnect), but the
+    // dominant cost was actually Module.toMutableModule() above it - its WirePairs accumulation
+    // was O(n^2) in the whole module's node/wire count, paid fresh by every transformer stage that
+    // calls it on an already-large flattened design. Fixing both took this stage from ~840s to
+    // ~6s compiling netfpga's aes processor.
     override fun transform(original: List<Module>): List<Module> {
         return original
             .map { it.toMutableModule() }

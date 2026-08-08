@@ -37,14 +37,14 @@ class MutableModule(
 
         connectionSet.add(connection)
         connectionByInput[inputWire] = connection
-        connectionsByOutput[outputWire] = connectionsByOutput.getOrDefault(outputWire, emptyList()) + connection
+        connectionsByOutput.getOrPut(outputWire) { mutableListOf() }.add(connection)
     }
 
     fun disconnect(inputWire: InputWire) {
         val connection = getConnectionForInputWire(inputWire)
         connectionSet.remove(connection)
         connectionByInput.remove(inputWire)
-        connectionsByOutput[connection.source] = connectionsByOutput[connection.source]!! - connection
+        connectionsByOutput.getValue(connection.source).remove(connection)
     }
 
 

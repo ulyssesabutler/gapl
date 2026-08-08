@@ -43,7 +43,7 @@ open class Module(
 
     protected val connectionSet = mutableSetOf<Connection>()
     protected val connectionByInput = mutableMapOf<InputWire, Connection>()
-    protected val connectionsByOutput = mutableMapOf<OutputWire, List<Connection>>()
+    protected val connectionsByOutput = mutableMapOf<OutputWire, MutableList<Connection>>()
 
     // Single Getters
     fun getInputNode(identifier: String) = inputNodes[identifier]!!
@@ -74,22 +74,35 @@ open class Module(
     fun toMutableModule(): MutableModule {
         val newModule = MutableModule(invocation)
 
-        var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
+        // Accumulate into mutable lists rather than reassigning via `wirePairs += WirePairs(...)`
+        // each iteration - WirePairs.plus concatenates immutable lists, so that pattern was
+        // O(n^2) in the module's total node/wire count (rebuilding everything accumulated so far
+        // on every node). Measured as the dominant cost of every transformer stage that calls
+        // toMutableModule() on a large flattened design - e.g. ~840s of LiteralSimplifier's total
+        // time compiling netfpga's aes processor, collapsing to ~6s once fixed.
+        val inputWirePairs = mutableListOf<NodeCopier.WirePair<InputWire>>()
+        val outputWirePairs = mutableListOf<NodeCopier.WirePair<OutputWire>>()
 
         for (node in getInputNodes()) {
-            wirePairs += NodeCopier.copyInputNode(node, newModule).wirePairs
+            val pairs = NodeCopier.copyInputNode(node, newModule).wirePairs
+            inputWirePairs.addAll(pairs.input)
+            outputWirePairs.addAll(pairs.output)
         }
 
         for (node in getOutputNodes()) {
-            wirePairs += NodeCopier.copyOutputNode(node, newModule).wirePairs
+            val pairs = NodeCopier.copyOutputNode(node, newModule).wirePairs
+            inputWirePairs.addAll(pairs.input)
+            outputWirePairs.addAll(pairs.output)
         }
 
         for (node in getBodyNodes()) {
-            wirePairs += NodeCopier.copyBodyNode(node, invocation.gaplFunctionName, newModule, { _, n -> n }).wirePairs
+            val pairs = NodeCopier.copyBodyNode(node, invocation.gaplFunctionName, newModule, { _, n -> n }).wirePairs
+            inputWirePairs.addAll(pairs.input)
+            outputWirePairs.addAll(pairs.output)
         }
 
-        val newToOldInput = wirePairs.input.associate { it.current to it.inlining }
-        val oldToNewOutput = wirePairs.output.associate { it.inlining to it.current }
+        val newToOldInput = inputWirePairs.associate { it.current to it.inlining }
+        val oldToNewOutput = outputWirePairs.associate { it.inlining to it.current }
 
         (newModule.getOutputNodes() + newModule.getBodyNodes()).forEach { node ->
             node.inputWires().forEach { inputWire ->
