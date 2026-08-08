@@ -140,7 +140,7 @@ val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
 val retimingSolver = propString("retimingSolver")
 val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 
-val flattenMode = propString("flatten", "all")!!
+val flattenMode = propString("flatten", "recursive")!!
 
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
