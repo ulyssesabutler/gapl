@@ -3,6 +3,8 @@ package com.uabutler.netlistir.transformer
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
+import com.uabutler.netlistir.netlist.InputWire
+import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.util.NodeCopier
 import com.uabutler.netlistir.util.NodeCopier.copyBodyNode
 import com.uabutler.netlistir.util.NodeCopier.copyInputNodeToPassThroughNode
@@ -26,19 +28,30 @@ class Flattener(val mode: Mode): Transformer {
         fun inline(currentModule: MutableModule, inliningModule: MutableModule, node: ModuleInvocationNode) {
             val invocationIdentifier = node.name()
 
-            var wirePairs = NodeCopier.WirePairs(emptyList(), emptyList())
+            // Accumulate into mutable lists rather than reassigning via `wirePairs +=
+            // WirePairs(...)` each iteration - WirePairs.plus concatenates immutable lists, making
+            // that pattern O(n^2) in the inlined module's node/wire count (same bug fixed in
+            // Module.toMutableModule() - see netfpga-perf-analysis investigation). Scoped to one
+            // callee's own size per inlining call here rather than the whole flattened module, so
+            // less severe in practice, but the same fix.
+            val inputWirePairs = mutableListOf<NodeCopier.WirePair<InputWire>>()
+            val outputWirePairs = mutableListOf<NodeCopier.WirePair<OutputWire>>()
+            fun accumulate(pairs: NodeCopier.WirePairs) {
+                inputWirePairs.addAll(pairs.input)
+                outputWirePairs.addAll(pairs.output)
+            }
 
             // STEP 1a: Create the IO Nodes. We create a PassThrough node for each IO Node in the inlining module
             Timer.start("Step 1a")
             val inputNodes = inliningModule.getInputNodes().associate { inputNode ->
                 val createdNode = copyInputNodeToPassThroughNode(inputNode, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
+                accumulate(createdNode.wirePairs)
                 inputNode.name() to createdNode.node
             }
 
             val outputNodes = inliningModule.getOutputNodes().associate { outputNode ->
                 val createdNode = copyOutputNodeToPassThroughNode(outputNode, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
+                accumulate(createdNode.wirePairs)
                 outputNode.name() to createdNode.node
             }
             Timer.stop("Step 1a")
@@ -78,12 +91,12 @@ class Flattener(val mode: Mode): Transformer {
             Timer.start("Step 2a")
             val bodyNodes = inliningModule.getBodyNodes().map {
                 val createdNode = copyBodyNode(it, invocationIdentifier, currentModule)
-                wirePairs += createdNode.wirePairs
+                accumulate(createdNode.wirePairs)
                 createdNode.node
             }
 
-            val inliningInput = wirePairs.input.associate { it.current to it.inlining }
-            val currentOutput = wirePairs.output.associate { it.inlining to it.current }
+            val inliningInput = inputWirePairs.associate { it.current to it.inlining }
+            val currentOutput = outputWirePairs.associate { it.inlining to it.current }
             Timer.stop("Step 2a")
 
             // Step 2b: Connect each new node in the new module based on the connections in the inlining module
