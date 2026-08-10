@@ -193,8 +193,19 @@ tasks.register("generateGaplVerilog") {
     description = "Compile specified *.gapl and copy wrapper.v (under src/$programName) to Verilog into build/verilog"
     dependsOn(":compiler:installDist")
 
-    // Incremental inputs/outputs
+    // Incremental inputs/outputs. compilePropsFile is the resolved-at-configuration-time
+    // compile.properties for the selected -PprogramVariationName - it's what drives every
+    // compiler flag added below (retime, flatten, retimingClockPeriod, retimingSolver,
+    // retimingMaintainsTiming), and it resolves to a *different* physical file whenever the
+    // variation is switched. Without it declared here, this task's only tracked input was
+    // gaplTargetFile (processor.gapl itself), so switching -PprogramVariationName without
+    // touching processor.gapl left Gradle believing a stale previous variation's already-built
+    // build/verilog/*.v was still UP-TO-DATE - silently shipping the wrong compiled design.
     inputs.files(gaplTargetFile)
+    inputs.file(compilePropsFile)
+    if (retime) {
+        inputs.file(delayModelFile)
+    }
     outputs.dir(gaplVerilogOut)
 
     doLast {
