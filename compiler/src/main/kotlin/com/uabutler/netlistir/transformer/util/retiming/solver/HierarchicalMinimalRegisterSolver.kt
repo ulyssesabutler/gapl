@@ -122,7 +122,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
 
         // Child nodes expand into contracted subgraphs using the child's solve result
         if (graph.childNodes().any { it.childGraph !in childResults }) {
-            Logger.error { "Missing child solve result — child was not processed first" }
+            Logger.error { "Missing child solve result — child was not processed first (graph=${graph.value}, missing=${graph.childNodes().filter { it.childGraph !in childResults }.map { it.childGraph.value }})" }
             return@run null
         }
 
@@ -219,8 +219,14 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         }
 
         // Step 4: Run the flat solver
-        val retimedFlatGraph = MinimalRegisterSolver(MonolithicRetimingProblem(flatGraph), equalityConstraints).solveOrNull(targetClockPeriod)?.graph
-            ?: return@run null
+        val minimalResult = MinimalRegisterSolver(MonolithicRetimingProblem(flatGraph), equalityConstraints).solveOrNull(targetClockPeriod)
+        if (minimalResult == null) {
+            // Debug, not error: this fires routinely for every infeasible probe during
+            // findMinimumClockPeriod's binary search, not just for a genuine bug.
+            Logger.debug { "MinimalRegisterSolver infeasible for graph=${graph.value} at period=$targetClockPeriod (unretimedClockPeriod=${unretimedProperties.clockPeriod}, nodes=${allFlatNodes.size}, edges=${allFlatEdges.size})" }
+            return@run null
+        }
+        val retimedFlatGraph = minimalResult.graph
 
         // Step 5: Back-map retimed edge weights to the hierarchical graph
         // Flat edges are ordered: expansion edges [0, flatEdgeStartIndex), then hierarchical edges [flatEdgeStartIndex, ...)

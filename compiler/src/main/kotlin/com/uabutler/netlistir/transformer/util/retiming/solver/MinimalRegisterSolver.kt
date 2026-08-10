@@ -28,9 +28,19 @@ class MinimalRegisterSolver<G, N, E>(
     companion object {
         init { Loader.loadNativeLibraries() }
 
+        // Sums of *absolute* edge weight, not signed weight: HierarchicalMinimalRegisterSolver's
+        // per-child "expansion" edges are deliberately built with negative starting weight (see its
+        // own comments) to encode an already-solved child's boundary offset via an accompanying
+        // equality constraint, not a real register count - so a signed sum here can come out
+        // negative for those flat graphs. That previously produced a negative upperBound, handing
+        // model.newIntVar an inverted (empty) domain and making CP-SAT report MODEL_INVALID, which
+        // solveOrNull's caller then couldn't distinguish from a genuinely infeasible clock period.
+        // FastSolver also isn't a safe source of non-negative weights here: it's a pure heuristic
+        // that only checks the resulting clock period, so it never re-establishes "all final edge
+        // weights are non-negative" for a graph that didn't already start that way.
         fun computeUpperRetimingUpperBound(graph: LeisersonCircuitGraph<*, *, *>, clockPeriod: Int?): Long? = Logger.run("Computing upper bound on retiming label") {
-            if (clockPeriod == null) return@run graph.edges.sumOf { it.weight }.toLong()
-            return@run FastSolver(MonolithicRetimingProblem(graph)).solveOrNull(clockPeriod)?.graph?.edges?.sumOf { it.weight }?.toLong()
+            if (clockPeriod == null) return@run graph.edges.sumOf { kotlin.math.abs(it.weight.toLong()) }
+            return@run FastSolver(MonolithicRetimingProblem(graph)).solveOrNull(clockPeriod)?.graph?.edges?.sumOf { kotlin.math.abs(it.weight.toLong()) }
         }
     }
 
@@ -198,7 +208,7 @@ class MinimalRegisterSolver<G, N, E>(
         when (solverStatus) {
             CpSolverStatus.OPTIMAL -> Logger.debug { "LP solver found optimal solution" }
             else -> {
-                Logger.debug { "LP solver did not find an optimal solution: $solverStatus" }
+                Logger.debug { "LP solver did not find an optimal solution: $solverStatus; validate=${model.validate()}" }
                 return@run null
             }
         }
