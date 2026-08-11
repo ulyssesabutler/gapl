@@ -41,16 +41,6 @@ val nfProjectName = propOrEnv("nfProjectName", "NF_PROJECT_NAME", "reference_swi
 val programName = propOrEnv("programName", "PROGRAM_NAME", null)
 val programVariationName = propOrEnv("programVariationName", "PROGRAM_VARIATION_NAME", null)
 
-// Clock Period
-// GAPL: this is the only value a person should ever need to edit to change clk_200's speed. It's
-// a *request*, not a guarantee - solveClkWizConfig (below) resolves it against Vivado's own
-// Clocking Wizard solver, which fails the build loudly if it's not achievable by a single MMCM
-// stage. Every other place that used to need hand-editing (clk_wiz_ip's multiply/divide/jitter
-// config, and the create_clock constraint) is now generated *from* the solver's real output, so
-// they can't drift out of sync with each other or with the physical silicon the way they did
-// before - see the netfpga clock-period workflow investigation for the incident this replaced.
-val clockPeriodNs = propOrEnv("clockPeriodNs", "CLOCK_PERIOD_NS", "213.333")
-
 // GAPL: the exact part string create_project.tcl itself uses (`set device`) - solveClkWizConfig
 // needs the same one, since the MMCM's valid VCO/divide range is speed-grade-specific.
 val clockWizPart = propOrEnv("clockWizPart", "CLOCK_WIZ_PART", "xc7vx690t-3-ffg1761")
@@ -148,6 +138,22 @@ val testInputs = providers.gradleProperty("testInputs").orNull ?: testProps.getP
 val testExpectedOutputs = providers.gradleProperty("testExpectedOutputs").orNull ?: testProps.getProperty("testExpectedOutputs")!!
 
 val retime = propBool("retime", true)
+
+// GAPL: this is the only value a person should ever need to edit to change clk_200's speed. It's
+// a *request*, not a guarantee - solveClkWizConfig (below) resolves it against Vivado's own
+// Clocking Wizard solver, which fails the build loudly if it's not achievable by a single MMCM
+// stage. Every other place that used to need hand-editing (clk_wiz_ip's multiply/divide/jitter
+// config, and the create_clock constraint) is now generated *from* the solver's real output, so
+// they can't drift out of sync with each other or with the physical silicon the way they did
+// before - see the netfpga clock-period workflow investigation for the incident this replaced.
+//
+// Per-variation like retime/flatten above, not a global gradle.properties default: different
+// variations of the same design can need very different periods (an unretimed design's single
+// combinational block needs far more room than a retimed one), so each variation's own
+// compile.properties is what should carry its natural clock period, not one shared repo-wide
+// value. Falls back to NetFPGA's traditional 10.000ns when a variation doesn't set one -
+// still overridable from the command line with -PclockPeriodNs=... same as retime/flatten are.
+val clockPeriodNs = propString("clockPeriodNs", "10.000")!!
 
 val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
 
