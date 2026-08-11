@@ -109,6 +109,14 @@ if {[file exists $incremental_dcp]} {
     set_property incremental_checkpoint $incremental_dcp [get_runs impl_1]
 } else {
     puts "GAPL: no previous routed checkpoint found - full place & route this time"
+    # GAPL: incremental_checkpoint is a persistent property on the impl_1 run object, saved into
+    # the project state - it survives across separate `vivado -mode batch` sessions even though
+    # reset_run clears the run's completion status/outputs, not its configured properties. Without
+    # explicitly clearing it here, a run that previously had a checkpoint set (this same branch,
+    # last build) but no longer has one on disk (e.g. it was deleted to force a clean rebuild) hits
+    # "ERROR: [Vivado 12-3280] Incremental checkpoint file '...' set on run 'impl_1' does not
+    # exist" at launch_runs below - confirmed against real Vivado.
+    set_property incremental_checkpoint {} [get_runs impl_1]
 }
 
 # GAPL: see run_synth.tcl - no unconditional reset_run here either, for the same reason, but the
