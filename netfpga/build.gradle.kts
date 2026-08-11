@@ -1,5 +1,4 @@
 import org.gradle.api.tasks.Exec
-import org.apache.tools.ant.filters.ReplaceTokens
 import java.util.Properties
 
 plugins { base }
@@ -43,7 +42,22 @@ val programName = propOrEnv("programName", "PROGRAM_NAME", null)
 val programVariationName = propOrEnv("programVariationName", "PROGRAM_VARIATION_NAME", null)
 
 // Clock Period
-val clockPeriodNs = propOrEnv("clockPeriodNs", "CLOCK_PERIOD_NS", "10.000")
+// GAPL: this is the only value a person should ever need to edit to change clk_200's speed. It's
+// a *request*, not a guarantee - solveClkWizConfig (below) resolves it against Vivado's own
+// Clocking Wizard solver, which fails the build loudly if it's not achievable by a single MMCM
+// stage. Every other place that used to need hand-editing (clk_wiz_ip's multiply/divide/jitter
+// config, and the create_clock constraint) is now generated *from* the solver's real output, so
+// they can't drift out of sync with each other or with the physical silicon the way they did
+// before - see the netfpga clock-period workflow investigation for the incident this replaced.
+val clockPeriodNs = propOrEnv("clockPeriodNs", "CLOCK_PERIOD_NS", "213.333")
+
+// GAPL: the exact part string create_project.tcl itself uses (`set device`) - solveClkWizConfig
+// needs the same one, since the MMCM's valid VCO/divide range is speed-grade-specific.
+val clockWizPart = propOrEnv("clockWizPart", "CLOCK_WIZ_PART", "xc7vx690t-3-ffg1761")
+
+// GAPL: the board's fixed reference oscillator feeding clk_wiz_ip (see axi_clocking.v) - not
+// something solveClkWizConfig can change, only its own multiply/divide in response to it.
+val clockWizPrimInFreqMhz = propOrEnv("clockWizPrimInFreqMhz", "CLOCK_WIZ_PRIM_IN_FREQ_MHZ", "200.00")
 
 // Log Level
 val logLevel = propOrEnv("logLevel", "LOG_LEVEL", "info")
@@ -288,23 +302,82 @@ tasks.register<Copy>("installGaplVerilog") {
     )
 }
 
-tasks.register<Copy>("generateConstraints") {
+// GAPL: solves clk_wiz_ip's MMCM multiply/divide/jitter/phase-error configuration for
+// clockPeriodNs using Vivado's own Clocking Wizard solver (solve_clk_wiz.tcl), instead of the
+// hand-computed VCO arithmetic and hand-copied jitter numbers this replaced. Runs in seconds
+// (an in-memory throwaway IP customization, not a real project build), so it's cheap enough to
+// run on every build and catch an unachievable request immediately - Vivado's own
+// "Please enter valid freq in range (X - Y)" error fails this task loudly - rather than 20+
+// minutes into a real synthesis run.
+val clkWizGeneratedDir = layout.buildDirectory.dir("netfpga-clk-wiz")
+val clkWizConfigTcl = clkWizGeneratedDir.map { it.file("clk_wiz_config.tcl") }
+val achievedPeriodFile = clkWizGeneratedDir.map { it.file("achieved_period_ns.txt") }
+
+tasks.register<Exec>("solveClkWizConfig") {
     group = "vivado"
-    description = "Generate XDC from template using gradle.properties"
+    description = "Solve clk_wiz_ip's MMCM config for clockPeriodNs via Vivado's own Clocking Wizard solver"
 
-    val outputDir = layout.buildDirectory.dir("constraints").get().asFile
-    outputDir.mkdirs()
+    inputs.property("clockPeriodNs", clockPeriodNs)
+    inputs.property("clockWizPart", clockWizPart)
+    inputs.property("clockWizPrimInFreqMhz", clockWizPrimInFreqMhz)
+    outputs.file(clkWizConfigTcl)
+    outputs.file(achievedPeriodFile)
 
-    from(layout.projectDirectory.file("constraints/nf_sume_general.xdc.template"))
-    into(outputDir)
-    rename { "nf_sume_general.xdc" }
-
-    // Gradle's ReplaceTokens uses @TOKEN@ style by default
-    filter<ReplaceTokens>(
-        "tokens" to mapOf(
-            "CLOCK_PERIOD_NS" to clockPeriodNs,
-        )
+    val solverScript = layout.projectDirectory.file(
+        "packet-processor/projects/reference_switch/hw/tcl/solve_clk_wiz.tcl"
     )
+
+    doFirst {
+        clkWizGeneratedDir.get().asFile.mkdirs()
+    }
+
+    commandLine(bash("""
+        set -euo pipefail
+        [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
+        source "$vivadoSettings"
+        vivado -mode batch -nojournal -nolog -source "${solverScript.asFile.absolutePath}" -tclargs \
+          "$clockWizPart" "$clockWizPrimInFreqMhz" "$clockPeriodNs" \
+          "${clkWizConfigTcl.get().asFile.absolutePath}" \
+          "${achievedPeriodFile.get().asFile.absolutePath}"
+    """.trimIndent()))
+}
+
+tasks.register<Copy>("installClkWizConfig") {
+    group = "netfpga"
+    description = "Install the solved clk_wiz_ip config into \$NF_DESIGN_DIR/hw/tcl_generated"
+    dependsOn("solveClkWizConfig")
+
+    from(clkWizConfigTcl)
+    into(provider { file("$nfDesignDir/hw/tcl_generated") })
+
+    inputs.files(clkWizConfigTcl)
+    outputs.files(file("$nfDesignDir/hw/tcl_generated/clk_wiz_config.tcl"))
+}
+
+tasks.register("generateConstraints") {
+    group = "vivado"
+    description = "Generate XDC from template, using solveClkWizConfig's achieved period (not the raw request) for clk_200's create_clock"
+    dependsOn("solveClkWizConfig")
+
+    val templateFile = layout.projectDirectory.file("constraints/nf_sume_general.xdc.template")
+    val outputFile = layout.buildDirectory.file("constraints/nf_sume_general.xdc")
+
+    inputs.file(templateFile)
+    inputs.file(achievedPeriodFile)
+    outputs.file(outputFile)
+
+    doLast {
+        // GAPL: reads the achieved period from solveClkWizConfig's own output, not the raw
+        // clockPeriodNs request - the two are usually equal but aren't guaranteed to be (divide
+        // granularity can round the achievable frequency slightly), and it's the achieved value
+        // that's physically true of the silicon, which is what the constraint must reflect.
+        val achievedPeriod = achievedPeriodFile.get().asFile.readText().trim()
+        val out = outputFile.get().asFile
+        out.parentFile.mkdirs()
+        out.writeText(
+            templateFile.asFile.readText().replace("@CLOCK_PERIOD_NS@", achievedPeriod)
+        )
+    }
 }
 
 tasks.register<Copy>("installConstraints") {
@@ -612,13 +685,21 @@ tasks.register<Exec>("makeSynthShell") {
     description = "Synthesize the static NetFPGA shell (create_project + run_synth), skipped when nothing static changed"
     workingDir = rootProject.projectDir
     exportNetfpgaEnv()
-    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
+    dependsOn("installGaplVerilog", "installConstraints", "installClkWizConfig", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
     inputs.files(fileTree(file("$nfDesignDir/hw/hdl")) { exclude("GAPLprocessor.v") })
     inputs.dir(file("$nfDesignDir/hw/constraints"))
     inputs.dir(file("$nfDesignDir/hw/tcl"))
+    inputs.file(file("$nfDesignDir/hw/tcl_generated/clk_wiz_config.tcl"))
     outputs.file(file("$nfDesignDir/hw/project/$nfProjectName.runs/synth_1/top.dcp"))
 
+    // GAPL: clk_wiz_ip's multiply/divide config is only ever read once, when create_project.tcl's
+    // `create_ip`/`generate_target` first creates it - the Makefile's own create_project target
+    // just checks whether project/$PROJ.xpr already exists and silently no-ops if so, so a clock
+    // period change alone would otherwise never actually reach the physical MMCM on an existing
+    // project (confirmed directly: this bit an earlier session, requiring a manually-remembered
+    // `make clean`). Stamp the installed clk_wiz config's hash inside the project directory and
+    // wipe it before rebuilding whenever that hash no longer matches, so this can't be forgotten.
     commandLine(bash("""
         set -euo pipefail
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
@@ -626,7 +707,22 @@ tasks.register<Exec>("makeSynthShell") {
         [ -d "${'$'}NF_DESIGN_DIR" ] || { echo "NF_DESIGN_DIR not found: ${'$'}NF_DESIGN_DIR" >&2; exit 2; }
         echo "[netfpga] SUME_FOLDER=${'$'}SUME_FOLDER"
         echo "[netfpga] NF_DESIGN_DIR=${'$'}NF_DESIGN_DIR"
+
+        clk_wiz_config="${'$'}NF_DESIGN_DIR/hw/tcl_generated/clk_wiz_config.tcl"
+        stamp_file="${'$'}NF_DESIGN_DIR/hw/project/.gapl_clk_wiz_stamp"
+        if [ -d "${'$'}NF_DESIGN_DIR/hw/project" ]; then
+            new_hash="${'$'}(sha256sum "${'$'}clk_wiz_config" | cut -d' ' -f1)"
+            old_hash="${'$'}(cat "${'$'}stamp_file" 2>/dev/null || true)"
+            if [ "${'$'}new_hash" != "${'$'}old_hash" ]; then
+                echo "[netfpga] clk_wiz_ip config changed since project/ was created - recreating the project"
+                rm -rf "${'$'}NF_DESIGN_DIR/hw/project"
+            fi
+        fi
+
         make -C "${'$'}NF_DESIGN_DIR/hw" identifier create_project run_synth
+
+        mkdir -p "${'$'}NF_DESIGN_DIR/hw/project"
+        sha256sum "${'$'}clk_wiz_config" | cut -d' ' -f1 > "${'$'}stamp_file"
     """.trimIndent()))
 }
 
@@ -683,7 +779,9 @@ tasks.register<Exec>("runSimulation") {
     // lib/hw/contrib/cores/gapl_kernel_v1_0_0 (see that file) just like create_project.tcl does -
     // without this dependency, a pure application switch could simulate a stale previously-packaged
     // kernel instead of the currently-installed one.
-    dependsOn("installGaplVerilog", "installConstraints", "makeInit", "makeIPs", "packageCoreGaplKernel")
+    // installClkWizConfig: reference_switch_sim.tcl also sources tcl_generated/clk_wiz_config.tcl,
+    // same as create_project.tcl, so simulation's clk_wiz_ip can't drift from the real one either.
+    dependsOn("installGaplVerilog", "installConstraints", "installClkWizConfig", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
     // Allow overrides: -Pmajor=..., -Pminor=..., -Pgui=false
     val major = (findProperty("netfpgaSimTestMajor") as String?) ?: "simple"
@@ -757,6 +855,19 @@ tasks.register<Delete>("uninstallConstraints") {
                 println("[uninstallGaplVerilog] Deleting ${f.relativeToOrSelf(constraintsDir)}")
                 delete(f)
             }
+        }
+    }
+}
+
+tasks.register<Delete>("uninstallClkWizConfig") {
+    group = "netfpga"
+    description = "Remove the installed clk_wiz_ip config"
+
+    doFirst {
+        val installed = file("$nfDesignDir/hw/tcl_generated/clk_wiz_config.tcl")
+        if (installed.exists()) {
+            println("[uninstallClkWizConfig] Deleting ${installed.relativeToOrSelf(file(nfDesignDir))}")
+            delete(installed)
         }
     }
 }
@@ -902,6 +1013,7 @@ tasks.named("build") {
 tasks.named("clean") {
     dependsOn("uninstallGaplVerilog")
     dependsOn("uninstallConstraints")
+    dependsOn("uninstallClkWizConfig")
     dependsOn("makeClean")
 }
 

@@ -124,8 +124,11 @@ if {[get_ips -quiet identifier_ip] eq ""} {
 }
 
 if {[get_ips -quiet clk_wiz_ip] eq ""} {
-    create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name clk_wiz_ip
-    set_property -dict [list CONFIG.PRIM_IN_FREQ {200.00} CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {100.000} CONFIG.USE_SAFE_CLOCK_STARTUP {true} CONFIG.RESET_TYPE {ACTIVE_LOW} CONFIG.CLKIN1_JITTER_PS {50.0} CONFIG.CLKOUT1_DRIVES {BUFGCE} CONFIG.CLKOUT2_DRIVES {BUFGCE} CONFIG.CLKOUT3_DRIVES {BUFGCE} CONFIG.CLKOUT4_DRIVES {BUFGCE} CONFIG.CLKOUT5_DRIVES {BUFGCE} CONFIG.CLKOUT6_DRIVES {BUFGCE} CONFIG.CLKOUT7_DRIVES {BUFGCE} CONFIG.MMCM_CLKFBOUT_MULT_F {5.000} CONFIG.MMCM_CLKIN1_PERIOD {5.0} CONFIG.MMCM_CLKOUT0_DIVIDE_F {10.000} CONFIG.RESET_PORT {resetn} CONFIG.CLKOUT1_JITTER {98.146} CONFIG.CLKOUT1_PHASE_ERROR {89.971}] [get_ips clk_wiz_ip]
+    # GAPL: sources the same solve_clk_wiz.tcl-generated config create_project.tcl uses, so
+    # simulation's clk_wiz_ip can't silently drift out of sync with the real synthesized one - this
+    # used to be a separate hand-written -dict literal, stuck at whatever period someone last typed
+    # here by hand.
+    source ./tcl_generated/clk_wiz_config.tcl
     set_property generate_synth_checkpoint false [get_files clk_wiz_ip.xci]
     reset_target all [get_ips clk_wiz_ip]
     generate_target all [get_ips clk_wiz_ip]
