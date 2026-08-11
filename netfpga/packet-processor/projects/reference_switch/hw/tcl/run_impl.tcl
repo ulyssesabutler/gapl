@@ -75,6 +75,39 @@ if {[llength [get_ips gapl_kernel_ip -quiet]] > 0} {
         upgrade_ip [get_ips gapl_kernel_ip]
         reset_target all [get_ips gapl_kernel_ip]
         generate_target all [get_ips gapl_kernel_ip]
+        # GAPL: gapl_kernel_ip is deliberately left with generate_synth_checkpoint enabled (see
+        # gapl_kernel.tcl) for OOC synthesis-result caching - but that cache's key doesn't appear to
+        # distinguish between applications with an identical top-level interface (same gapl_wrapper
+        # ports/parameters), only different internal GAPLprocessor.v logic. Confirmed directly against
+        # real Vivado: switching from a 0-register unretimed md5 build to an unrelated unretimed aes
+        # build still hit the exact same cache-ID ("Using cached IP synthesis design for IP
+        # gapl_kernel_ip, cache-ID = ...") and produced byte-identical post-route timing paths inside
+        # gapl_processor's own hierarchy, despite genuinely different compiled logic. generate_target
+        # above (which only refreshes the IP's own declared output products) does not clear this
+        # separate cache, so the stale entry survives and gets reused by the OOC sub-run below
+        # regardless. Explicitly removing this IP's cache entry whenever we already know its packaged
+        # core changed - the same condition guarding the refresh above - forces a genuinely fresh OOC
+        # synthesis without touching caching for any other (legitimately static) IP in the project.
+        config_ip_cache -remove [get_ips gapl_kernel_ip]
+        # GAPL: even after upgrade_ip/reset_target/generate_target above, the project's own copy of
+        # this IP's HDL sources (siblings of $gapl_kernel_xci, under its own hdl/ subdirectory) can
+        # still end up stale - confirmed directly against real Vivado: after everything above ran
+        # cleanly with no errors, that directory's GAPLprocessor.v was a completely different, older
+        # design (wrong register count, no reference to the currently-selected application's own
+        # generated module names) despite the packaged core's own hdl/ copy (the true source, refreshed
+        # by Gradle's packageCoreGaplKernel every build) being correct. generate_target's normal
+        # source-refresh behavior appears not to apply the same way once generate_synth_checkpoint is
+        # enabled on an IP (see gapl_kernel.tcl) - it seems to treat the existing checkpoint as
+        # sufficient without re-validating sources against it. Rather than depend on that undocumented
+        # behavior, force-copy the packaged core's actual HDL directly over the project's copy so the
+        # OOC synthesis below is guaranteed to read the current application's real source, regardless
+        # of whatever Vivado's own IP-generation logic decided to do.
+        set gapl_kernel_packaged_hdl "$::env(SUME_FOLDER)/lib/hw/contrib/cores/gapl_kernel_v1_0_0/hdl"
+        set gapl_kernel_project_hdl "[file dirname $gapl_kernel_xci]/hdl"
+        puts "GAPL: force-copying packaged core HDL ($gapl_kernel_packaged_hdl) over project's IP source copy ($gapl_kernel_project_hdl)"
+        foreach f [glob -directory $gapl_kernel_packaged_hdl -nocomplain "*.v"] {
+            file copy -force $f "$gapl_kernel_project_hdl/[file tail $f]"
+        }
     } else {
         puts "GAPL: gapl_kernel_ip is already up to date with its packaged core - skipping refresh"
     }
