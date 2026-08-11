@@ -85,10 +85,25 @@ val configSrcRoot = layout.projectDirectory.dir("src/$programName/$programVariat
 
 val delayModelPath = propOrEnv("delayModelPath", "DELAY_MODEL_PATH", "delay.yaml")
 
+// A relative path is resolved against the selected variation's own directory first (so a
+// variation that wants to override the model - e.g. delaymodel's own probe variations, or a
+// future variation calibrated for a different part - still can), falling back to this
+// subproject's root delay.yaml (the real, measured model - see netfpga/delay.yaml's own header)
+// when the variation doesn't carry one of its own. NOTE: every existing variation as of this
+// change (md5/aes/cms/regex) still has its own `delay.yaml` sitting in its directory, and every
+// one of those is just `default: 1` - identical to the old hardcoded uniform model - so this
+// fallback does NOT yet change behavior for any of them; it only takes effect for a variation
+// that doesn't create a delay.yaml of its own. Rolling the new model out to an existing variation
+// is a deliberate follow-up: delete that variation's own delay.yaml so it falls through to this one.
 val delayModelFile = File(delayModelPath)
     .let { candidate ->
-        if (candidate.isAbsolute) candidate
-        else File(configSrcRoot, candidate.path)   // resolve relative to gaplSrcRoot
+        if (candidate.isAbsolute) {
+            candidate
+        } else {
+            val variationSpecific = File(configSrcRoot, candidate.path)
+            if (variationSpecific.exists()) variationSpecific
+            else layout.projectDirectory.file(candidate.path).asFile
+        }
     }
 
 // Validate: under src, exists, and ends with .gapl
