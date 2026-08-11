@@ -1,0 +1,147 @@
+# GAPL per-operator delay model, calibrated from real post-route Vivado timing (Artix-7 xc7a200t,
+# NetFPGA SUME target) via netfpga/src/delaymodel/processor.gapl - see that file's header comment
+# for the probe design, and unretimed/compile.properties for the synthesis setup.
+#
+# Methodology: each operator was measured in isolation as a genuine register-to-register
+# combinational path (report_timing -to <op's own register D pin>), across two independent, fully
+# fresh place-and-route runs (no incremental-checkpoint reuse) at two different clock-period
+# constraints (10ns and 213.333ns) to catch run-to-run placement variance - e.g. bitwise_or(8)
+# swung from 1.922ns to 2.946ns between runs on identical logic. Every value below is
+# ceil(worst_of_two_runs * 1.25), i.e. 25% headroom over the slower observed run, rounded up to
+# the next integer - conservative by construction, per the project's explicit preference for
+# margin over precision here.
+#
+# Two operand widths were measured per operator: 8 bits (cheap, covers every primitive once) and
+# 32 bits (MD5/AES's real operating width), for the operators whose delay is genuinely
+# width-dependent (arithmetic + comparisons). Each operator's `widths` slice covers 1-8 bits with
+# the measured 8-bit value; its `default` (used for any width outside the slice, i.e. 9+ bits)
+# covers the 32-bit case. Where the raw 32-bit measurement came out *below* the 8-bit one - true
+# FPGA behavior for add/subtract/left_shift/right_shift, whose dedicated carry-chain and mux-tree
+# fabric barely grows with width - `default` was still floored at the 8-bit value rather than the
+# measured (lower) 32-bit one, so the model never claims a wider op is faster than its narrower
+# self.
+#
+# Pure bitwise ops (bitwiseAnd/Or/Xor/Not) get a single flat `default` and no `widths` slice at
+# all: each output bit is an independent same-position LUT with no cross-bit propagation, so their
+# delay is architecturally width-independent - confirmed by the FPGA fabric, not just by only
+# having one measured width.
+#
+# logicalAnd/logicalOr (1-bit boolean ops) are likewise flat, always 1-bit by construction.
+# logicalNot has NO real measurement - it never produced a matchable register pin in any of the
+# three extraction runs (likely optimized away as trivially simple by Vivado). Its value below is
+# a placeholder: the larger of the two measured 1-bit boolean ops (logicalAnd/logicalOr), not an
+# independent measurement. Flagged here for anyone revisiting this file.
+#
+# multiplication is the one genuinely UNRELIABLE data point: a 32x32 multiply exceeds a single
+# DSP48E1's native ~25x18 capacity, so Vivado cascades multiple DSP48 slices with a built-in
+# internal pipeline boundary between them. The measured "32-bit" path only captured one stage of
+# that cascade (its source was another DSP48's own CLK pin, `Logic Levels: 0`, only 17/32 result
+# bits reachable) - both fresh-P&R runs agreed on this, ruling out slack-driven auto-pipelining as
+# the cause; it's structural, not tunable via clock period. Its measured value (raw ~4.1ns
+# conservative) is a LOWER bound and is discarded here in favor of an estimate: 2x the trusted
+# 8-bit single-DSP-stage value, reflecting a 2-stage cascade. This is reasoned, not measured -
+# revisit with a dedicated probe (e.g. an explicit single-DSP-stage synthesis attribute, or tracing
+# the full multi-stage cascade path) before trusting it for a design that's actually
+# multiply-critical.
+
+addition:
+  widths:
+    - index: 1
+      until: 9
+      delay: 5
+  default: 5
+
+subtraction:
+  widths:
+    - index: 1
+      until: 9
+      delay: 4
+  default: 4
+
+multiplication:
+  widths:
+    - index: 1
+      until: 9
+      delay: 7
+  default: 14  # unmeasured estimate - see header caveat
+
+leftShift:
+  widths:
+    - index: 1
+      until: 9
+      delay: 5
+  default: 6
+
+rightShift:
+  widths:
+    - index: 1
+      until: 9
+      delay: 5
+  default: 6
+
+bitwiseAnd:
+  default: 4
+
+bitwiseOr:
+  default: 4
+
+bitwiseXor:
+  default: 4
+
+bitwiseNot:
+  default: 4
+
+lessThan:
+  widths:
+    - index: 1
+      until: 9
+      delay: 3
+  default: 4
+
+greaterThan:
+  widths:
+    - index: 1
+      until: 9
+      delay: 3
+  default: 4
+
+lessThanEquals:
+  widths:
+    - index: 1
+      until: 9
+      delay: 3
+  default: 4
+
+greaterThanEquals:
+  widths:
+    - index: 1
+      until: 9
+      delay: 3
+  default: 4
+
+equals:
+  widths:
+    - index: 1
+      until: 9
+      delay: 4
+  default: 4
+
+notEquals:
+  widths:
+    - index: 1
+      until: 9
+      delay: 3
+  default: 4
+
+logicalAnd:
+  default: 4
+
+logicalOr:
+  default: 4
+
+logicalNot:
+  default: 4  # unmeasured placeholder - see header caveat
+
+# Anything not a PredefinedFunctionNode (registers, muxes, passthroughs, etc.) - not covered by
+# this probe, left at the pre-existing repo-wide convention.
+default: 1

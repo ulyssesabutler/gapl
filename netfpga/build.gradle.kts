@@ -757,6 +757,14 @@ tasks.register<Exec>("makeBuild") {
     // tracks them to decide whether the *shell* needs resynthesizing) - track them here too, or
     // editing this step's own Tcl wouldn't invalidate this task's cached result.
     inputs.dir(file("$nfDesignDir/hw/tcl"))
+    // GAPL: makeSynthShell's own output (synth_1/top.dcp) wasn't tracked here, so a change that
+    // forces makeSynthShell to rerun without touching component.xml or hw/tcl/ (e.g. clockPeriodNs,
+    // which flows into clk_wiz_config.tcl and makeSynthShell's own project-recreation check) left
+    // this task believing nothing relevant had changed - confirmed directly: a clock-period-only
+    // change correctly forced a full shell resynthesis, but makeBuild then reported UP-TO-DATE and
+    // silently skipped run_impl entirely, leaving bitfiles/$nfProjectName.bit stale against the new
+    // clock domain with no error or warning.
+    inputs.file(file("$nfDesignDir/hw/project/$nfProjectName.runs/synth_1/top.dcp"))
     outputs.file(file("$nfDesignDir/bitfiles/$nfProjectName.bit"))
 
     commandLine(bash("""
