@@ -60,11 +60,19 @@ puts "\nOpening $design BD project\n"
 open_bd_design $bd_file
 
 # insert elf if it is not inserted yet
+# GAPL: this used to exit here once the ELF was associated (true after the very first build of a
+# given project), skipping everything below - including write_bitstream ../bitfiles/$design.bit,
+# the step that actually publishes the final bitstream. Confirmed directly: after that first
+# build, bitfiles/reference_switch.bit stayed byte-for-byte identical across every subsequent
+# rebuild regardless of how many times the selected application's logic actually changed,
+# because the ELF (generic MicroBlaze software, not application-specific) never changes between
+# GAPL app switches, so this check kept taking the early-exit path forever. The ELF-association
+# skip only makes sense for the add_files step itself (adding it twice would be redundant/error),
+# not for regenerating the bitstream - so only that part stays conditional now.
 if {[llength [get_files app.elf]]} {
 	puts "ELF File [get_files app.elf] is already associated"
-	exit
 } else {
-	add_files -norecurse -force ${elf_file} 
+	add_files -norecurse -force ${elf_file}
 	set_property SCOPED_TO_REF [current_bd_design] [get_files -all -of_objects [get_fileset sources_1] ${elf_file}]
 	set_property SCOPED_TO_CELLS nf_mbsys/mbsys/microblaze_0 [get_files -all -of_objects [get_fileset sources_1] ${elf_file}]
 }
