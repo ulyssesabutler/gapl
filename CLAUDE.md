@@ -51,7 +51,11 @@ Concretely, as Gradle subprojects:
   the build, both as living examples and as an implicit regression surface (see Verification below).
 - **`basys`** / **`netfpga`** (+ `netfpga:hw-test`) — real FPGA hardware targets (Basys 3, NetFPGA),
   driving actual synthesis via Vivado. Only relevant if you're touching hardware-target build
-  configuration, not general compiler/language work.
+  configuration, not general compiler/language work. `netfpga:sim-kernel-test` is the exception —
+  it's a `simengine`-backed counterpart to `netfpga/kernel-test`'s Verilator harness (same
+  packet-in/packet-out `test.properties` vectors, one shared CLI wrapper for every application, no
+  Vivado/Verilog involved), so it's relevant to general GAPL/simengine work too, not just hardware
+  builds.
 - **`latency-finder`** — a small utility subproject, works with retiming delay models
   (`latency-finder/delay.yaml`).
 - **`python-tests`** — standalone Python scripts, unrelated to the Gradle build.

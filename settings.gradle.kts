@@ -35,5 +35,6 @@ include(
     "basys", // Use generated verilog, along with a test harness, to test design on Basys 3
     "netfpga", // Use generated verilog, along with a test harness, to test design on NetFPGA
     "netfpga:hw-test",
+    "netfpga:sim-kernel-test", // Simengine counterpart to netfpga/kernel-test: same packet-in/packet-out harness, run directly against analyzer's netlist IR, no Verilog/Verilator involved
     "latency-finder"
 )

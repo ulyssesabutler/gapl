@@ -1035,6 +1035,48 @@ tasks.register<Exec>("runKernelTest") {
     }
 }
 
+// simengine counterpart to buildKernelTest/runKernelTest above: runs the SAME test.properties
+// packet vectors against packet_body_processor directly through simengine's Engine, bypassing
+// Verilog/Verilator (and the compiler entirely - it reads gaplTargetFile's source directly, not
+// gaplVerilogOut). Only -PprogramName matters here, not -PprogramVariationName: retime/flatten/
+// clockPeriodNs are all compiler-only settings a pre-compile semantic check has no use for, and
+// every variation of a given application shares the exact same processor.gapl source.
+val simKernelTestBinary = project(":netfpga:sim-kernel-test")
+    .layout.buildDirectory.file("install/sim-kernel-test/bin/sim-kernel-test")
+
+tasks.register<Exec>("runSimKernelTest") {
+    group = "simengine"
+    description = "Run kernel-test's packet vectors against packet_body_processor directly " +
+        "through simengine, no Verilog/Verilator involved"
+    dependsOn(":netfpga:sim-kernel-test:installDist")
+    outputs.upToDateWhen { false } // always run
+
+    doFirst {
+        val exe = simKernelTestBinary.get().asFile
+        if (!exe.exists()) throw GradleException("sim-kernel-test executable not found at ${exe.absolutePath}")
+
+        fun splitCsv(s: String): List<String> =
+            s.split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+        val inputs = splitCsv(testInputs.trim())
+        val expected = splitCsv(testExpectedOutputs.trim())
+
+        val waveFile = layout.buildDirectory
+            .file("simKernelTest/sim_kernel_test.vcd")
+            .get().asFile
+        waveFile.parentFile.mkdirs()
+
+        val args = mutableListOf("-f", gaplTargetFile.absolutePath)
+        inputs.forEach { args += listOf("-i", it) }
+        expected.forEach { args += listOf("-o", it) }
+        args += listOf("-w", waveFile.absolutePath)
+
+        commandLine(listOf(exe.absolutePath) + args)
+    }
+}
+
 // Wire lifecycle
 tasks.named("build") {
     dependsOn("makeBuild")
