@@ -962,6 +962,21 @@ tasks.register<Exec>("buildKernelTest") {
     inputs.files(kernelTestHeaders)
     outputs.file(verilatorKernelExe)
 
+    // ccache keys its direct-mode fast path on the source file's path+size+mtime, not always its
+    // content. Verilator always regenerates this design's *.cpp at the SAME fixed path
+    // (verilatorKernelOutDir) regardless of which -PprogramName/-PprogramVariationName was
+    // selected, so switching applications (or just editing processor.gapl and rebuilding the same
+    // one) repeatedly overwrites that path with different content - if two such rebuilds land on
+    // the same file size within the same mtime-resolution window (easy on a fast machine), ccache
+    // can serve a stale/mismatched object for the new content instead of recompiling. Confirmed by
+    // A/B testing: identical generated sources built with ccache disabled always worked; the same
+    // sources built through ccache reproducibly crashed (SIGSEGV in Verilator's own runtime, no
+    // simulation output at all) even right after `ccache -C`. Disabling ccache here avoids the
+    // whole class of failures - Verilator's own codegen (not compilation) already dominates this
+    // task's wall time anyway, so the object-cache reuse ccache would otherwise provide isn't worth
+    // the correctness risk for this fast-changing, same-path output.
+    environment("CCACHE_DISABLE", "1")
+
     doFirst {
         val outDir = verilatorKernelOutDir.get().asFile
         outDir.mkdirs()
