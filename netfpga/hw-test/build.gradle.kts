@@ -131,6 +131,10 @@ tasks.register<Exec>("runTest") {
     group = "application"
     description = "Run the traffic generator using generator.properties"
     dependsOn("grantCapabilities")
+    // Real hardware needs the current build actually flashed before traffic can exercise it -
+    // :netfpga:programFPGA itself dependsOn :netfpga:build, so this alone pulls in the full
+    // build-then-program chain.
+    dependsOn(":netfpga:programFPGA")
 
     // Changing the config should make Gradle rerun this
     inputs.file(generatorConfigFile)

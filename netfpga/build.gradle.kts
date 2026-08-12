@@ -1091,16 +1091,25 @@ tasks.named("clean") {
 tasks.register<Exec>("programFPGA") {
     group = "vivado"
     description = "Program the FPGA with the built bitstream via Vivado batch + Tcl"
+    dependsOn("build")
 
     val bitfile = layout.projectDirectory.file("packet-processor/projects/reference_switch/bitfiles/reference_switch.bit")
 
     inputs.file(bitfile)
+    // Deliberately always reprogram rather than trying to detect whether the board already has
+    // this bitstream loaded - FPGA configuration here is volatile SRAM loaded over JTAG (not
+    // flashed to nonvolatile memory), so it has no persistent identity Gradle could compare
+    // against, and the design has no build-ID/version register software could read back either.
+    // A stale "already flashed" skip (e.g. after a power cycle, a host reboot, or someone else
+    // reprogramming the shared board via the Vivado GUI) would silently run hardware tests
+    // against outdated logic with no error - far worse than the cost of an unconditional reflash.
+    outputs.upToDateWhen { false }
 
     commandLine(
         "bash", "-lc",
         """
         set -euo pipefail
-        
+
         [ -f "$vivadoSettings" ] || { echo "Vivado settings not found: $vivadoSettings" >&2; exit 2; }
         source "$vivadoSettings"
 
@@ -1113,18 +1122,19 @@ tasks.register<Exec>("programFPGA") {
 
 tasks.register<Exec>("rebuildAndTest") {
     group = "build"
-    description = "Hacky sequential: ./gradlew clean && build && :hw-test:runTest"
+    description = "Hacky sequential: ./gradlew clean && runKernelTest && runSimulation && :hw-test:runTest"
 
     workingDir = rootProject.rootDir
 
     // Linux/macOS
     // makeInit/makeIPs are no longer separate manual steps - :netfpga:build and :netfpga:runSimulation
-    // now dependOn them directly and only rebuild what's actually stale.
+    // now dependOn them directly and only rebuild what's actually stale. Building and programming the
+    // FPGA are likewise no longer separate explicit steps here - :netfpga:hw-test:runTest now
+    // dependsOn :netfpga:programFPGA dependsOn :netfpga:build, so running it alone pulls both in;
+    // calling them explicitly too would just reprogram the board twice in one invocation.
     commandLine("bash", "-lc", """
         set -euo pipefail
         ./gradlew clean
-        ./gradlew :netfpga:build
-        ./gradlew :netfpga:programFPGA
         ./gradlew :netfpga:runKernelTest
         ./gradlew :netfpga:runSimulation
         ./gradlew :netfpga:hw-test:runTest
