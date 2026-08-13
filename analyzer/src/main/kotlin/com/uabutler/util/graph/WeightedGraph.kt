@@ -52,7 +52,42 @@ open class WeightedGraph<N, E>(
             if (!changed) return distanceFromRoot
         }
 
-        return distanceFromRoot
+        // Bellman-Ford's correctness (and termination in nodes.size - 1 rounds) assumes no
+        // negative-weight cycle is reachable from root. That assumption doesn't hold for every
+        // caller here - e.g. HierarchicalMinimalRegisterSolver's per-child "expansion" edges are
+        // deliberately negative-weighted (see MinimalRegisterSolver.computeUpperRetimingUpperBound's
+        // comment), and a real register-protected feedback loop crossing such an edge can produce a
+        // net-negative cycle. Undetected, that silently corrupts distances (even a node's distance
+        // to *itself*, which must always be `zero`, can get overwritten by a lower-but-meaningless
+        // value from looping the cycle) into arbitrary, iteration-count-dependent numbers - not "a
+        // large but real" distance, but a genuinely undefined one, since a reachable negative cycle
+        // means the true shortest-walk distance is unbounded below. Detect every node still
+        // reachable from such a cycle (one more relaxation pass finds directly-corrupted nodes;
+        // repeating until fixpoint propagates that to everything reachable from them) and drop them
+        // from the result entirely, rather than handing a caller a wrong number it can't tell apart
+        // from a correct one.
+        val corrupted = mutableSetOf<Node<N>>()
+        var corruptionChanged = true
+        while (corruptionChanged) {
+            corruptionChanged = false
+            edges.forEach { edge ->
+                val distanceToEdgeSource = distanceFromRoot[edge.source]
+                if (distanceToEdgeSource != null && edge.source !in corrupted) {
+                    val candidateDistance = weightAddition(distanceToEdgeSource, edgeWeight(edge))
+                    val distanceToEdgeSink = distanceFromRoot[edge.sink]
+                    val improves = distanceToEdgeSink == null || weightComparator.compare(candidateDistance, distanceToEdgeSink) < 0
+                    if (improves && edge.sink !in corrupted) {
+                        corrupted.add(edge.sink)
+                        corruptionChanged = true
+                    }
+                } else if (edge.source in corrupted && edge.sink in distanceFromRoot && edge.sink !in corrupted) {
+                    corrupted.add(edge.sink)
+                    corruptionChanged = true
+                }
+            }
+        }
+
+        return distanceFromRoot.filterKeys { it !in corrupted }
     }
 
 }
