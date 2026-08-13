@@ -24,6 +24,14 @@ import com.uabutler.verilogir.builder.creator.util.Identifier
  */
 class InvalidCompilerOptionsException(message: String) : Exception(message)
 
+/**
+ * Thrown when a solver could not find any retiming of the circuit that meets the requested clock
+ * period — the target is genuinely unreachable given the circuit's own critical path/register
+ * structure, not a bug in the compiler or a self-inconsistent set of options. Callers should
+ * report this the same way as a CLI usage error, not as an internal compiler error.
+ */
+class RetimingInfeasibleException(message: String) : Exception(message)
+
 object Compiler {
 
     data class Options(

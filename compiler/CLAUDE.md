@@ -24,9 +24,11 @@ where retiming/flattening/CLI behavior lives.
   and builds `Compiler.Options` directly from them in `run()`; unrecognized flags, missing required
   options, and bad choice values are all rejected by Clikt itself, with `--help` generated from the
   same option declarations rather than hand-maintained separately. `compile()` reads/joins input
-  files, calls `Compiler.compile`, and distinguishes three outcomes: `DiagnosticsException` (your GAPL
+  files, calls `Compiler.compile`, and distinguishes four outcomes: `DiagnosticsException` (your GAPL
   is wrong — formatted diagnostics, exit 1), `InvalidCompilerOptionsException` (your flags are wrong —
-  e.g. `--flatten`/`--retiming-solver` kind mismatch — clean "Error: ..." message, exit 1), or any
+  e.g. `--flatten`/`--retiming-solver` kind mismatch — clean "Error: ..." message, exit 1),
+  `RetimingInfeasibleException` (your requested clock period is unreachable for this circuit — no
+  solver-found feasible retiming, same clean "Error: ..." message, exit 1), or any
   other `Throwable` (the compiler is wrong — generic "contact a TA" message, stack trace at ERROR log
   level, exit 1).
 - `Compiler.kt` — `Compiler.compile(gapl, options)` calls `Analyzer.analyzeFull(gapl, options.analyzerOptions)`,

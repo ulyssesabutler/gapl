@@ -34,6 +34,9 @@ fun compile(inputFiles: List<File>, outputFile: File, options: Compiler.Options)
     } catch (e: InvalidCompilerOptionsException) {
         println("Error: ${e.message}")
         exitProcess(1)
+    } catch (e: RetimingInfeasibleException) {
+        println("Error: ${e.message}")
+        exitProcess(1)
     } catch (e: Throwable) {
         // Anything reaching here escaped the diagnostics pipeline entirely - a bug in the
         // compiler (including unimplemented features, which throw NotImplementedError - a

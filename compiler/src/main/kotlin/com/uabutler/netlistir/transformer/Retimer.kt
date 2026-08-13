@@ -1,6 +1,7 @@
 package com.uabutler.netlistir.transformer
 
 import com.uabutler.InvalidCompilerOptionsException
+import com.uabutler.RetimingInfeasibleException
 import com.uabutler.netlistir.netlist.InputNode
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
@@ -168,7 +169,9 @@ class Retimer(
                 Logger.trace { "Retiming will use clock period of $clockPeriod" }
                 Logger.trace { "Retiming will use ${finalSolver::class.simpleName} solver" }
 
-                finalSolver.solveOrNull(clockPeriod)?.graph ?: throw Exception("Failed to find feasible solution")
+                finalSolver.solveOrNull(clockPeriod)?.graph ?: throw RetimingInfeasibleException(
+                    "No feasible retiming found for clock period $clockPeriod using solver ${retimingSolverId.id}"
+                )
             }
             .onEach { graph -> recordGraphStats("Retimed", graph) }
             .map { NetlistLeisersonCircuitConverter.toModule(it) }

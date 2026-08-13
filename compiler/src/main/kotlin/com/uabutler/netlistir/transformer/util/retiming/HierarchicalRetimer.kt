@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer.util.retiming
 
+import com.uabutler.RetimingInfeasibleException
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
@@ -91,7 +92,7 @@ class HierarchicalRetimer(
 
         val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(solver, solver.problem)
         val retimedProblem = solver.solveOrNull(clockPeriod)
-            ?: throw Exception("Failed to find feasible hierarchical solution for clock period $clockPeriod")
+            ?: throw RetimingInfeasibleException("No feasible hierarchical retiming found for clock period $clockPeriod")
 
         hierarchicalGraphs.forEach { original ->
             val invocation = original.value.invocation
