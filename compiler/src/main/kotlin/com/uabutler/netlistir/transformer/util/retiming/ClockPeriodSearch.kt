@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.transformer.util.retiming
 
+import com.uabutler.RetimingInfeasibleException
 import com.uabutler.netlistir.transformer.util.retiming.solver.Solver
 import com.uabutler.util.Logger
 
@@ -44,7 +45,21 @@ fun <P : RetimingProblem> findMinimumClockPeriod(
         }
     }
 
-    possibleClockPeriods.sorted().binarySearch { clockPeriod -> if (attempt(clockPeriod)) 1 else -1 }
+    val sortedClockPeriods = possibleClockPeriods.sorted()
+    sortedClockPeriods.binarySearch { clockPeriod -> if (attempt(clockPeriod)) 1 else -1 }
 
-    return@run cache.filter { it.value }.minBy { it.key }.key
+    // No feasible period is a real outcome, not an internal error. It cannot happen for a monolithic
+    // problem (the largest candidate is the unretimed critical path, which is always achievable),
+    // but it can for a hierarchical one: the candidate periods come from the fully expanded graph
+    // while feasibility is judged against each module's contracted graph, which is strictly more
+    // conservative and can reject every candidate.
+    return@run cache.filterValues { it }.keys.minOrNull() ?: throw RetimingInfeasibleException(
+        if (sortedClockPeriods.isEmpty()) {
+            "No feasible clock period found: the circuit has no candidate clock periods"
+        } else {
+            "No feasible clock period found for this circuit " +
+                "(tried ${cache.size} of ${sortedClockPeriods.size} candidates in " +
+                "${sortedClockPeriods.first()}..${sortedClockPeriods.last()}, none were achievable)"
+        }
+    )
 }
