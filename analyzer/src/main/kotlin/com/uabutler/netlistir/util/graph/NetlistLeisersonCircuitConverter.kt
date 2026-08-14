@@ -191,48 +191,114 @@ object NetlistLeisersonCircuitConverter {
         ).also { Logger.finish() }
     }
 
-    internal fun addWeightedConnection(module: MutableModule, source: List<OutputWire>, sink: List<InputWire>, weight: Int) {
-        val sourceWires = if (weight > 0) {
-            val registerFunction = RegisterFunction(
-                storageStructure = VectorInterfaceStructure(
-                    vectoredInterface = WireInterfaceStructure,
-                    size = source.size,
-                )
+    /** One retimed connection: [sink] is driven by [source] delayed by [weight] clock cycles. */
+    data class WeightedWireConnection(
+        val source: OutputWire,
+        val sink: InputWire,
+        val weight: Int,
+    )
+
+    private fun createRegisterNode(module: MutableModule, width: Int): PredefinedFunctionNode {
+        val registerFunction = RegisterFunction(
+            storageStructure = VectorInterfaceStructure(
+                vectoredInterface = WireInterfaceStructure,
+                size = width,
             )
+        )
 
-            val registerNode = PredefinedFunctionNode(
-                identifier = AnonymousIdentifierGenerator.genIdentifier(), // TODO: Use a better identifier
-                parentModule = module,
-                inputWireVectorGroupsBuilder = { node ->
-                    registerFunction.inputs.map { it.toInputWireVectorGroup(node) }
-                },
-                outputWireVectorGroupsBuilder = { node ->
-                    registerFunction.outputs.map { it.toOutputWireVectorGroup(node) }
-                },
-                predefinedFunction = registerFunction,
-            )
+        return PredefinedFunctionNode(
+            identifier = AnonymousIdentifierGenerator.genIdentifier(), // TODO: Use a better identifier
+            parentModule = module,
+            inputWireVectorGroupsBuilder = { node ->
+                registerFunction.inputs.map { it.toInputWireVectorGroup(node) }
+            },
+            outputWireVectorGroupsBuilder = { node ->
+                registerFunction.outputs.map { it.toOutputWireVectorGroup(node) }
+            },
+            predefinedFunction = registerFunction,
+        )
+    }
 
-            module.addBodyNode(registerNode)
-
-            addWeightedConnection(module, source, registerNode.inputWires(), weight - 1)
-
-            registerNode.outputWires()
-        } else {
-            source
+    /**
+     * Materialises every retimed connection in a module, sharing registers across fanout.
+     *
+     * Each driving wire gets **one** shift register, as deep as its most-delayed consumer needs, and
+     * every consumer of that wire taps it at its own depth. So a bit driving three sinks two cycles
+     * downstream costs two flip-flops, not six, and a bit driving one sink at depth 2 and another at
+     * depth 5 costs five, not seven.
+     *
+     * This has to be done for the whole module at once rather than per edge: two edges out of the
+     * same node are exactly the case that shares, and an edge-at-a-time API cannot see the sharing
+     * opportunity. [com.uabutler.netlistir.transformer.util.retiming] relies on the cost model here
+     * matching what the register-minimisation objective charges for - see
+     * `MinimalRegisterSolver`'s objective, which prices a retiming as the sum over driving bits of
+     * that bit's maximum consumer depth.
+     *
+     * Wires of one node are collected into a single register per stage, ordered by the node's own
+     * output-wire order so the emitted netlist is deterministic. Every map here is a
+     * [LinkedHashMap]: netlist [com.uabutler.netlistir.netlist.Wire]/[Node] have no `equals`
+     * override, so it is already identity-keyed, and unlike an `IdentityHashMap` it also iterates in
+     * a stable order.
+     */
+    internal fun addSharedWeightedConnections(module: MutableModule, connections: Collection<WeightedWireConnection>) {
+        val byDrivingNode = LinkedHashMap<Node, MutableList<WeightedWireConnection>>()
+        connections.forEach { connection ->
+            require(connection.weight >= 0) {
+                "Cannot materialise a connection with negative register count: " +
+                    "${connection.source.parentWireVector.parentGroup.parentNode.name()} -> " +
+                    "${connection.sink.parentWireVector.parentGroup.parentNode.name()} has weight ${connection.weight}"
+            }
+            val drivingNode = connection.source.parentWireVector.parentGroup.parentNode
+            byDrivingNode.getOrPut(drivingNode) { mutableListOf() }.add(connection)
         }
 
-        sink.zip(sourceWires).forEach { (sinkWire, sourceWire) ->
-            module.connect(sinkWire, sourceWire)
+        byDrivingNode.forEach { (drivingNode, nodeConnections) ->
+            // How deep each driven bit's shift register has to be: its most-delayed consumer.
+            val requiredDepth = LinkedHashMap<OutputWire, Int>()
+            nodeConnections.forEach { connection ->
+                val existing = requiredDepth[connection.source] ?: 0
+                requiredDepth[connection.source] = maxOf(existing, connection.weight)
+            }
+
+            // Order the register's bits by the node's own output order rather than by whichever
+            // consumer happened to be visited first, so the emitted Verilog is stable.
+            val wireOrder = LinkedHashMap<OutputWire, Int>()
+            drivingNode.outputWires().forEachIndexed { index, wire -> wireOrder[wire] = index }
+            val orderedWires = requiredDepth.keys.sortedBy { wireOrder[it] ?: Int.MAX_VALUE }
+
+            // wireAtDepth[d][w] is the wire carrying w's value after d registers. Stage d only
+            // carries the bits that still have a consumer at depth d or deeper, so the chain narrows
+            // as shallower consumers drop off.
+            val currentWire = LinkedHashMap<OutputWire, OutputWire>()
+            orderedWires.forEach { currentWire[it] = it }
+            val wireAtDepth = mutableListOf<Map<OutputWire, OutputWire>>(LinkedHashMap(currentWire))
+
+            val maxDepth = requiredDepth.values.maxOrNull() ?: 0
+            for (depth in 1..maxDepth) {
+                val stageWires = orderedWires.filter { requiredDepth.getValue(it) >= depth }
+                val registerNode = createRegisterNode(module, stageWires.size)
+                module.addBodyNode(registerNode)
+
+                registerNode.inputWires().forEachIndexed { index, inputWire ->
+                    module.connect(inputWire, currentWire.getValue(stageWires[index]))
+                }
+                registerNode.outputWires().forEachIndexed { index, outputWire ->
+                    currentWire[stageWires[index]] = outputWire
+                }
+
+                wireAtDepth.add(LinkedHashMap(currentWire))
+            }
+
+            nodeConnections.forEach { connection ->
+                module.connect(connection.sink, wireAtDepth[connection.weight].getValue(connection.source))
+            }
         }
     }
 
-    internal fun addWeightedConnection(module: MutableModule, weightedConnection: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>) {
-        addWeightedConnection(
-            module = module,
-            source = weightedConnection.value.map { it.source },
-            sink = weightedConnection.value.map { it.sink },
-            weight = weightedConnection.weight,
-        )
+    internal fun weightedWireConnections(
+        edge: WeightedGraph.Edge<Node, Collection<NonRegisterConnection>>,
+    ): List<WeightedWireConnection> = edge.value.map {
+        WeightedWireConnection(source = it.source, sink = it.sink, weight = edge.weight)
     }
 
     fun toModule(graph: LeisersonCircuitGraph<MutableModule, Node, Collection<NonRegisterConnection>>): MutableModule {
@@ -318,8 +384,7 @@ object NetlistLeisersonCircuitConverter {
             edges = newGraphEdges,
         )
 
-        condensedGraph.edges.asSequence()
-            .forEach { addWeightedConnection(newModule, it) }
+        addSharedWeightedConnections(newModule, condensedGraph.edges.flatMap { weightedWireConnections(it) })
 
         return newModule
     }

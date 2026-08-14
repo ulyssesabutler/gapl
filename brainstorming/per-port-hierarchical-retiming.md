@@ -17,14 +17,49 @@ Results, all at the same `default: 1` delay model:
 | toy loop repro, periods 1-3 | infeasible | matches monolithic exactly |
 | false-loop DAG (incl. `min`) | `Graph cannot contain zero-weight cycles` | compiles |
 | md5 / aes / dag-retiming | works | works |
-| **CMS at period 20** | **infeasible at every period** | **769 registers, clock period 20** |
+| **CMS at period 20** | **infeasible at every period** | **compiles at clock period 20** (cost below) |
 
-CMS's retimed circuit measures 2946 registers once flattened, against 5102 for the monolithic build
-at the same period and delay model. That is worth double-checking rather than celebrating: a
-hierarchical retiming is a restriction of the monolithic problem and should not be able to beat it,
-so the likelier reading is that the monolithic number is itself not optimal - plausibly because its
-CP-SAT box is derived from `FastSolver`'s register count, which bounds the search without being a
-proof (see `MinimalRegisterSolver.provableLabelBound`).
+### What per-port actually costs, and how the cost model got fixed on the way
+
+An early version of this section reported "2946 registers flattened against 5102 monolithic" and
+wondered why a restriction of the monolithic problem appeared to beat it. It never did. That number
+was **register nodes**, which was exactly what the ILP minimised, and register-node count is not even
+a property of the circuit - it depends on how the netlist happens to be chopped into nodes, and the
+flat and contracted graphs chop it very differently. Flip-flops are the only like-for-like metric.
+
+Counting those exposed two real defects in the cost model, both since fixed (see
+`brainstorming/todo.md` > `## Retiming`):
+
+1. **The objective counted edges, not bits** - a register on a 512-bit bus was priced the same as one
+   on a 1-bit wire.
+2. **Fanout was not shared** - `addWeightedConnection` built a chain per edge, so a bit driving three
+   consumers at the same depth emitted three chains.
+
+Flip-flop counts on CMS at period 20, `default: 1`, elaborating each module by its real instantiation
+count:
+
+| | before the fix | after |
+|---|---|---|
+| monolithic (`--flatten all`, `minimal-register`) | 5102 regs / 103,088 FFs | 1343 regs / **47,331 FFs** |
+| per-port hierarchical (`--flatten recursive`) | 2947 regs / 1,303,996 FFs | 267 regs / **62,682 FFs** |
+
+So per-port went from 12.6x worse than monolithic to **1.32x worse**, which is the ordering theory
+predicts: hierarchical retiming is a restriction of the monolithic problem, so it should cost a little
+more, and "a lot less" was the tell that the metric was wrong.
+
+The remaining 1.32x is **granularity, not pricing**, and it is the "per port, not per field"
+limitation listed under Risks below showing up on a real design. Under `--flatten all` MD5's 64
+iterations are inlined, the 512-bit message block appears as separate 32-bit word nodes, and retiming
+delays each word only as far as the iteration that consumes it. Under `--flatten recursive` each
+`md5_iteration` is a module whose `m` port is the whole 512-bit vector, so the only edge available to
+hold a register carries all 512 bits. Sharing brought that module from 626 x 512-bit registers down to
+25 x 512, but per-*field* boundaries (`md5_input_block` is `word[16]`) are what would close the rest.
+
+**Historical note on the FPGA run:** the 1.3M-flip-flop pre-fix build synthesised and ran correctly on
+the NetFPGA (xc7vx690t, 866,400 flip-flops), which it should not have fitted. Vivado presumably
+absorbed the long uniform delay chains via SRL inference. Not worth chasing now that the design is
+62,682 flip-flops, but it is a reminder that flip-flop count is itself only a proxy for FPGA
+resources - deep uniform delay lines are sublinear in depth, and LUTs usually bind before FFs do.
 
 ### Functional validation
 

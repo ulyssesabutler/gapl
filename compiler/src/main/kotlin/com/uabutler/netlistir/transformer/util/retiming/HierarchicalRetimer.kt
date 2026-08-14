@@ -8,6 +8,7 @@ import com.uabutler.netlistir.netlist.VirtualBodyNode
 import com.uabutler.netlistir.util.graph.HierarchicalNetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
 import com.uabutler.netlistir.transformer.util.retiming.solver.HierarchicalMinimalRegisterSolver
+import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.TimingProperties
 import com.uabutler.util.Logger
 import com.uabutler.util.PropagationDelay
@@ -98,6 +99,7 @@ class HierarchicalRetimer(
                 ) as Node
             },
             expansionEdgeValueFactory = { emptyList<NonRegisterConnection>() },
+            edgeSourceBits = MinimalRegisterSolver.Companion::netlistEdgeSourceBits,
         )
 
         val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(solver, solver.problem)

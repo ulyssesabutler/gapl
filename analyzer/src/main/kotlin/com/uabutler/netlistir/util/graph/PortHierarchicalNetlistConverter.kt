@@ -191,14 +191,18 @@ object PortHierarchicalNetlistConverter {
             addNodeToMaps(copyBodyNode(instance.value as ModuleInvocationNode, "FromPortHierarchical", newModule))
         }
 
-        graph.edges.forEach { edge ->
-            NetlistLeisersonCircuitConverter.addWeightedConnection(
-                module = newModule,
-                source = edge.value.map { outputWireMap.getValue(it.source) },
-                sink = edge.value.map { inputWireMap.getValue(it.sink) },
-                weight = edge.weight,
-            )
-        }
+        NetlistLeisersonCircuitConverter.addSharedWeightedConnections(
+            module = newModule,
+            connections = graph.edges.flatMap { edge ->
+                edge.value.map {
+                    NetlistLeisersonCircuitConverter.WeightedWireConnection(
+                        source = outputWireMap.getValue(it.source),
+                        sink = inputWireMap.getValue(it.sink),
+                        weight = edge.weight,
+                    )
+                }
+            },
+        )
 
         return newModule
     }

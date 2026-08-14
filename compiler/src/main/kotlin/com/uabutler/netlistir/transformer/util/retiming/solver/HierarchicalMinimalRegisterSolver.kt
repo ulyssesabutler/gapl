@@ -20,6 +20,9 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
     private val graphs: Collection<HierarchicalLeisersonCircuitGraph<G, N, E>>,
     private val expansionNodeFactory: () -> N,
     private val expansionEdgeValueFactory: () -> E,
+    // See MinimalRegisterSolver's own parameter of this name - it is what makes the objective count
+    // flip-flops rather than edges, and it is passed straight through to the per-module solve.
+    private val edgeSourceBits: (WeightedGraph.Edge<N, E>) -> Collection<Any> = { listOf(Any()) },
 ) : HierarchicalSolver<G, N, E>(HierarchicalRetimingProblem(graphs)) {
 
     private data class SolveResult<G, N, E>(
@@ -316,7 +319,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         }
 
         // Step 3: Run the flat solver
-        val minimalRegisterSolver = MinimalRegisterSolver(MonolithicRetimingProblem(model.graph), equalityConstraints)
+        val minimalRegisterSolver = MinimalRegisterSolver(MonolithicRetimingProblem(model.graph), equalityConstraints, edgeSourceBits)
         val minimalResult = minimalRegisterSolver.solveOrNull(targetClockPeriod)
         if (minimalResult == null) {
             // Debug, not error: this fires routinely for every infeasible probe during

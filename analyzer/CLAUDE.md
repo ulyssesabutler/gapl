@@ -133,6 +133,15 @@ generic graph representation and cycle-detection logic aren't).
 convert between the netlist IR and this graph representation — register nodes get walked through to
 compute per-edge register-hop weight, non-register connections become graph edges.
 
+Going back the other way, **registers are shared across fanout**:
+`NetlistLeisersonCircuitConverter.addSharedWeightedConnections` emits one shift register per *driving
+wire*, as deep as that wire's most-delayed consumer, and taps each consumer at its own depth. So it
+has to run over a whole module's connections at once — an edge-at-a-time API can't see that two edges
+leaving the same node are the sharing opportunity. All three converters (including
+`PortHierarchicalNetlistConverter`) funnel through it. `compiler`'s `MinimalRegisterSolver` prices a
+retiming with the matching cost model, so if you change the emission strategy here, that objective has
+to move with it or the solver starts optimizing hardware that never gets built.
+
 `netlistir/builder/util/CombinationalLoopDetector.kt` (`findCombinationalLoops`, called from
 `ModuleBuilder.buildAllModules` after a clean build) is the payoff — but does **not** use the
 hierarchical flattening machinery above for this; it computes bottom-up port-reachability summaries

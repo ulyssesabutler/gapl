@@ -7,8 +7,10 @@ import com.google.ortools.sat.CpModel
 import com.google.ortools.sat.CpSolver
 import com.google.ortools.sat.CpSolverStatus
 import com.google.ortools.sat.LinearExpr
+import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.VirtualIONode
 import com.uabutler.netlistir.transformer.util.retiming.MonolithicRetimingProblem
+import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.transformer.util.retiming.Retiming
 import com.uabutler.util.graph.WeightedGraph
 
@@ -21,6 +23,18 @@ data class NodeEqualityConstraint<N>(
 class MinimalRegisterSolver<G, N, E>(
     problem: MonolithicRetimingProblem<G, N, E>,
     private val additionalEqualityConstraints: List<NodeEqualityConstraint<N>> = emptyList(),
+    /**
+     * The individual driven bits an edge carries, identified so that two edges out of the same node
+     * report the *same* object for a bit they both carry. That identity is what lets the objective
+     * charge a shared shift register once instead of once per consumer, and the count is what lets it
+     * charge a 512-bit bus 512 times what it charges a 1-bit wire.
+     *
+     * The default hands every edge one anonymous bit of its own, which reproduces the classic
+     * sum-of-edge-weights objective exactly - correct for any graph with no netlist wires behind it
+     * (the unit tests) and for the synthetic boundary edges hierarchical solvers add, which emit no
+     * hardware and so should cost nothing to weight by width.
+     */
+    private val edgeSourceBits: (WeightedGraph.Edge<N, E>) -> Collection<Any> = { listOf(Any()) },
 ): MonolithicSolver<G, N, E>(problem) {
 
     private val graph = problem.graph
@@ -42,6 +56,20 @@ class MinimalRegisterSolver<G, N, E>(
 
     companion object {
         init { Loader.loadNativeLibraries() }
+
+        /**
+         * [edgeSourceBits] for a graph built from a netlist: the driving wires behind the edge, one
+         * per bit. Two edges out of the same node report the same `OutputWire` object for a bit they
+         * both carry (netlist [com.uabutler.netlistir.netlist.Wire] has no `equals` override, so this
+         * is identity), which is what makes shared fanout visible to the objective.
+         *
+         * Synthetic edges - super-source/sink, and the boundary edges hierarchical solvers add for an
+         * already-solved child - carry no connections and so report no bits. That is deliberate: no
+         * hardware is emitted for them, so they should not be priced.
+         */
+        fun netlistEdgeSourceBits(
+            edge: WeightedGraph.Edge<Node, Collection<NetlistLeisersonCircuitConverter.NonRegisterConnection>>,
+        ): Collection<Any> = edge.value.map { it.source }
 
         // Sums of *absolute* edge weight, not signed weight: HierarchicalMinimalRegisterSolver's
         // per-child "expansion" edges are deliberately built with negative starting weight (see its
@@ -109,13 +137,20 @@ class MinimalRegisterSolver<G, N, E>(
     }
 
     /**
-     * A bound on |r(v)| that holds for some optimal solution, unlike [computeUpperRetimingUpperBound].
+     * A bound on |r(v)| wide enough that the model is feasible inside it whenever it is feasible at
+     * all, unlike [computeUpperRetimingUpperBound].
      *
-     * Every constraint emitted below is a difference constraint r(sink) - r(source) >= b (each
-     * equality being two of them), so the feasible region is a difference-constraint polyhedron.
-     * The objective is linear, so an optimum is attained at a vertex, and with r(anchor) pinned to 0
-     * every vertex satisfies |r(v)| <= (|V| - 1) * max|b| - the Bellman-Ford longest-path bound on
-     * the constraint graph. Loose, but sound.
+     * Every constraint on r is a difference constraint r(sink) - r(source) >= b (each equality being
+     * two of them), so the feasible region for r is a difference-constraint polyhedron, and with
+     * r(anchor) pinned to 0 every vertex of it satisfies |r(v)| <= (|V| - 1) * max|b| - the
+     * Bellman-Ford longest-path bound on the constraint graph. A non-empty polyhedron has a vertex,
+     * so a box this wide can only come up empty if the model is genuinely infeasible. That is exactly
+     * what this is used for: distinguishing "infeasible" from "the cheap box was too small".
+     *
+     * It is *not* a guarantee that a true optimum lies inside. The shared-fanout depth variables make
+     * the objective a sum of maxima rather than a plain linear function of r, so the vertex argument
+     * that used to carry optimality over no longer applies. In practice this only affects the
+     * fallback path, where returning a feasible retiming beats reporting a false infeasibility.
      */
     private fun provableLabelBound(
         timingConstrainedPaths: List<LeisersonCircuitGraph.FastestConnection<N>>,
@@ -127,6 +162,42 @@ class MinimalRegisterSolver<G, N, E>(
         ).coerceAtLeast(1L)
 
         return (graph.nodes.size.toLong() - 1).coerceAtLeast(1L) * maxRightHandSide
+    }
+
+    /**
+     * Groups the graph's driven bits by the exact set of edges they ride, as (edges, bit count).
+     *
+     * Bits that ride the same set of edges always end up at the same shift-register depth, so one
+     * term per group is enough. Edges reporting no bits at all (a hierarchical solver's synthetic
+     * boundary edges, the super-source/sink edges) appear in no group and so cost nothing, which is
+     * right: no hardware is emitted for them.
+     */
+    private fun objectiveBitGroups(): List<Pair<List<WeightedGraph.Edge<N, E>>, Int>> {
+        val edgeList = graph.edges.toList()
+
+        // Identity-keyed and insertion-ordered. A bit is a netlist wire, which has no equals
+        // override, so a LinkedHashMap is already identity-keyed - and unlike an IdentityHashMap it
+        // iterates deterministically, which matters because this order feeds CP-SAT's variable order.
+        val edgesPerBit = LinkedHashMap<Any, MutableList<Int>>()
+        edgeList.forEachIndexed { index, edge ->
+            edgeSourceBits(edge).forEach { bit ->
+                edgesPerBit.getOrPut(bit) { mutableListOf() }.add(index)
+            }
+        }
+
+        val groups = LinkedHashMap<List<Int>, Int>()
+        edgesPerBit.values.forEach { edgeIndices ->
+            val key = edgeIndices.distinct().sorted()
+            groups[key] = (groups[key] ?: 0) + 1
+        }
+
+        return groups.map { (edgeIndices, bitCount) -> edgeIndices.map { edgeList[it] } to bitCount }
+    }
+
+    /** The largest depth any shared shift register could need, given a bound on |r(v)|. */
+    private fun sharedDepthUpperBound(labelBound: Long): Long {
+        val maxEdgeWeight = graph.edges.maxOfOrNull { kotlin.math.abs(it.weight.toLong()) } ?: 0L
+        return maxEdgeWeight + 2L * labelBound
     }
 
     private fun solveWithLabelBound(
@@ -144,23 +215,68 @@ class MinimalRegisterSolver<G, N, E>(
             node to model.newIntVar(-upperBound, upperBound, "v$index-${node.value}")
         }.toMap()
 
-        // Step 3: Create the objective function
-        val incomingEdges = graph.edges.groupBy { it.sink }
-        val outgoingEdges = graph.edges.groupBy { it.source }
+        // Step 3: Create the objective function.
+        //
+        // NetlistLeisersonCircuitConverter.addSharedWeightedConnections materialises one shift
+        // register per driving bit, as deep as that bit's most-delayed consumer, so the cost of a
+        // retiming is
+        //
+        //     sum over driving bits b of  max over edges e carrying b of w_r(e)
+        //
+        // and *not* the sum of edge weights. Two things follow. Bits are counted individually, so a
+        // register on a 512-bit bus costs 512 where one on a 1-bit wire costs 1 - the old objective
+        // priced them identically, which made "minimal register count" mean something quite far from
+        // minimal flip-flops. And fanout is shared, so a bit feeding three consumers at the same
+        // depth is charged once rather than three times.
+        //
+        // Bits carrying the identical set of outgoing edges necessarily take the identical depth, so
+        // they collapse into one term weighted by how many bits it stands for.
+        val bitGroups = objectiveBitGroups()
 
-        val fanIn = graph.nodes.associateWith { incomingEdges[it]?.size ?: 0 }
-        val fanOut = graph.nodes.associateWith { outgoingEdges[it]?.size ?: 0 }
+        // A group riding a single edge needs no auxiliary variable: w_r(e) >= 0 is already enforced
+        // below, so its depth *is* w_r(e), and the term folds into the per-node coefficients the same
+        // way the old fanIn-minus-fanOut objective did. Every group is a singleton whenever
+        // edgeSourceBits is left at its default, so this is also what keeps the model the same size
+        // as before for callers that have no widths.
+        val nodeCost = mutableMapOf<WeightedGraph.Node<N>, Long>()
+        val sharedDepthTerms = mutableListOf<LinearExpr>()
 
-        val nodeCost = graph.nodes.associateWith { fanIn[it]!! - fanOut[it]!! }
-
-        val objectiveFunctionTerms = graph.nodes.map { node ->
-            LinearExpr.term(retimingLabelVariables[node]!!, nodeCost[node]!!.toLong())
+        bitGroups.forEach { (edges, bitCount) ->
+            val weight = bitCount.toLong()
+            if (edges.size == 1) {
+                val edge = edges.single()
+                nodeCost[edge.sink] = (nodeCost[edge.sink] ?: 0L) + weight
+                nodeCost[edge.source] = (nodeCost[edge.source] ?: 0L) - weight
+            } else {
+                val depth = model.newIntVar(0L, sharedDepthUpperBound(upperBound), "depth${sharedDepthTerms.size}")
+                edges.forEach { edge ->
+                    // depth >= w(e) + r(sink) - r(source)
+                    model.addGreaterOrEqual(
+                        LinearExpr.sum(
+                            arrayOf(
+                                depth,
+                                LinearExpr.term(retimingLabelVariables[edge.sink]!!, -1L),
+                                retimingLabelVariables[edge.source]!!,
+                            )
+                        ),
+                        edge.weight.toLong(),
+                    )
+                }
+                sharedDepthTerms.add(LinearExpr.term(depth, weight))
+            }
         }
+
+        val objectiveFunctionTerms = nodeCost.filterValues { it != 0L }.map { (node, cost) ->
+            LinearExpr.term(retimingLabelVariables[node]!!, cost)
+        } + sharedDepthTerms
 
         val objectiveFunction = LinearExpr.sum(objectiveFunctionTerms.toTypedArray())
         model.minimize(objectiveFunction)
 
-        Logger.trace { "Created objective function with ${objectiveFunctionTerms.size} terms" }
+        Logger.trace {
+            "Created objective function with ${objectiveFunctionTerms.size} terms " +
+                "(${sharedDepthTerms.size} shared-fanout depth variables)"
+        }
 
         // Step 4: Add constraints to prevent negative register counts
         val negativeRegisterConstraintCount = graph.edges.onEach { edge ->
@@ -223,14 +339,15 @@ class MinimalRegisterSolver<G, N, E>(
 
         Logger.trace {
             fun varName(node: WeightedGraph.Node<N>) = retimingLabelVariables[node]!!.name
-            fun formatTerm(coeff: Int, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
+            fun formatTerm(coeff: Long, name: String) = if (coeff >= 0) "+ $coeff $name" else "- ${-coeff} $name"
 
             val sb = StringBuilder()
 
-            // Objective
+            // Objective. The shared-fanout depth variables are omitted here - this dump exists to
+            // eyeball the retiming constraints, and those are unaffected by them.
             val objTerms = graph.nodes.mapNotNull { node ->
-                val coeff = nodeCost[node]!!
-                if (coeff == 0) null else formatTerm(coeff, varName(node))
+                val coeff = nodeCost[node] ?: 0L
+                if (coeff == 0L) null else formatTerm(coeff, varName(node))
             }
             sb.appendLine("Minimize")
             sb.appendLine("  obj: ${objTerms.joinToString(" ").removePrefix("+ ")}")

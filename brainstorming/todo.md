@@ -16,6 +16,40 @@ There are a few different validations we need to do, but currently don't.
 > `brainstorming/per-port-hierarchical-retiming.md` — that doc is the design, this section is the
 > backing detail (measurements, reproductions, failure modes).
 
+- **[DONE] Retiming now minimises flip-flops rather than edges.** Two problems, one cost model.
+
+  The old objective was `sum (fanIn(v) - fanOut(v)) * r(v)`, the sum of retimed *edge weights*, and
+  `condenseWeightedNonRegisterConnectionGroups` emits one edge per *(source node, sink node, weight)*
+  triple regardless of bit width — so a register on a 512-bit bus and one on a 1-bit wire were priced
+  identically. Separately, `addWeightedConnection` built a register chain per edge, so a bit driving
+  three consumers at the same depth emitted (and was charged for) three chains rather than one.
+
+  Both are fixed. `NetlistLeisersonCircuitConverter.addSharedWeightedConnections` now materialises one
+  shift register per *driving bit*, as deep as that bit's most-delayed consumer, with each consumer
+  tapping it at its own depth; `MinimalRegisterSolver` prices a retiming to match, as
+  `sum over driving bits b of max over edges carrying b of w_r(e)`. The bridge is the solver's new
+  `edgeSourceBits` parameter — for netlist graphs it returns the edge's driving `OutputWire`s (one per
+  bit, identity-compared so shared fanout is visible), and its default of one anonymous bit per edge
+  reproduces the old objective exactly for graphs with no wires behind them.
+
+  Measured on CMS at period 20, `default: 1`, elaborating each module by its real instantiation count:
+
+  | | before | after |
+  |---|---|---|
+  | monolithic (`--flatten all`) | 5102 registers / 103,088 FFs | 1343 registers / **47,331 FFs** |
+  | per-port hierarchical (`--flatten recursive`) | 2947 registers / 1,303,996 FFs | 267 registers / **62,682 FFs** |
+
+  Per-port went from 12.6x worse than monolithic to 1.32x worse, which is the expected ordering
+  (hierarchical is a restriction of monolithic, so a little worse is right and a lot better was the
+  tell that the metric was wrong). MD5's 512-bit message bus, which dominated the per-port build at
+  626 x 512-bit registers, is down to 25 x 512.
+
+  Two follow-on notes. `provableLabelBound`'s vertex argument no longer carries *optimality* — the
+  objective is a sum of maxima, not linear in `r` — though it still soundly separates feasible from
+  infeasible, which is all it is used for. And the remaining per-port overhead is granularity, not
+  pricing: with `--flatten recursive` MD5's `m` is one 512-bit port with no narrower edge to choose,
+  so per-*field* boundaries (`md5_input_block` is `word[16]`) are what would close the rest of the gap.
+
 - **A parent-side feedback loop through a submodule is why CMS retimes monolithically but not
   hierarchically.** Root cause is that the boundary summary is per-*module*, not per-*port*: a module
   hands its parent one `delta`, one `inputDelay` (max over every input port) and one `outputDelay`

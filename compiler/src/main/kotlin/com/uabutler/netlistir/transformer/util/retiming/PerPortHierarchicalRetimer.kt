@@ -4,6 +4,7 @@ import com.uabutler.RetimingInfeasibleException
 import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.VirtualBodyNode
+import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.PerPortHierarchicalMinimalRegisterSolver
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
 import com.uabutler.netlistir.util.graph.PortGraph
@@ -33,6 +34,7 @@ class PerPortHierarchicalRetimer(
                 ) as Node
             },
             expansionEdgeValueFactory = { emptyList<NonRegisterConnection>() },
+            edgeSourceBits = MinimalRegisterSolver.Companion::netlistEdgeSourceBits,
         )
 
         val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(solver, solver.problem)

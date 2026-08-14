@@ -78,17 +78,30 @@ bottom-up, coordinated across the call graph).
   minimize register count, just finds *a* feasible retiming for a target clock period (bounded
   iteration count). Used as the cheap oracle for `findMinimumClockPeriod`'s binary search.
 - `netlistir/transformer/util/retiming/solver/MinimalRegisterSolver.kt` — the true optimal solver, an
-  ILP formulated with Google OR-Tools CP-SAT (Leiserson-Saxe's standard formulation: minimize
-  `Σ (fanIn(v) - fanOut(v)) * r(v)`, subject to non-negative edge weights, clock-period constraints
-  only on paths that actually need them, and an anchor constraint since retiming is only defined up
-  to a global constant). Slower than `FastSolver`, used only when a `minimal-register` family solver
-  is selected via `--retiming-solver`/`--retiming-min-clock-period-solver`. Two things worth knowing:
-  it solves **twice** on failure — first inside a cheap heuristic box derived from `FastSolver`'s
-  register count, then, only if that reports infeasible, inside the provable
-  `(|V| - 1) * max|b|` difference-constraint bound, since the heuristic box isn't a proof and can in
-  principle exclude every feasible point; and it publishes the chosen labels via `lastSolveNodeLags`,
-  because a retiming is defined by its labels and several things (a hierarchical child's component
-  retiming difference, retimed edge weights) can't be recovered from the retimed graph alone.
+  ILP formulated with Google OR-Tools CP-SAT (Leiserson-Saxe constraints: non-negative edge weights,
+  clock-period constraints only on paths that actually need them, and an anchor constraint since
+  retiming is only defined up to a global constant). Slower than `FastSolver`, used only when a
+  `minimal-register` family solver is selected via
+  `--retiming-solver`/`--retiming-min-clock-period-solver`. Three things worth knowing:
+  - **It minimizes flip-flops, not edges.** The objective is
+    `Σ over driving bits b of (max over edges carrying b of w_r(e))`, *not* Leiserson-Saxe's textbook
+    `Σ (fanIn(v) - fanOut(v)) * r(v)`. That form counted one register per edge per unit weight
+    regardless of bit width and with no fanout sharing, which priced a 512-bit bus the same as a 1-bit
+    wire and charged a shared shift register once per consumer — on netfpga's CMS the two together
+    were a 12.6x hardware error. The bridge to the netlist is the `edgeSourceBits` constructor
+    parameter, which reports an edge's driving `OutputWire`s (one per bit, identity-compared so shared
+    fanout is visible). Its default — one anonymous bit per edge — reproduces the old objective
+    exactly, which is what keeps the unit tests and any wire-less graph working unchanged. This has to
+    stay in step with `NetlistLeisersonCircuitConverter.addSharedWeightedConnections`, which is what
+    actually emits the shared registers; change one and the other is pricing hardware nobody builds.
+  - It solves **twice** on failure — first inside a cheap heuristic box derived from `FastSolver`'s
+    register count, then, only if that reports infeasible, inside the `(|V| - 1) * max|b|`
+    difference-constraint bound, since the heuristic box isn't a proof and can in principle exclude
+    every feasible point. Note that wider bound is only sound for *feasibility* now: the objective is
+    a sum of maxima rather than linear in `r`, so the vertex argument no longer carries optimality.
+  - It publishes the chosen labels via `lastSolveNodeLags`, because a retiming is defined by its
+    labels and several things (a hierarchical child's component retiming difference, retimed edge
+    weights) can't be recovered from the retimed graph alone.
 - `netlistir/transformer/util/retiming/solver/PerPortHierarchicalMinimalRegisterSolver.kt` — the
   second hierarchical solver (`--retiming-solver per-port-hierarchical-minimal-register`), built
   *alongside* the one below rather than replacing it. It summarises a module boundary **per port**

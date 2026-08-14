@@ -16,6 +16,7 @@ import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonReg
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
 import com.uabutler.util.graph.LeisersonCircuitGraph
+import com.uabutler.util.graph.WeightedGraph
 import com.uabutler.netlistir.transformer.util.retiming.solver.DagSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.FastSolver
 import com.uabutler.netlistir.transformer.util.retiming.solver.MinimalRegisterSolver
@@ -49,9 +50,10 @@ class Retimer(
         private fun <G, N, E> buildMonolithicSolver(
             id: RetimingSolverId,
             problem: MonolithicRetimingProblem<G, N, E>,
+            edgeSourceBits: (WeightedGraph.Edge<N, E>) -> Collection<Any>,
         ): MonolithicSolver<G, N, E> = when (id) {
             RetimingSolverId.FAST -> FastSolver(problem)
-            RetimingSolverId.MINIMAL_REGISTER -> MinimalRegisterSolver(problem)
+            RetimingSolverId.MINIMAL_REGISTER -> MinimalRegisterSolver(problem, edgeSourceBits = edgeSourceBits)
             RetimingSolverId.SCC -> SccSolver(problem)
             RetimingSolverId.DAG -> DagSolver(problem)
             RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER,
@@ -165,8 +167,9 @@ class Retimer(
             .onEach { graph -> recordGraphStats("Unretimed", graph) }
             .map { graph ->
                 val problem = MonolithicRetimingProblem(graph)
-                val searchSolver = buildMonolithicSolver(minClockPeriodSolverId, problem)
-                val finalSolver = buildMonolithicSolver(retimingSolverId, problem)
+                val edgeSourceBits = MinimalRegisterSolver.Companion::netlistEdgeSourceBits
+                val searchSolver = buildMonolithicSolver(minClockPeriodSolverId, problem, edgeSourceBits)
+                val finalSolver = buildMonolithicSolver(retimingSolverId, problem, edgeSourceBits)
                 val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(searchSolver, problem)
 
                 Logger.trace { "Retiming will use clock period of $clockPeriod" }

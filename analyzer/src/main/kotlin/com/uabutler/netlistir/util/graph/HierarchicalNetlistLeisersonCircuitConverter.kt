@@ -168,13 +168,16 @@ object HierarchicalNetlistLeisersonCircuitConverter {
                 )
             }.let { groups ->
                 NetlistLeisersonCircuitConverter.condenseWeightedNonRegisterConnectionGroups(groups)
-            }.forEach { group ->
-                NetlistLeisersonCircuitConverter.addWeightedConnection(
-                    module = newModule,
-                    source = group.connections.map { outputWireMap[it.source]!! },
-                    sink = group.connections.map { inputWireMap[it.sink]!! },
-                    weight = group.weight,
-                )
+            }.flatMap { group ->
+                group.connections.map {
+                    NetlistLeisersonCircuitConverter.WeightedWireConnection(
+                        source = outputWireMap[it.source]!!,
+                        sink = inputWireMap[it.sink]!!,
+                        weight = group.weight,
+                    )
+                }
+            }.let { connections ->
+                NetlistLeisersonCircuitConverter.addSharedWeightedConnections(newModule, connections)
             }
 
         return newModule
