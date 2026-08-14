@@ -41,11 +41,26 @@ object Compiler {
         val includeStdLib: Boolean,
         val retime: PropagationDelay?,
         val retimingClockPeriod: Int?,
-        val retimingSolverId: RetimingSolverId,
+        val retimingSolverId: RetimingSolverId?,
         val retimingMinClockPeriodSolverId: RetimingSolverId?,
         val retimingMaintainTiming: Boolean,
     ) {
         val analyzerOptions get() = Analyzer.Options(includeStdLib)
+    }
+
+    // --retiming-solver is optional. Given one, it decides everything, including which --flatten
+    // mode is required. Without one, the choice follows whatever --flatten asks for: `all` is
+    // monolithic territory, and anything else needs a hierarchical solver - where per-port is the
+    // default, because it handles every case the whole-module solver does *plus* designs whose
+    // caller holds a feedback loop through a submodule, which a whole-module boundary summary
+    // cannot express at any clock period. `hierarchical-minimal-register` remains selectable
+    // explicitly.
+    private fun resolveRetimingSolverId(options: Options): RetimingSolverId {
+        options.retimingSolverId?.let { return it }
+        return when (options.flattenMode) {
+            null, Flattener.Mode.ALL -> RetimingSolverId.FAST
+            Flattener.Mode.NONE, Flattener.Mode.RECURSIVE -> RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER
+        }
     }
 
     // -flatten is optional: when the user doesn't pass it, the required mode is derived from the
@@ -54,10 +69,10 @@ object Compiler {
     // there's no solver kind to derive from, so this just preserves the old always-"all" default.
     // An explicit -flatten value that conflicts with the solver's requirement is a hard error,
     // never silently overridden.
-    private fun resolveFlattenMode(options: Options): Flattener.Mode {
+    private fun resolveFlattenMode(options: Options, solverId: RetimingSolverId): Flattener.Mode {
         if (options.retime == null) return options.flattenMode ?: Flattener.Mode.ALL
 
-        val requiredKind = options.retimingSolverId.kind
+        val requiredKind = solverId.kind
         val requiredFlattenMode = when (requiredKind) {
             RetimingSolverKind.MONOLITHIC -> Flattener.Mode.ALL
             RetimingSolverKind.HIERARCHICAL -> Flattener.Mode.NONE
@@ -67,30 +82,35 @@ object Compiler {
         val explicitKind = if (explicit == Flattener.Mode.ALL) RetimingSolverKind.MONOLITHIC else RetimingSolverKind.HIERARCHICAL
         if (explicitKind != requiredKind) {
             throw InvalidCompilerOptionsException(
-                "--flatten $explicit is incompatible with --retiming-solver ${options.retimingSolverId.id} (requires a $requiredKind flatten mode)"
+                "--flatten $explicit is incompatible with --retiming-solver ${solverId.id} (requires a $requiredKind flatten mode)"
             )
         }
         return explicit
     }
 
-    private fun resolveMinClockPeriodSolverId(options: Options): RetimingSolverId {
-        val solverKind = options.retimingSolverId.kind
+    private fun resolveMinClockPeriodSolverId(options: Options, solverId: RetimingSolverId): RetimingSolverId {
+        val solverKind = solverId.kind
         val default = when (solverKind) {
             RetimingSolverKind.MONOLITHIC -> RetimingSolverId.FAST
-            RetimingSolverKind.HIERARCHICAL -> RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER
+            // Hierarchical retimers search with their own solver rather than a cheaper oracle, so
+            // the only coherent default is the solver actually selected - defaulting to a *different*
+            // hierarchical solver would search against a different feasibility notion than the one
+            // used for the final retiming.
+            RetimingSolverKind.HIERARCHICAL -> solverId
         }
 
         val explicit = options.retimingMinClockPeriodSolverId ?: return default
         if (explicit.kind != solverKind) {
             throw InvalidCompilerOptionsException(
-                "--retiming-min-clock-period-solver ${explicit.id} is a ${explicit.kind} solver, but --retiming-solver ${options.retimingSolverId.id} is $solverKind"
+                "--retiming-min-clock-period-solver ${explicit.id} is a ${explicit.kind} solver, but --retiming-solver ${solverId.id} is $solverKind"
             )
         }
         return explicit
     }
 
     fun runNetlistTransformers(inputNetlist: List<Module>, options: Options): List<Module> {
-        val effectiveFlattenMode = resolveFlattenMode(options)
+        val effectiveRetimingSolverId = resolveRetimingSolverId(options)
+        val effectiveFlattenMode = resolveFlattenMode(options, effectiveRetimingSolverId)
 
         val transformers = Logger.run("Building Transformer List") {
             buildList {
@@ -119,7 +139,7 @@ object Compiler {
                 add(PassThroughRemover)
 
                 if (options.retime != null) {
-                    val retimeMode = when (options.retimingSolverId.kind) {
+                    val retimeMode = when (effectiveRetimingSolverId.kind) {
                         RetimingSolverKind.MONOLITHIC -> Retimer.Mode.MONOLITH
                         RetimingSolverKind.HIERARCHICAL -> Retimer.Mode.HIERARCHICAL
                     }
@@ -128,8 +148,8 @@ object Compiler {
                         mode = retimeMode,
                         delay = options.retime,
                         targetClockPeriod = options.retimingClockPeriod,
-                        retimingSolverId = options.retimingSolverId,
-                        minClockPeriodSolverId = resolveMinClockPeriodSolverId(options),
+                        retimingSolverId = effectiveRetimingSolverId,
+                        minClockPeriodSolverId = resolveMinClockPeriodSolverId(options, effectiveRetimingSolverId),
                         maintainTiming = options.retimingMaintainTiming,
                     ))
                 }

@@ -1,5 +1,74 @@
 # Per-port hierarchical retiming: design plan
 
+## Status: implemented and clearing CMS
+
+Landed as `--retiming-solver per-port-hierarchical-minimal-register`, alongside (not replacing) the
+existing hierarchical solver, whose output is byte-identical to before.
+
+One deviation from the plan below: the per-port path uses **no super-nodes at all**. Root port
+alignment is a direct equality constraint between the root's own port nodes, which keeps
+`VirtualIONode` out of the new path entirely - so the design's step 7 (make the boundary structural
+rather than a type check) came for free, and root alignment is unit-testable.
+
+Results, all at the same `default: 1` delay model:
+
+| case | old hierarchical | per-port |
+|---|---|---|
+| toy loop repro, periods 1-3 | infeasible | matches monolithic exactly |
+| false-loop DAG (incl. `min`) | `Graph cannot contain zero-weight cycles` | compiles |
+| md5 / aes / dag-retiming | works | works |
+| **CMS at period 20** | **infeasible at every period** | **769 registers, clock period 20** |
+
+CMS's retimed circuit measures 2946 registers once flattened, against 5102 for the monolithic build
+at the same period and delay model. That is worth double-checking rather than celebrating: a
+hierarchical retiming is a restriction of the monolithic problem and should not be able to beat it,
+so the likelier reading is that the monolithic number is itself not optimal - plausibly because its
+CP-SAT box is derived from `FastSolver`'s register count, which bounds the search without being a
+proof (see `MinimalRegisterSolver.provableLabelBound`).
+
+### Functional validation
+
+New variations `netfpga/src/{aes,md5,cms}/per-port-min-register-count/` (same clock periods and delay
+models as each app's existing retimed variation). Results:
+
+| harness | aes | md5 | cms |
+|---|---|---|---|
+| `:netfpga:runSimKernelTest` (simengine) | pass | pass | pass |
+| `:netfpga:runKernelTest` (Verilator, on the retimed Verilog) | **pass** | **pass** | **pass** |
+
+The Verilator row is the one that means something, and two negative controls establish that it does:
+supplying the wrong number of expected packets fails on packet count, and supplying the right number
+with one corrupted nibble fails on packet contents ("mismatch at packet 0, output 0"). So a pass is a
+byte-for-byte comparison of real packet output, not a vacuous green.
+
+This is the first real evidence that retiming preserves behaviour on CMS's sketch feedback loop -
+the case where the known "retiming does not recompute register reset values" gap
+(`verilator-test/tests/cyclic-retiming` is marked deprecated for exactly this) would have been most
+likely to bite. Evidence, not proof: the vectors are three short packets.
+
+**`runSimKernelTest` cannot validate retiming at all**, and should not be read as if it did. It is
+invoked with `-f <processor.gapl>` and runs the *untransformed* netlist through simengine, never
+touching the compiler or the generated Verilog - so it produces identical results for every variation
+of a given application, retimed or not. Useful as a source-level check; useless as a retiming check.
+
+### Two bugs found and fixed on the way
+
+- **Model construction must be deterministic.** The converter stored nodes in `IdentityHashMap`s and
+  then iterated them to build the node list, so `graph.nodes` order - and therefore CP-SAT's variable
+  order and `MinimalRegisterSolver`'s anchor-node choice - depended on JVM identity hash codes, i.e.
+  on unrelated earlier allocations. This surfaced as **compilation output depending on `--log-level`**:
+  at INFO and above, `Retimer.recordCircuitStats` runs a throwaway `Flattener(ALL).transform(...)`
+  inside a `Logger.ifInfo`, which advances `AnonymousIdentifierGenerator`'s global counter and shifts
+  every later allocation. CMS compiled at INFO and failed at WARN. Netlist `Node` has no
+  `equals`/`hashCode` override, so a plain `LinkedHashMap` is *already* identity-keyed - it gives
+  identity semantics and insertion order together, and is what these maps should have been.
+  Worth knowing generally: `Logger.ifInfo` blocks in this codebase are not always side-effect free.
+- **Arbitrary lags must not be propagated.** Ports in different weakly-connected components of a
+  module have no chain of edges relating their lags, so the ILP's choice of relative lag between them
+  is arbitrary; forcing a caller to reproduce it invents a requirement the hardware does not have.
+  `PortBoundarySummary.portComponents` now scopes the port-lag constraints to within a component.
+
+
 Plan for replacing hierarchical retiming's per-*module* boundary summary with a per-*port* one. This
 doc is the design; `brainstorming/todo.md` > `## Retiming` is the backing detail - the measurements,
 the reproductions, and the two failure modes that motivate it.

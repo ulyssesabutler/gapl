@@ -115,19 +115,23 @@ class Gapl : CliktCommand(name = "gapl") {
         else raw.toIntOrNull()?.takeIf { it > 0 } ?: fail("must be \"min\" or a positive integer")
     }.default(MIN_CLOCK_PERIOD)
 
-    private val retimingSolver: RetimingSolverId by option(
+    private val retimingSolver: RetimingSolverId? by option(
         "--retiming-solver",
         help = "Solver used for the final retiming. fast/minimal-register/scc/dag are monolithic " +
-            "(require --flatten all); hierarchical-minimal-register is hierarchical (requires " +
-            "--flatten none or recursive). dag additionally requires the circuit to be fully " +
-            "acyclic (no register-protected loops).",
-    ).choice(RetimingSolverId.entries.associate { it.id to it }).default(RetimingSolverId.FAST)
+            "(require --flatten all); hierarchical-minimal-register and " +
+            "per-port-hierarchical-minimal-register are hierarchical (require --flatten none or " +
+            "recursive). The per-port solver summarises a module boundary per port rather than " +
+            "per module, which lets a module's ports sit at different pipeline depths - needed " +
+            "whenever a caller has a feedback loop through a submodule. dag additionally " +
+            "requires the circuit to be fully acyclic (no register-protected loops). Defaults to " +
+            "fast with --flatten all, and to per-port-hierarchical-minimal-register otherwise.",
+    ).choice(RetimingSolverId.entries.associate { it.id to it })
 
     private val retimingMinClockPeriodSolver: RetimingSolverId? by option(
         "--retiming-min-clock-period-solver",
         help = "Solver used when searching for the minimum clock period (--retiming-clock-period " +
             "min). Must be the same kind (monolithic/hierarchical) as --retiming-solver. Defaults " +
-            "to fast for monolithic solvers, hierarchical-minimal-register for hierarchical solvers.",
+            "to fast for monolithic solvers, and to the matching hierarchical solver otherwise.",
     ).choice(RetimingSolverId.entries.associate { it.id to it })
 
     private val retimingMaintainsTiming: Boolean by option(
