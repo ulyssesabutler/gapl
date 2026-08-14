@@ -89,6 +89,21 @@ bottom-up, coordinated across the call graph).
   principle exclude every feasible point; and it publishes the chosen labels via `lastSolveNodeLags`,
   because a retiming is defined by its labels and several things (a hierarchical child's component
   retiming difference, retimed edge weights) can't be recovered from the retimed graph alone.
+- `netlistir/transformer/util/retiming/solver/PerPortHierarchicalMinimalRegisterSolver.kt` — the
+  second hierarchical solver (`--retiming-solver per-port-hierarchical-minimal-register`), built
+  *alongside* the one below rather than replacing it. It summarises a module boundary **per port**
+  (a lag per port, delays per port, register counts and combinational delays per port *pair*) instead
+  of per module, so a module's ports may sit at different pipeline depths. That is what lets a caller
+  hold a feedback loop through a submodule: the whole-module summary forces every input-to-output
+  path to share one retiming difference, which a loop cannot absorb. It uses its own graph type
+  (`PortHierarchicalCircuitGraph`) and converter (`PortHierarchicalNetlistConverter`), has no
+  super-nodes at all — root port alignment is an explicit equality constraint — and is the only
+  solver that compiles netfpga's CMS hierarchically. See
+  `../brainstorming/per-port-hierarchical-retiming.md`. **Its model construction must stay
+  deterministic**: node order drives CP-SAT's variable order and the anchor-node choice, so the maps
+  feeding `graph.nodes` are insertion-ordered `LinkedHashMap`s (already identity-keyed, since netlist
+  `Node` has no `equals` override). An `IdentityHashMap` there previously made compilation output
+  depend on `--log-level`.
 - `netlistir/transformer/util/retiming/solver/HierarchicalMinimalRegisterSolver.kt` — orchestrates
   `MinimalRegisterSolver` per-module across a hierarchy: rather than inlining already-solved children
   wholesale, it "expands" each into a small synthetic summary (boundary nodes carrying the child's

@@ -79,22 +79,31 @@ class MinimalRegisterSolver<G, N, E>(
 
         Logger.finish()
 
-        val heuristicBound = (computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null) + 1
-        solveWithLabelBound(heuristicBound, timingConstrainedPaths)?.let { return@run it }
+        // The cheap bound is derived from FastSolver's register count. It is only a heuristic, in two
+        // separate ways, and neither of them is allowed to be the last word on feasibility:
+        //
+        //  - It is not a proof that an optimal solution fits inside +/-bound. The binding direction
+        //    is the lower one (r(v) - r(u) >= -sum of w along a path), and FEAS can strictly *reduce*
+        //    total register count, so the box can exclude every feasible point.
+        //  - FastSolver failing outright does not mean the model is infeasible. It solves a
+        //    *relaxation* - it ignores additionalEqualityConstraints entirely - and it assumes
+        //    non-negative starting edge weights, which contracted-subgraph edges deliberately
+        //    violate. On a per-port hierarchical graph those weights are negative routinely, so
+        //    FEAS's own correctness argument simply does not apply.
+        //
+        // So: try the cheap box when there is one, then fall through to a bound that is actually
+        // provable before reporting infeasible.
+        val heuristicBound = computeUpperRetimingUpperBound(graph, targetClockPeriod)?.plus(1)
+        if (heuristicBound != null) {
+            solveWithLabelBound(heuristicBound, timingConstrainedPaths)?.let { return@run it }
+        }
 
-        // The heuristic bound above is derived from FastSolver's register count, which is not a
-        // proof that an optimal solution fits inside +/-heuristicBound: the binding direction is the
-        // lower one (r(v) - r(u) >= -sum of w along a path), and FEAS can strictly *reduce* total
-        // register count, so the box can in principle exclude every feasible point and make CP-SAT
-        // report infeasible for an achievable clock period. Retry once against a bound that is
-        // actually provable before believing "infeasible". Only reachable when FastSolver already
-        // found a feasible retiming, so it does not slow down the common infeasible-probe path
-        // through findMinimumClockPeriod.
         val provableBound = provableLabelBound(timingConstrainedPaths)
-        if (provableBound <= heuristicBound) return@run null
+        if (heuristicBound != null && provableBound <= heuristicBound) return@run null
 
         Logger.debug {
-            "Infeasible at heuristic retiming-label bound $heuristicBound; retrying at provable bound $provableBound"
+            "Retrying at provable retiming-label bound $provableBound " +
+                "(heuristic bound ${heuristicBound ?: "unavailable - FastSolver found no feasible relaxation"})"
         }
         return@run solveWithLabelBound(provableBound, timingConstrainedPaths)
     }

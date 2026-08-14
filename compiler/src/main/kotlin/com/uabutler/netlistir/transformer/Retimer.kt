@@ -9,6 +9,7 @@ import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.transformer.util.retiming.HierarchicalRetimer
+import com.uabutler.netlistir.transformer.util.retiming.PerPortHierarchicalRetimer
 import com.uabutler.util.PropagationDelay
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter.NonRegisterConnection
@@ -53,7 +54,9 @@ class Retimer(
             RetimingSolverId.MINIMAL_REGISTER -> MinimalRegisterSolver(problem)
             RetimingSolverId.SCC -> SccSolver(problem)
             RetimingSolverId.DAG -> DagSolver(problem)
-            RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER -> error("$id is a hierarchical solver, not a monolithic one")
+            RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER,
+            RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER ->
+                error("$id is a hierarchical solver, not a monolithic one")
         }
     }
 
@@ -186,7 +189,11 @@ class Retimer(
 
     private fun transformAll(original: List<MutableModule>): List<MutableModule> {
         if (maintainTiming) throw Exception("Maintain timing is not supported yet")
-        return HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
+        return when (retimingSolverId) {
+            RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER ->
+                PerPortHierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
+            else -> HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
+        }
     }
 
     override fun transform(original: List<Module>): List<Module> {
