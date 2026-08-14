@@ -82,7 +82,13 @@ bottom-up, coordinated across the call graph).
   `Σ (fanIn(v) - fanOut(v)) * r(v)`, subject to non-negative edge weights, clock-period constraints
   only on paths that actually need them, and an anchor constraint since retiming is only defined up
   to a global constant). Slower than `FastSolver`, used only when a `minimal-register` family solver
-  is selected via `--retiming-solver`/`--retiming-min-clock-period-solver`.
+  is selected via `--retiming-solver`/`--retiming-min-clock-period-solver`. Two things worth knowing:
+  it solves **twice** on failure — first inside a cheap heuristic box derived from `FastSolver`'s
+  register count, then, only if that reports infeasible, inside the provable
+  `(|V| - 1) * max|b|` difference-constraint bound, since the heuristic box isn't a proof and can in
+  principle exclude every feasible point; and it publishes the chosen labels via `lastSolveNodeLags`,
+  because a retiming is defined by its labels and several things (a hierarchical child's component
+  retiming difference, retimed edge weights) can't be recovered from the retimed graph alone.
 - `netlistir/transformer/util/retiming/solver/HierarchicalMinimalRegisterSolver.kt` — orchestrates
   `MinimalRegisterSolver` per-module across a hierarchy: rather than inlining already-solved children
   wholesale, it "expands" each into a small synthetic summary (boundary nodes carrying the child's

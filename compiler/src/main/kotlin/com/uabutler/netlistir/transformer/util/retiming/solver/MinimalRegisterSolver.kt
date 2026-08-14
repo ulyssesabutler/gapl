@@ -25,6 +25,21 @@ class MinimalRegisterSolver<G, N, E>(
 
     private val graph = problem.graph
 
+    /**
+     * The retiming labels r(v) chosen by the most recent successful [solveOrNull], or null if no
+     * solve has succeeded on this instance.
+     *
+     * Exposed because a retiming is fully described by its labels, and several things a caller
+     * legitimately needs cannot be recovered from the retimed graph alone. In particular
+     * HierarchicalMinimalRegisterSolver needs r(super-out) - r(super-in) - the component retiming
+     * difference it pins its parent against - which is *not* the same as the change in the graph's
+     * minimum input-to-output register count whenever the graph has more than one graph-theoretic
+     * leaf. It also uses these labels to recompute retimed edge weights directly (w + r(sink) -
+     * r(source)) rather than matching retimed edges back to originals positionally.
+     */
+    var lastSolveNodeLags: Map<WeightedGraph.Node<N>, Int>? = null
+        private set
+
     companion object {
         init { Loader.loadNativeLibraries() }
 
@@ -47,7 +62,7 @@ class MinimalRegisterSolver<G, N, E>(
     override fun solveOrNull(targetClockPeriod: Int?): MonolithicRetimingProblem<G, N, E>? = Logger.run("Retiming to minimize register count", Logger.Level.DEBUG) {
         Logger.trace { "Target clock period: $targetClockPeriod" }
 
-        Logger.start("Creating LP problem", Logger.Level.TRACE)
+        lastSolveNodeLags = null
 
         // Precompute
         Logger.start("Precomputing WD values", Logger.Level.TRACE)
@@ -64,11 +79,57 @@ class MinimalRegisterSolver<G, N, E>(
 
         Logger.finish()
 
+        val heuristicBound = (computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null) + 1
+        solveWithLabelBound(heuristicBound, timingConstrainedPaths)?.let { return@run it }
+
+        // The heuristic bound above is derived from FastSolver's register count, which is not a
+        // proof that an optimal solution fits inside +/-heuristicBound: the binding direction is the
+        // lower one (r(v) - r(u) >= -sum of w along a path), and FEAS can strictly *reduce* total
+        // register count, so the box can in principle exclude every feasible point and make CP-SAT
+        // report infeasible for an achievable clock period. Retry once against a bound that is
+        // actually provable before believing "infeasible". Only reachable when FastSolver already
+        // found a feasible retiming, so it does not slow down the common infeasible-probe path
+        // through findMinimumClockPeriod.
+        val provableBound = provableLabelBound(timingConstrainedPaths)
+        if (provableBound <= heuristicBound) return@run null
+
+        Logger.debug {
+            "Infeasible at heuristic retiming-label bound $heuristicBound; retrying at provable bound $provableBound"
+        }
+        return@run solveWithLabelBound(provableBound, timingConstrainedPaths)
+    }
+
+    /**
+     * A bound on |r(v)| that holds for some optimal solution, unlike [computeUpperRetimingUpperBound].
+     *
+     * Every constraint emitted below is a difference constraint r(sink) - r(source) >= b (each
+     * equality being two of them), so the feasible region is a difference-constraint polyhedron.
+     * The objective is linear, so an optimum is attained at a vertex, and with r(anchor) pinned to 0
+     * every vertex satisfies |r(v)| <= (|V| - 1) * max|b| - the Bellman-Ford longest-path bound on
+     * the constraint graph. Loose, but sound.
+     */
+    private fun provableLabelBound(
+        timingConstrainedPaths: List<LeisersonCircuitGraph.FastestConnection<N>>,
+    ): Long {
+        val maxRightHandSide = maxOf(
+            graph.edges.maxOfOrNull { kotlin.math.abs(it.weight.toLong()) } ?: 0L,
+            timingConstrainedPaths.maxOfOrNull { kotlin.math.abs(1L - it.registerCount) } ?: 0L,
+            additionalEqualityConstraints.maxOfOrNull { kotlin.math.abs(it.value) } ?: 0L,
+        ).coerceAtLeast(1L)
+
+        return (graph.nodes.size.toLong() - 1).coerceAtLeast(1L) * maxRightHandSide
+    }
+
+    private fun solveWithLabelBound(
+        upperBound: Long,
+        timingConstrainedPaths: List<LeisersonCircuitGraph.FastestConnection<N>>,
+    ): MonolithicRetimingProblem<G, N, E>? = Logger.run("Solving at retiming-label bound $upperBound", Logger.Level.DEBUG) {
+        Logger.start("Creating LP problem", Logger.Level.TRACE)
+
         // Step 1: create the module
         val model = CpModel()
 
         // Step 2: create the variables
-        val upperBound = (computeUpperRetimingUpperBound(graph, targetClockPeriod) ?: return@run null) + 1
         Logger.debug { "Upper bound on retiming label: $upperBound" }
         val retimingLabelVariables = graph.nodes.mapIndexed { index, node ->
             node to model.newIntVar(-upperBound, upperBound, "v$index-${node.value}")
@@ -219,13 +280,16 @@ class MinimalRegisterSolver<G, N, E>(
             graphFactory = { nodes, edges -> LeisersonCircuitGraph(graph.value, nodes, edges) }
         )
 
-        graph.nodes.map { node ->
-            val retimingLabel = solver.value(retimingLabelVariables[node]!!)
-            retiming.setNodeLag(node, retimingLabel.toInt())
-            retimingLabel
-        }.groupBy { it }.mapValues { (_, value) -> value.size }.forEach {
-            Logger.trace { "${it.value} nodes with lag r(v)=${it.key}" }
+        val nodeLags = graph.nodes.associateWith { node ->
+            solver.value(retimingLabelVariables[node]!!).toInt()
         }
+
+        nodeLags.values.groupingBy { it }.eachCount().forEach { (lag, count) ->
+            Logger.trace { "$count nodes with lag r(v)=$lag" }
+        }
+
+        nodeLags.forEach { (node, lag) -> retiming.setNodeLag(node, lag) }
+        lastSolveNodeLags = nodeLags
 
         return@run MonolithicRetimingProblem(retiming.generateNewCircuit())
     }
