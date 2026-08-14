@@ -23,6 +23,10 @@ class HierarchicalRetimer(
         val combinationalDelay: Int?,
         val registerDelay: Int,
         val clockPeriod: Int,
+        // Registers this module owns directly. Deliberately not a whole-subtree total: a module
+        // invoked from several call sites is emitted once, so summing its children into it would
+        // double-count. Per-module numbers add up to the design total only once each module's own
+        // instantiation count is taken into account.
         val registerCount: Int,
     )
 
@@ -51,12 +55,16 @@ class HierarchicalRetimer(
             val unretimedStats = unretimedGraphStats[invocation]
             val retimedStats = retimedGraphStats[invocation]
 
-            if (unretimedStats != null && retimedStats != null) {
-                Logger.start("Unretimed", Logger.Level.INFO)
-                Logger.info { "Clock Period:   ${unretimedStats.clockPeriod}" }
-                Logger.info { "Register Count: ${unretimedStats.registerCount}" }
-                Logger.info { "Register Delay: ${unretimedStats.registerDelay}" }
-                Logger.finish()
+            if (retimedStats == null) {
+                Logger.error { "No stats for ${invocation.gaplFunctionName}" }
+            } else {
+                if (unretimedStats != null) {
+                    Logger.start("Unretimed", Logger.Level.INFO)
+                    Logger.info { "Clock Period:   ${unretimedStats.clockPeriod}" }
+                    Logger.info { "Register Count: ${unretimedStats.registerCount}" }
+                    Logger.info { "Register Delay: ${unretimedStats.registerDelay}" }
+                    Logger.finish()
+                }
 
                 Logger.start("Retimed", Logger.Level.INFO)
                 Logger.info { "Clock Period:   ${retimedStats.clockPeriod}" }
@@ -64,11 +72,13 @@ class HierarchicalRetimer(
                 Logger.info { "Register Delay: ${retimedStats.registerDelay}" }
                 Logger.finish()
 
-                Logger.info { "Clock Period Decrease:   ${unretimedStats.clockPeriod - retimedStats.clockPeriod}" }
-                Logger.info { "Register Count Increase: ${retimedStats.registerCount - unretimedStats.registerCount}" }
-                Logger.info { "Register Delay Increase: ${retimedStats.registerDelay - unretimedStats.registerDelay}" }
-            } else {
-                Logger.error { "No stats for ${invocation.gaplFunctionName}" }
+                if (unretimedStats == null) {
+                    Logger.info { "No unretimed stats available for comparison" }
+                } else {
+                    Logger.info { "Clock Period Decrease:   ${unretimedStats.clockPeriod - retimedStats.clockPeriod}" }
+                    Logger.info { "Register Count Increase: ${retimedStats.registerCount - unretimedStats.registerCount}" }
+                    Logger.info { "Register Delay Increase: ${retimedStats.registerDelay - unretimedStats.registerDelay}" }
+                }
             }
 
             Logger.finish()
@@ -97,7 +107,7 @@ class HierarchicalRetimer(
         hierarchicalGraphs.forEach { original ->
             val invocation = original.value.invocation
             val (unretimed, retimed) = solver.timingPropertiesFromLastSolve(original) ?: return@forEach
-            unretimedGraphStats[invocation] = unretimed.toGraphStats()
+            unretimed?.let { unretimedGraphStats[invocation] = it.toGraphStats() }
             retimedGraphStats[invocation] = retimed.toGraphStats()
         }
 
