@@ -61,7 +61,9 @@ Concretely, as Gradle subprojects:
 - **`python-tests`** — standalone Python scripts, unrelated to the Gradle build.
 - **`brainstorming/`** — not a Gradle subproject, just design-notes markdown (`functions.md`,
   `interfaces.md`, `protocols.md`, `static-expressions.md`, `connector.md`, `design-patterns-in-the-wild.md`,
-  `parser.md`) plus **`brainstorming/todo.md`** and **`brainstorming/future-work.md`** — check these
+  `parser.md`) plus two canonical per-effort design/status docs (`netfpga-partial-synthesis.md`,
+  `per-port-hierarchical-retiming.md` — each the entry point for its effort, with `todo.md` as the
+  backing detail) plus **`brainstorming/todo.md`** and **`brainstorming/future-work.md`** — check these
   for standing, higher-level project TODOs/direction before assuming something hasn't been thought
   about yet, and consider adding to them (rather than only leaving inline code comments) for
   non-urgent findings a future session should know about.

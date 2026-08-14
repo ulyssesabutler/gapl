@@ -11,6 +11,137 @@ There are a few different validations we need to do, but currently don't.
     - These might depend on other parameters to evaluate
 
 ## Retiming
+
+> The plan for fixing the first two entries below lives in
+> `brainstorming/per-port-hierarchical-retiming.md` — that doc is the design, this section is the
+> backing detail (measurements, reproductions, failure modes).
+
+- **A parent-side feedback loop through a submodule is why CMS retimes monolithically but not
+  hierarchically.** Root cause is that the boundary summary is per-*module*, not per-*port*: a module
+  hands its parent one `delta`, one `inputDelay` (max over every input port) and one `outputDelay`
+  (max over every output port). When a parent has a feedback loop through the child, the loop's
+  register count is invariant under retiming, and both of those merged summaries charge the loop for
+  paths that need not be on it. It fails in two distinct ways, with `loopRegisters` counted in the
+  parent and `delta` from the child:
+
+  - **Register count.** `delta > loopRegisters` means the child's own retiming wants more registers
+    on the loop than the loop has, so the loop's external edges would have to go negative. Infeasible
+    outright, and no clock period fixes it.
+  - **Delay concatenation.** `delta == loopRegisters` is satisfiable, but it consumes every register,
+    pinning the external return edge to zero - so the parent then has to fit
+    `outputDelay + inputDelay` into a single clock period. With `loopRegisters - delta >= 1` the
+    parent only has to fit `max(inputDelay, outputDelay)`.
+
+  15-line repro of the *second* mode (`--flatten none` vs `--flatten all`, `default: 1` delay model).
+  `updater` reports `delta=1 inputDelay=2 outputDelay=2` against a one-register loop:
+  ```
+  function updater() data: wire[32], state: wire[32] => o: wire[32] {
+      data, data => add(32) => declare h1: wire[32];
+      h1, h1 => add(32) => declare h2: wire[32];
+      h2, h2 => add(32) => declare h3: wire[32];
+      h3, state => bitwise_xor(32) => o;   // `state` is the port the parent's loop runs through
+  }
+  function test() i: wire[32] => o: wire[32] {
+      declare state: wire[32];
+      i, state => declare u: updater() => declare next_state: wire[32];
+      next_state => register(wire[32]) => state;
+      state => o;
+  }
+  ```
+  Monolithic succeeds at every period. Hierarchical is infeasible at periods 1-3 and succeeds from 4
+  = `inputDelay + outputDelay`; adding a second register to the loop moves the threshold to 2 =
+  `max(inputDelay, outputDelay)`. In the real circuit the loop's combinational depth is just the xor.
+
+  **CMS fails by the first mode, not the second.** `packet_body_processor` is the only module in the
+  whole design with a child instance on a feedback loop, and the only infeasible one. The child is
+  `count_min_update_sketch4` (ports `value` = the long hash path, not on the loop; `original` = the
+  sketch, on the loop; output `updated`), sitting on a two-node loop that holds the single
+  `current_sketch` register. Its boundary summary:
+
+  | period | delta | inputDelay | outputDelay | binding |
+  |--------|-------|-----------|------------|---------|
+  | 20     | 21    | 3         | 11         | register count (21 > 1); delays would have fit |
+  | 100    | 3     | 100       | 83         | both (3 > 1, and 183 > 100) |
+
+  As the period loosens `delta` shrinks but the delays grow, and there is no period where both modes
+  pass - which is why it is infeasible at 20, 30, 40, 60 and 100 alike. It also explains why adding
+  one extra register to the loop does nothing (tried): at period 20 you would need 21. Confirmed
+  causally by feeding `updater` from the already-present, commented-out constant `initial_sketch`
+  instead of `current_sketch`, taking the child off the loop and changing nothing else - CMS then
+  compiles at period 20 with 858 registers.
+
+  **The fix needs per-port lags; per-port delay summaries alone are not enough.** Letting each port
+  have its own lag lets the child pipeline the `value` path (delta 21) while leaving the `original`
+  path at delta 0, so the loop gains nothing - this addresses the register-count mode, which is the
+  one CMS actually hits. Per-port delays only address the delay-concatenation mode, and at period 20
+  CMS's delays already fit, so they would do nothing there on their own. Both are worth having: the
+  toy needs the delays, CMS needs the lags, and contracting to one node per port instead of one
+  `c_i`/`c_o` pair also removes the false combinational loops in the next entry.
+
+  Per-port lags generalise the interior/exterior contract without disturbing its structure: instead
+  of one scalar `delta` plus `r(i_j) = r(s_i)`, the child hands up a vector of relative port offsets
+  and the parent is constrained to reproduce them, `r_e(c_i_j) - r_e(c_i_1) = r_i(i_j) - r_i(i_1)`,
+  with one free global `t` per instance exactly as now. The composition `r(v) = r_i(v) + t` and the
+  four-case non-negativity argument carry over unchanged. The visible consequence is that a module's
+  ports end up at different pipeline depths - but monolithic retiming already produces exactly that
+  skew internally, it just has no module boundary at which to name it.
+
+  Under per-port summaries `combinationalDelay` becomes a per-(input port, output port) matrix,
+  populated only for pairs that are still combinationally connected after retiming - it is that
+  sparsity that removes the false loops below, since today's single `d_c` asserts every input is
+  combinationally coupled to every output.
+
+- **Module-boundary contraction turns legal designs into false combinational loops.** Both the
+  super-source/super-sink construction (every module's input ports collapse to one node, every
+  output port to another) and the per-child contracted graph (`c_i`/`c_o` joined by a combinational
+  `d_c` path) throw away which *port* depends on which. Any external combinational path from an
+  output port of an instance back to an input port of that same instance therefore becomes a
+  zero-weight cycle, even when the real circuit is acyclic. Minimal repro - a pure DAG that compiles
+  fine unretimed and under monolithic retiming, and dies under hierarchical retiming with
+  `IllegalArgumentException: Graph cannot contain zero-weight cycles`:
+  ```
+  function inner() a: wire[32], b: wire[32] => x: wire[32], y: wire[32] {
+      a => register(wire[32]) => x;   // registered:    a -> x
+      b, b => add(32) => y;           // combinational: b -> y
+  }
+  function test() i: wire[32] => o: wire[32] {
+      declare fb: wire[32]; declare xo: wire[32]; declare yo: wire[32];
+      i, fb => declare u: inner() => xo, yo;
+      xo, xo => add(32) => fb;        // x -> ext -> b, never a cycle in the real circuit
+      yo => o;
+  }
+  ```
+  It fires in two independent places: `HierarchicalRetimingProblem.computePossibleClockPeriods()`
+  via `flatten()` (super-node merge), and `HierarchicalMinimalRegisterSolver`'s own flat graph
+  (contraction). The analyzer's `CombinationalLoopDetector` correctly clears this design, since it
+  tracks port-to-port reachability - so only the retimer disagrees. Note the retiming is *sound*
+  here rather than wrong (a re-entrant combinational path is exactly what the contraction cannot
+  represent, so it gets rejected rather than under-constrained), but this is a completeness loss
+  the paper doesn't mention, and a "contact a TA" crash rather than a diagnostic. A real fix means
+  keeping per-port-group reachability in the summary instead of one `c_i`/`c_o` pair.
+- The retimed contracted graph's input-delay path always carries exactly one register
+  (`w_r(d_i, d_o) = 1`), even when the child really needs `k > 1` between its ports. That
+  understates `W(u, v)` for parent paths crossing the child, which only *strengthens* the
+  clock-period constraint `r(v) - r(u) >= 1 - W`, so it is sound - but it over-pipelines the parent
+  around a deeply-pipelined child. Setting the weight to `-delta + max(1, W_retimed)` would be both
+  sound and more accurate; deliberately not done as part of the boundary-tracking fix, since it
+  changes generated Verilog for reasons unrelated to that bug.
+- `HierarchicalNetlistLeisersonCircuitConverter.fromModule` hangs the super-source off *every*
+  source-less node, not just `InputNode`s - so `MinimalRegisterSolver`'s zero-register boundary
+  constraint pins literals/constants (and zero-argument child instances) to `r(s_i)` too. That is a
+  deliberate fix for a bug found in a real application, but it is a mismatch with the paper (whose
+  constraint is over input ports only) and it costs real freedom: a constant feeding a long
+  combinational chain cannot be given its own lag. Untangling it needs the boundary to stop being
+  inferred from "has no incoming edges" at the same time.
+- `MinimalRegisterSolver` treats any CP-SAT status other than `OPTIMAL` as failure, so a `FEASIBLE`
+  result (solver hit a limit before proving optimality) is discarded even though it is a perfectly
+  valid retiming, just possibly not a minimal one.
+- `HierarchicalMinimalRegisterSolver.solveOrNull` re-solves the *entire* hierarchy from scratch on
+  every `findMinimumClockPeriod` probe, and `HierarchicalRetimingProblem.computePossibleClockPeriods`
+  fully flattens every module - re-flattening a shared child once per call site, the same pattern
+  that cost `CombinationalLoopDetector` 696s on netfpga's aes processor before it was rewritten to
+  bottom-up port summaries. This is why `--retiming-clock-period min` is impractically slow on
+  anything the size of md5 under hierarchical retiming.
 - Naively calling `HierarchicalLeisersonCircuitGraph.flatten()` on an already-*retimed* graph is
   unsafe, not just "architecturally awkward" - it was originally tried for both
   `HierarchicalRetimingProblem`-generic clock-period lookups and `HierarchicalRetimer`'s stats
