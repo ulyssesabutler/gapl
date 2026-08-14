@@ -49,7 +49,12 @@ val generatedDir = layout.buildDirectory.dir("generated")
 val generateWrappers by tasks.registering {
     group = "sim-test"
     description = "Generate Kotlin simulation wrapper classes for sim-test fixtures that opt in via a test.kt harness"
-    dependsOn(":simgen:installDist")
+
+    // The simgen distribution is a real input, not just an ordering dependency. `dependsOn` alone
+    // guarantees installDist runs first but does not dirty this task when simgen changes, so a
+    // simgen edit used to leave already-generated wrappers UP-TO-DATE. A task provider resolves to
+    // that task's outputs *and* carries the dependency, so it replaces the `dependsOn` outright.
+    inputs.files(project(":simgen").tasks.named("installDist"))
 
     inputs.files(fileTree(testsRoot) { include("*/test.gapl", "*/test.kt") })
     outputs.dir(generatedDir)

@@ -299,10 +299,23 @@ fun simulateTestCase(testCase: TestCase, testProperties: TestProperties, variati
 tasks.register("generateVerilog") {
     group = "verilator-test"
     description = "Compile GAPL test sources to Verilog for each test case"
-    dependsOn(":compiler:installDist")
 
-    // Inputs/Outputs for gradle up-to-date checks
-    inputs.files(fileTree(testsRoot) { include("**/*.gapl") })
+    // Inputs/Outputs for gradle up-to-date checks.
+    //
+    // The compiler distribution is a real input, not just an ordering dependency: `dependsOn` alone
+    // guarantees installDist runs first but does not dirty this task when the compiler changes, so a
+    // compiler edit used to leave already-generated Verilog UP-TO-DATE and runSimulation would then
+    // report every variation passing against Verilog built before the change. A task provider
+    // resolves to that task's outputs *and* carries the dependency, so it replaces the `dependsOn`.
+    inputs.files(project(":compiler").tasks.named("installDist"))
+
+    // test.properties and delay.yaml drive every compiler flag compileTestCase adds (retime,
+    // flatten, retimingClockPeriod, retimingSolver, retimingMaintainsTiming) and the delay model
+    // itself, and neither is a .gapl file - a variation directory contains nothing else, since the
+    // .gapl lives one level up and is shared across variations. Tracking only **/*.gapl meant
+    // retargeting a test at a different clock period or solver did not regenerate anything. This is
+    // the same failure netfpga's generateGaplVerilog already guards against; see its comment.
+    inputs.files(fileTree(testsRoot) { include("**/*.gapl", "**/test.properties", "**/delay.yaml") })
     outputs.dir(layout.buildDirectory.dir("tests"))
 
     doLast {

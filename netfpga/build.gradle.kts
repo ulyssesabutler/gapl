@@ -226,7 +226,14 @@ tasks.register<Exec>("printEnv") {
 tasks.register("generateGaplVerilog") {
     group = "netfpga"
     description = "Compile specified *.gapl and copy wrapper.v (under src/$programName) to Verilog into build/verilog"
-    dependsOn(":compiler:installDist")
+
+    // The compiler distribution is a real input, not just an ordering dependency. `dependsOn` alone
+    // guarantees installDist runs first but does not dirty this task when the compiler changes, so a
+    // compiler edit used to leave already-generated Verilog UP-TO-DATE - the same silent-staleness
+    // failure the compilePropsFile comment below describes, just with a different missing input. A
+    // task provider resolves to that task's outputs *and* carries the dependency, so it replaces the
+    // `dependsOn` outright.
+    inputs.files(project(":compiler").tasks.named("installDist"))
 
     // Incremental inputs/outputs. compilePropsFile is the resolved-at-configuration-time
     // compile.properties for the selected -PprogramVariationName - it's what drives every

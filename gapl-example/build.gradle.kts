@@ -5,14 +5,18 @@ plugins {
 }
 
 tasks.register("generateVerilog") {
-    dependsOn(":compiler:installDist")
-
     // TODO: For now, each GAPL file is mapped to a single verilog file. This means no cross-file dependencies.
     val gaplFiles = fileTree("src") {
         include("**/*.gapl")
     }
     val verilogOutputDir = layout.buildDirectory.dir("verilog")
 
+    // The compiler distribution is a real input, not just an ordering dependency. `dependsOn` alone
+    // guarantees installDist runs first but does not dirty this task when the compiler changes, so a
+    // compiler edit used to leave already-generated Verilog UP-TO-DATE - silently validating stale
+    // output, which is worse than failing. A task provider resolves to that task's outputs *and*
+    // carries the dependency, so it replaces the `dependsOn` outright.
+    inputs.files(project(":compiler").tasks.named("installDist"))
     inputs.files(gaplFiles)
     outputs.dir(verilogOutputDir)
 
