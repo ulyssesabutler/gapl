@@ -32,6 +32,7 @@
             <option value="$PROJECT_DIR$/lsp" />
             <option value="$PROJECT_DIR$/netfpga" />
             <option value="$PROJECT_DIR$/netfpga/hw-test" />
+            <option value="$PROJECT_DIR$/netfpga/sim-kernel-test" />
             <option value="$PROJECT_DIR$/sim-test" />
             <option value="$PROJECT_DIR$/simengine" />
             <option value="$PROJECT_DIR$/simgen" />
