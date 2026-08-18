@@ -1,0 +1,716 @@
+interface word wire[32]
+interface md5_input_block word[16]
+
+interface md5_state {
+    a: word;
+    b: word;
+    c: word;
+    d: word;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR - STREAMING MD5 */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Streams an arbitrary-length message across many 256-bit (32-byte) beats, two beats to an MD5
+ * block, carrying the running (a,b,c,d) state and the total message bit-length in registers across
+ * beats (each packet gets a fresh Engine/module instance in simulation, so registers implicitly
+ * reset to zero at the start of every packet - see netfpga/sim-kernel-test's runSimKernelTest).
+ *
+ * Byte-lane convention (matches the original single-block md5/processor.gapl, verified against its
+ * passing test vectors): within a FULL (32 valid byte) beat's wire[256] `data`, byte lane j
+ * (bits[8j:8j+7]) holds the message byte that is chronologically LATER the LOWER j is - i.e. lane 0
+ * is the beat's last byte, lane 31 its first. The same holds one level up across a 512-bit block's
+ * two halves: the half at bits[256:511] holds the chronologically EARLIER 32 bytes, bits[0:255] the
+ * LATER 32 bytes. So building a block from two successive FULL beats is a direct, unshifted copy:
+ * the earlier-received beat into the block's high half, the later-received beat into the low half -
+ * which is exactly why md5_hash_block_from_input below is reused byte-for-byte from the original
+ * processor. A beat that is only partially valid (its `keep` not all-ones - see below) instead packs
+ * its N real bytes into the LOW N lanes (0..N-1, most-recent-byte-still-at-lane-0), a consequence of
+ * how the sim harness's hexToBeats packs a short hex chunk into a wire - so before such a beat can be
+ * used as a block's high half, md5_stream_realign_partial_beat shifts its real bytes up into lanes
+ * (32-N)..31 to match the full-beat convention above; a no-op whenever N=32.
+ *
+ * `keep` on a beat is only interpreted as meaningful (i.e. possibly not all-ones) on the beat that
+ * carries `last` - the standard AXI-stream convention, and the only one the sim-kernel-test harness
+ * can produce test vectors for on a multi-beat packet (its own hex-string-to-beats chunking always
+ * makes any earlier short beat the FIRST one instead, an artifact of representing test vectors as
+ * one packed hex number - see netfpga/sim-kernel-test's hexToBeats doc comment). Beats before `last`
+ * are assumed fully valid (32 bytes each); a multi-beat packet whose non-final beat is genuinely
+ * partial (impossible to construct through this harness, but a real AXI-stream sender could send one)
+ * is not handled - only the beat carrying `last` may be partial.
+ *
+ * MD5 padding needs at most one 512-bit block beyond the input stream itself: if the final (possibly
+ * partial) block being assembled has room for the 0x80 marker plus the 64-bit length (block byte
+ * count <= 55), padding finishes inside that same block. Otherwise the marker (if it still fits) is
+ * placed and the block is zero-filled, and exactly one more, fully-synthetic all-zero(+marker)+length
+ * block is produced on the next cycle - the sim-kernel-test harness keeps ticking with idle input
+ * until it sees `last` on the output, so this extra cycle costs nothing beyond a longer idle-drain.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    literal(1, 1) => vector_to_wire() => declare true_b: boolean;
+    literal(1, 0) => vector_to_wire() => declare false_b: boolean;
+
+    declare pending_half_reg: register(wire[256]);
+    declare half_filled_reg: register(boolean);
+    declare state_reg: register(md5_state);
+    declare started_reg: register(boolean);
+    declare length_bits_reg: register(wire[64]);
+    declare pending_final_reg: register(boolean);
+    declare pending_final_marker_reg: register(boolean);
+
+    /* Case flags - mutually exclusive by construction. */
+    pending_final_reg => not() => declare not_followup: boolean;
+    i.last => not() => declare not_last: boolean;
+
+    i.valid, i.last => and() => declare valid_and_last: boolean;
+    valid_and_last, not_followup => and() => declare is_terminal: boolean;
+
+    i.valid, not_last => and() => declare valid_and_not_last: boolean;
+    valid_and_not_last, not_followup => and() => declare is_normal: boolean;
+
+    half_filled_reg => not() => declare not_half_filled: boolean;
+    is_normal, not_half_filled => and() => declare is_normal_start: boolean;
+    is_normal, half_filled_reg => and() => declare is_normal_complete: boolean;
+
+    is_normal_complete, is_terminal => or() => declare nc_or_t: boolean;
+    nc_or_t, pending_final_reg => or() => declare clears_half: boolean;
+
+    /* How many real bytes the (potentially partial) final beat carries. */
+    i.keep => popcount32() => declare this_beat_valid: wire[6];
+
+    this_beat_valid => left_pad(6, 1) => declare this_beat_valid7: wire[7];
+    literal(7, 32) => declare thirty_two7: wire[7];
+    this_beat_valid7, thirty_two7 => add(7) => declare this_beat_valid_plus32: wire[7];
+    half_filled_reg, this_beat_valid_plus32, this_beat_valid7 => if_else(wire[7]) => declare block_valid_count: wire[7];
+
+    literal(7, 64) => declare sixty_four7: wire[7];
+    block_valid_count, sixty_four7 => less_than(7) => declare place_marker_terminal: boolean;
+
+    literal(7, 55) => declare fifty_five7: wire[7];
+    block_valid_count, fifty_five7 => less_than_equals(7) => declare needs_length_terminal: boolean;
+
+    declare valid_x8_9: wire[9];
+    this_beat_valid   => valid_x8_9[3:8];
+    literal(3, 0)     => valid_x8_9[0:2];
+    valid_x8_9 => left_pad(9, 55) => declare valid_x8_64: wire[64];
+    length_bits_reg, valid_x8_64 => add(64) => declare length_bits_terminal: wire[64];
+
+    /* A beat that lands at a fresh block boundary (not half_filled) is used as the block's high half,
+     * which the byte-lane convention above expects to be laid out as if it were a full 32-byte beat
+     * (first message byte at lane 31, ..., last at lane 32-N). But a genuinely partial beat's N real
+     * bytes sit at the LOW N lanes instead (lane N-1 down to lane 0 - confirmed against the sim
+     * harness's own hexToBeats: a short chunk's magnitude, packed into a 256-bit field, necessarily
+     * occupies its low-address end regardless of chunk length). Realign by shifting those N bytes up
+     * by (32-N) lanes before treating the beat as a high half - a no-op whenever N=32 (shift_amount=0),
+     * which is why this doesn't disturb any of the full-beat cases already covered above. */
+    thirty_two7, this_beat_valid7 => subtract(7) => declare shift_amount: wire[7];
+    i.data, shift_amount => md5_stream_realign_partial_beat() => declare realigned_data: wire[256];
+
+    /* Block under construction for the terminal beat: earlier-received data (pending half, if any)
+     * in the high half, this beat's own data in the low half - see the byte-lane note above. */
+    half_filled_reg, pending_half_reg, realigned_data => if_else(wire[256]) => declare high_half_terminal: wire[256];
+    half_filled_reg, i.data, literal(256, 0)        => if_else(wire[256]) => declare low_half_terminal: wire[256];
+
+    declare msg_block_terminal: wire[512];
+    high_half_terminal => msg_block_terminal[256:511];
+    low_half_terminal  => msg_block_terminal[0:255];
+
+    /* Block under construction when completing a pending half with an ordinary (non-final) beat. */
+    declare msg_block_normal: wire[512];
+    pending_half_reg => msg_block_normal[256:511];
+    i.data           => msg_block_normal[0:255];
+
+    /* Merge the three hash-invoking cases (followup > terminal > normal_complete/idle default). */
+    is_terminal, msg_block_terminal, msg_block_normal => if_else(wire[512]) => declare msg_block_t_or_n: wire[512];
+    pending_final_reg, literal(512, 0), msg_block_t_or_n => if_else(wire[512]) => declare msg_block_active: wire[512];
+
+    literal(7, 64) => declare valid_count_normal: wire[7];
+    is_terminal, block_valid_count, valid_count_normal => if_else(wire[7]) => declare valid_count_t_or_n: wire[7];
+    literal(7, 0) => declare valid_count_followup: wire[7];
+    pending_final_reg, valid_count_followup, valid_count_t_or_n => if_else(wire[7]) => declare valid_count_active: wire[7];
+
+    is_terminal, place_marker_terminal, false_b => if_else(boolean) => declare place_marker_t_or_n: boolean;
+    pending_final_reg, pending_final_marker_reg, place_marker_t_or_n => if_else(boolean) => declare place_marker_active: boolean;
+
+    is_terminal, needs_length_terminal, false_b => if_else(boolean) => declare needs_length_t_or_n: boolean;
+    pending_final_reg, true_b, needs_length_t_or_n => if_else(boolean) => declare needs_length_active: boolean;
+
+    is_terminal, length_bits_terminal, literal(64, 0) => if_else(wire[64]) => declare length_bits_t_or_n: wire[64];
+    pending_final_reg, length_bits_reg, length_bits_t_or_n => if_else(wire[64]) => declare length_bits_active: wire[64];
+
+    md5_stream_initial_state() => declare magic_initial_state: md5_state;
+    started_reg, state_reg, magic_initial_state => if_else(md5_state) => declare input_state_active: md5_state;
+
+    msg_block_active, valid_count_active, place_marker_active, needs_length_active, length_bits_active
+        => md5_stream_pad_block()
+        => declare padded_block: wire[512];
+
+    padded_block => md5_hash_block_from_input() => declare block_words: md5_input_block;
+    block_words, input_state_active => md5_hash_block() => declare digest: md5_state;
+
+    /* This cycle is final exactly when the merged case needed (and therefore got) the length field. */
+    needs_length_active => o.valid;
+    needs_length_active => o.last;
+
+    digest => md5_hash_output_from_state() => declare digest_bytes: wire[128];
+    declare formatted: wire[256];
+    digest_bytes  => formatted[128:255];
+    literal(128, 0) => formatted[0:127];
+    needs_length_active, formatted, literal(256, 0) => if_else(wire[256]) => o.data;
+
+    literal(1, 1) => vector_to_wire() => declare one_bit: wire;
+    one_bit => replicate(wire, 32) => o.keep;
+
+    /* Register updates. */
+    needs_length_terminal => not() => declare terminal_overflow_only: boolean;
+    is_terminal, terminal_overflow_only => and() => declare is_terminal_overflow: boolean;
+    is_terminal_overflow, is_normal_complete => or() => declare is_intermediate_update: boolean;
+
+    is_intermediate_update, digest, state_reg => if_else(md5_state) => declare state_next: md5_state;
+    state_next => state_reg;
+
+    is_intermediate_update, true_b, started_reg => if_else(boolean) => declare started_next: boolean;
+    started_next => started_reg;
+
+    needs_length_active, false_b, pending_final_reg => if_else(boolean) => declare pending_final_fallback: boolean;
+    is_terminal_overflow, true_b, pending_final_fallback => if_else(boolean) => declare pending_final_next: boolean;
+    pending_final_next => pending_final_reg;
+
+    place_marker_terminal => not() => declare marker_not_placed: boolean;
+    is_terminal_overflow, marker_not_placed, pending_final_marker_reg => if_else(boolean) => declare pending_final_marker_next: boolean;
+    pending_final_marker_next => pending_final_marker_reg;
+
+    clears_half, false_b, half_filled_reg => if_else(boolean) => declare half_filled_fallback: boolean;
+    is_normal_start, true_b, half_filled_fallback => if_else(boolean) => declare half_filled_next: boolean;
+    half_filled_next => half_filled_reg;
+
+    is_normal_start, i.data, pending_half_reg => if_else(wire[256]) => declare pending_half_next: wire[256];
+    pending_half_next => pending_half_reg;
+
+    /* Only bump the running length on a beat that leaves the packet unfinished (an ordinary beat, or
+     * a terminal beat that overflows into a followup block) - NOT on a beat that finishes the packet
+     * this same cycle. Engine.tick() re-settles the combinational network once more right after
+     * latching registers, with `i` still holding this same beat (the harness only advances `i` on the
+     * next loop iteration) - so if this register moved on a beat that also cleared `is_terminal`'s
+     * gating some other way, that second settle would still see `is_terminal` true and double-count
+     * this beat's bytes into an already-updated register. Gating on is_terminal_overflow specifically
+     * (rather than is_terminal) avoids that: it's the only terminal case where pending_final_reg (and
+     * therefore not_followup) doesn't itself flip and mask is_terminal back off on that second settle.
+     */
+    literal(64, 256) => declare two_five_six_64: wire[64];
+    length_bits_reg, two_five_six_64 => add(64) => declare length_bits_after_normal: wire[64];
+    is_normal, length_bits_after_normal, length_bits_reg => if_else(wire[64]) => declare length_bits_normal_or_hold: wire[64];
+    is_terminal_overflow, length_bits_terminal, length_bits_normal_or_hold => if_else(wire[64]) => declare length_bits_reg_next: wire[64];
+    length_bits_reg_next => length_bits_reg;
+}
+
+/* Byte lane j (0..31, static) of a shifted-up copy of `i`: the real byte at source lane
+ * (j - shift_amount) when that's in range [0,31], zero otherwise. shift_amount is a runtime value
+ * (32 minus however many real bytes this beat carries), so the source lane is a runtime-selected mux
+ * rather than a static slice. */
+function md5_stream_realign_lane(j: integer) i: wire[256], shift_amount: wire[7] => o: wire[8]
+{
+    literal(7, j) => declare j7: wire[7];
+    j7, shift_amount => greater_than_equals(7) => declare in_range: boolean;
+    j7, shift_amount => subtract(7) => declare src_idx7: wire[7];
+    src_idx7[0:4] => declare src_idx5: wire[5];
+
+    declare candidates: wire[8][32];
+    i[0:7] => candidates[0];
+    i[8:15] => candidates[1];
+    i[16:23] => candidates[2];
+    i[24:31] => candidates[3];
+    i[32:39] => candidates[4];
+    i[40:47] => candidates[5];
+    i[48:55] => candidates[6];
+    i[56:63] => candidates[7];
+    i[64:71] => candidates[8];
+    i[72:79] => candidates[9];
+    i[80:87] => candidates[10];
+    i[88:95] => candidates[11];
+    i[96:103] => candidates[12];
+    i[104:111] => candidates[13];
+    i[112:119] => candidates[14];
+    i[120:127] => candidates[15];
+    i[128:135] => candidates[16];
+    i[136:143] => candidates[17];
+    i[144:151] => candidates[18];
+    i[152:159] => candidates[19];
+    i[160:167] => candidates[20];
+    i[168:175] => candidates[21];
+    i[176:183] => candidates[22];
+    i[184:191] => candidates[23];
+    i[192:199] => candidates[24];
+    i[200:207] => candidates[25];
+    i[208:215] => candidates[26];
+    i[216:223] => candidates[27];
+    i[224:231] => candidates[28];
+    i[232:239] => candidates[29];
+    i[240:247] => candidates[30];
+    i[248:255] => candidates[31];
+
+    src_idx5, candidates => mux(wire[8], 32, 5) => declare selected: wire[8];
+
+    literal(8, 0) => declare zero8: wire[8];
+    in_range, selected, zero8 => if_else(wire[8]) => o;
+}
+
+function md5_stream_realign_partial_beat() i: wire[256], shift_amount: wire[7] => o: wire[256]
+{
+    i, shift_amount => md5_stream_realign_lane(0) => o[0:7];
+    i, shift_amount => md5_stream_realign_lane(1) => o[8:15];
+    i, shift_amount => md5_stream_realign_lane(2) => o[16:23];
+    i, shift_amount => md5_stream_realign_lane(3) => o[24:31];
+    i, shift_amount => md5_stream_realign_lane(4) => o[32:39];
+    i, shift_amount => md5_stream_realign_lane(5) => o[40:47];
+    i, shift_amount => md5_stream_realign_lane(6) => o[48:55];
+    i, shift_amount => md5_stream_realign_lane(7) => o[56:63];
+    i, shift_amount => md5_stream_realign_lane(8) => o[64:71];
+    i, shift_amount => md5_stream_realign_lane(9) => o[72:79];
+    i, shift_amount => md5_stream_realign_lane(10) => o[80:87];
+    i, shift_amount => md5_stream_realign_lane(11) => o[88:95];
+    i, shift_amount => md5_stream_realign_lane(12) => o[96:103];
+    i, shift_amount => md5_stream_realign_lane(13) => o[104:111];
+    i, shift_amount => md5_stream_realign_lane(14) => o[112:119];
+    i, shift_amount => md5_stream_realign_lane(15) => o[120:127];
+    i, shift_amount => md5_stream_realign_lane(16) => o[128:135];
+    i, shift_amount => md5_stream_realign_lane(17) => o[136:143];
+    i, shift_amount => md5_stream_realign_lane(18) => o[144:151];
+    i, shift_amount => md5_stream_realign_lane(19) => o[152:159];
+    i, shift_amount => md5_stream_realign_lane(20) => o[160:167];
+    i, shift_amount => md5_stream_realign_lane(21) => o[168:175];
+    i, shift_amount => md5_stream_realign_lane(22) => o[176:183];
+    i, shift_amount => md5_stream_realign_lane(23) => o[184:191];
+    i, shift_amount => md5_stream_realign_lane(24) => o[192:199];
+    i, shift_amount => md5_stream_realign_lane(25) => o[200:207];
+    i, shift_amount => md5_stream_realign_lane(26) => o[208:215];
+    i, shift_amount => md5_stream_realign_lane(27) => o[216:223];
+    i, shift_amount => md5_stream_realign_lane(28) => o[224:231];
+    i, shift_amount => md5_stream_realign_lane(29) => o[232:239];
+    i, shift_amount => md5_stream_realign_lane(30) => o[240:247];
+    i, shift_amount => md5_stream_realign_lane(31) => o[248:255];
+}
+
+function md5_stream_initial_state() null => o: md5_state
+{
+    literal(32, 1732584193) => o.a;
+    literal(32, 4023233417) => o.b;
+    literal(32, 2562383102) => o.c;
+    literal(32, 271733878)  => o.d;
+}
+
+function popcount32() i: boolean[32] => o: wire[6]
+{
+    literal(6, 0) => declare zero6: wire[6];
+    i, zero6 => combinational_vector_fold(boolean, wire[6], 32, popcount32_step) => o;
+}
+
+function popcount32_step() bit: boolean, acc: wire[6] => o: wire[6]
+{
+    bit => boolean_to_int(6) => declare bit_val: wire[6];
+    bit_val, acc => add(6) => o;
+}
+
+/* Byte position p (0 = block's chronologically first byte .. 63 = last) of a 512-bit block, using
+ * the byte-lane convention documented above packet_body_processor. */
+function md5_stream_block_byte(p: integer) block: wire[512] => o: wire[8]
+{
+    block[(504 - 8 * p):(511 - 8 * p)] => o;
+}
+
+/* Padding byte for positions 0..55: real data while p < valid_count, the 0x80 marker at
+ * p == valid_count (only if place_marker), zero otherwise. */
+function md5_stream_pad_byte_low(p: integer) block: wire[512], valid_count: wire[7], place_marker: boolean => o: wire[8]
+{
+    literal(7, p) => declare p7: wire[7];
+    block => md5_stream_block_byte(p) => declare data_byte: wire[8];
+
+    p7, valid_count => less_than(7) => declare is_data: wire;
+    p7, valid_count => equals(7) => declare is_marker_pos: wire;
+    is_marker_pos, place_marker => and() => declare is_marker: wire;
+
+    literal(8, 128) => declare marker_byte: wire[8];
+    literal(8, 0) => declare zero_byte: wire[8];
+
+    is_marker, marker_byte, zero_byte => if_else(wire[8]) => declare marker_or_zero: wire[8];
+    is_data, data_byte, marker_or_zero => if_else(wire[8]) => o;
+}
+
+/* Padding byte for positions 56..63: real data while p < valid_count, the 0x80 marker at
+ * p == valid_count (only if place_marker), one of the 64-bit little-endian length field's bytes
+ * when needs_length, zero otherwise. valid_count <= 55 whenever needs_length is true, so the marker
+ * and length-field cases never both apply to the same byte position. */
+function md5_stream_pad_byte_high(p: integer) block: wire[512], valid_count: wire[7], place_marker: boolean, needs_length: boolean, length_bits: wire[64] => o: wire[8]
+{
+    literal(7, p) => declare p7: wire[7];
+    block => md5_stream_block_byte(p) => declare data_byte: wire[8];
+
+    p7, valid_count => less_than(7) => declare is_data: wire;
+    p7, valid_count => equals(7) => declare is_marker_pos: wire;
+    is_marker_pos, place_marker => and() => declare is_marker: wire;
+
+    literal(8, 128) => declare marker_byte: wire[8];
+    literal(8, 0) => declare zero_byte: wire[8];
+
+    length_bits[(8 * (p - 56)):(8 * (p - 56) + 7)] => declare length_byte: wire[8];
+    needs_length, length_byte, zero_byte => if_else(wire[8]) => declare length_or_zero: wire[8];
+
+    is_marker, marker_byte, length_or_zero => if_else(wire[8]) => declare marker_or_length: wire[8];
+    is_data, data_byte, marker_or_length => if_else(wire[8]) => o;
+}
+
+function md5_stream_pad_block() block: wire[512], valid_count: wire[7], place_marker: boolean, needs_length: boolean, length_bits: wire[64] => o: wire[512]
+{
+    block, valid_count, place_marker => md5_stream_pad_byte_low(0) => o[504:511];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(1) => o[496:503];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(2) => o[488:495];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(3) => o[480:487];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(4) => o[472:479];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(5) => o[464:471];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(6) => o[456:463];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(7) => o[448:455];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(8) => o[440:447];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(9) => o[432:439];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(10) => o[424:431];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(11) => o[416:423];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(12) => o[408:415];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(13) => o[400:407];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(14) => o[392:399];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(15) => o[384:391];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(16) => o[376:383];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(17) => o[368:375];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(18) => o[360:367];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(19) => o[352:359];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(20) => o[344:351];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(21) => o[336:343];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(22) => o[328:335];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(23) => o[320:327];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(24) => o[312:319];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(25) => o[304:311];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(26) => o[296:303];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(27) => o[288:295];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(28) => o[280:287];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(29) => o[272:279];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(30) => o[264:271];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(31) => o[256:263];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(32) => o[248:255];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(33) => o[240:247];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(34) => o[232:239];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(35) => o[224:231];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(36) => o[216:223];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(37) => o[208:215];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(38) => o[200:207];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(39) => o[192:199];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(40) => o[184:191];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(41) => o[176:183];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(42) => o[168:175];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(43) => o[160:167];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(44) => o[152:159];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(45) => o[144:151];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(46) => o[136:143];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(47) => o[128:135];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(48) => o[120:127];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(49) => o[112:119];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(50) => o[104:111];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(51) => o[96:103];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(52) => o[88:95];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(53) => o[80:87];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(54) => o[72:79];
+    block, valid_count, place_marker => md5_stream_pad_byte_low(55) => o[64:71];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(56) => o[56:63];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(57) => o[48:55];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(58) => o[40:47];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(59) => o[32:39];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(60) => o[24:31];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(61) => o[16:23];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(62) => o[8:15];
+    block, valid_count, place_marker, needs_length, length_bits => md5_stream_pad_byte_high(63) => o[0:7];
+}
+
+function add_words() lhs: word, rhs: word => result: word
+{
+    lhs, rhs => add(32) => result;
+}
+
+function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
+{
+    i[0:31]    => reverse_endianess() => o[15];
+    i[32:63]   => reverse_endianess() => o[14];
+    i[64:95]   => reverse_endianess() => o[13];
+    i[96:127]  => reverse_endianess() => o[12];
+    i[128:159] => reverse_endianess() => o[11];
+    i[160:191] => reverse_endianess() => o[10];
+    i[192:223] => reverse_endianess() => o[9];
+    i[224:255] => reverse_endianess() => o[8];
+    i[256:287] => reverse_endianess() => o[7];
+    i[288:319] => reverse_endianess() => o[6];
+    i[320:351] => reverse_endianess() => o[5];
+    i[352:383] => reverse_endianess() => o[4];
+    i[384:415] => reverse_endianess() => o[3];
+    i[416:447] => reverse_endianess() => o[2];
+    i[448:479] => reverse_endianess() => o[1];
+    i[480:511] => reverse_endianess() => o[0];
+}
+
+function md5_hash_output_from_state() i: md5_state => o: wire[128]
+{
+    i.a => reverse_endianess() => o[96:127];
+    i.b => reverse_endianess() => o[64:95];
+    i.c => reverse_endianess() => o[32:63];
+    i.d => reverse_endianess() => o[0:31];
+}
+
+function left_rotate() i: word => o: word
+{
+    i[0:30] => o[1:31];
+    i[31] => o[0];
+}
+
+function reverse_endianess() i: word => o: word
+{
+    i[0:7]  => o[24:31];
+    i[8:15] => o[16:23];
+    i[16:23] => o[8:15];
+    i[24:31] => o[0:7];
+}
+
+function left_rotate_by(count: integer) i: word => o: word
+{
+    i => repeat(word, count, left_rotate) => o;
+}
+
+function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    i, input_state => md5_hash_block_from_iteration(0) => declare final_local_state: md5_state;
+
+    input_state.a, final_local_state.a => add_words() => output_state.a;
+    input_state.b, final_local_state.b => add_words() => output_state.b;
+    input_state.c, final_local_state.c => add_words() => output_state.c;
+    input_state.d, final_local_state.d => add_words() => output_state.d;
+}
+
+function md5_hash_block_from_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    if (iteration < 63) {
+        m, input_state => md5_iteration(iteration) => declare output_state_from_iteration: md5_state;
+        m, output_state_from_iteration => md5_hash_block_from_iteration(iteration + 1) => output_state;
+    } else {
+        m, input_state => md5_iteration(iteration) => output_state;
+    }
+}
+
+function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    declare f: word;
+    declare k_i: word;
+    declare m_g: word;
+
+    k_table(iteration) => k_i;
+
+    if (iteration <= 15) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.b, input_state.c => bitwise_and(32) => or1;
+
+        input_state.b => bitwise_not(32) => or21;
+        or21, input_state.d => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[iteration] => m_g;
+    } else if (iteration <= 31) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.d, input_state.b => bitwise_and(32) => or1;
+
+        input_state.d => bitwise_not(32) => or21;
+        or21, input_state.c => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[(5 * iteration + 1) % 16] => m_g;
+    } else if (iteration <= 47) {
+        declare xor1: word;
+
+        input_state.b, input_state.c => bitwise_xor(32) => xor1;
+
+        xor1, input_state.d => bitwise_xor(32) => f;
+
+        m[(3 * iteration + 5) % 16] => m_g;
+    } else if (iteration <= 63) {
+        declare xor2: word;
+        declare xor22: word;
+
+        input_state.d => bitwise_not(32) => xor22;
+        input_state.b, xor22 => bitwise_or(32) => xor2;
+
+        input_state.c, xor2 => bitwise_xor(32) => f;
+
+        m[(7 * iteration) % 16] => m_g;
+    }
+
+    declare f2: word;
+    declare f21: word;
+    declare f22: word;
+
+    f, input_state.a => add_words() => f21;
+    k_i, m_g => add_words() => f22;
+
+    f21, f22
+        => add_words()
+        => left_rotate_for_iteration(iteration)
+        => f2;
+
+    input_state.d => output_state.a;
+    input_state.c => output_state.d;
+    input_state.b => output_state.c;
+    input_state.b, f2 => add_words() => output_state.b;
+}
+
+function left_rotate_for_iteration(iteration: integer) i: word => o: word
+{
+    if (iteration == 0)  i => left_rotate_by(7)  => o;
+    if (iteration == 1)  i => left_rotate_by(12) => o;
+    if (iteration == 2)  i => left_rotate_by(17) => o;
+    if (iteration == 3)  i => left_rotate_by(22) => o;
+    if (iteration == 4)  i => left_rotate_by(7)  => o;
+    if (iteration == 5)  i => left_rotate_by(12) => o;
+    if (iteration == 6)  i => left_rotate_by(17) => o;
+    if (iteration == 7)  i => left_rotate_by(22) => o;
+    if (iteration == 8)  i => left_rotate_by(7)  => o;
+    if (iteration == 9)  i => left_rotate_by(12) => o;
+    if (iteration == 10) i => left_rotate_by(17) => o;
+    if (iteration == 11) i => left_rotate_by(22) => o;
+    if (iteration == 12) i => left_rotate_by(7)  => o;
+    if (iteration == 13) i => left_rotate_by(12) => o;
+    if (iteration == 14) i => left_rotate_by(17) => o;
+    if (iteration == 15) i => left_rotate_by(22) => o;
+    if (iteration == 16) i => left_rotate_by(5)  => o;
+    if (iteration == 17) i => left_rotate_by(9)  => o;
+    if (iteration == 18) i => left_rotate_by(14) => o;
+    if (iteration == 19) i => left_rotate_by(20) => o;
+    if (iteration == 20) i => left_rotate_by(5)  => o;
+    if (iteration == 21) i => left_rotate_by(9)  => o;
+    if (iteration == 22) i => left_rotate_by(14) => o;
+    if (iteration == 23) i => left_rotate_by(20) => o;
+    if (iteration == 24) i => left_rotate_by(5)  => o;
+    if (iteration == 25) i => left_rotate_by(9)  => o;
+    if (iteration == 26) i => left_rotate_by(14) => o;
+    if (iteration == 27) i => left_rotate_by(20) => o;
+    if (iteration == 28) i => left_rotate_by(5)  => o;
+    if (iteration == 29) i => left_rotate_by(9)  => o;
+    if (iteration == 30) i => left_rotate_by(14) => o;
+    if (iteration == 31) i => left_rotate_by(20) => o;
+    if (iteration == 32) i => left_rotate_by(4)  => o;
+    if (iteration == 33) i => left_rotate_by(11) => o;
+    if (iteration == 34) i => left_rotate_by(16) => o;
+    if (iteration == 35) i => left_rotate_by(23) => o;
+    if (iteration == 36) i => left_rotate_by(4)  => o;
+    if (iteration == 37) i => left_rotate_by(11) => o;
+    if (iteration == 38) i => left_rotate_by(16) => o;
+    if (iteration == 39) i => left_rotate_by(23) => o;
+    if (iteration == 40) i => left_rotate_by(4)  => o;
+    if (iteration == 41) i => left_rotate_by(11) => o;
+    if (iteration == 42) i => left_rotate_by(16) => o;
+    if (iteration == 43) i => left_rotate_by(23) => o;
+    if (iteration == 44) i => left_rotate_by(4)  => o;
+    if (iteration == 45) i => left_rotate_by(11) => o;
+    if (iteration == 46) i => left_rotate_by(16) => o;
+    if (iteration == 47) i => left_rotate_by(23) => o;
+    if (iteration == 48) i => left_rotate_by(6)  => o;
+    if (iteration == 49) i => left_rotate_by(10) => o;
+    if (iteration == 50) i => left_rotate_by(15) => o;
+    if (iteration == 51) i => left_rotate_by(21) => o;
+    if (iteration == 52) i => left_rotate_by(6)  => o;
+    if (iteration == 53) i => left_rotate_by(10) => o;
+    if (iteration == 54) i => left_rotate_by(15) => o;
+    if (iteration == 55) i => left_rotate_by(21) => o;
+    if (iteration == 56) i => left_rotate_by(6)  => o;
+    if (iteration == 57) i => left_rotate_by(10) => o;
+    if (iteration == 58) i => left_rotate_by(15) => o;
+    if (iteration == 59) i => left_rotate_by(21) => o;
+    if (iteration == 60) i => left_rotate_by(6)  => o;
+    if (iteration == 61) i => left_rotate_by(10) => o;
+    if (iteration == 62) i => left_rotate_by(15) => o;
+    if (iteration == 63) i => left_rotate_by(21) => o;
+}
+
+function k_table(iteration: integer) null => o: word
+{
+    if (iteration == 0)  literal(32, 3614090360) => o;
+    if (iteration == 1)  literal(32, 3905402710) => o;
+    if (iteration == 2)  literal(32, 606105819)  => o;
+    if (iteration == 3)  literal(32, 3250441966) => o;
+    if (iteration == 4)  literal(32, 4118548399) => o;
+    if (iteration == 5)  literal(32, 1200080426) => o;
+    if (iteration == 6)  literal(32, 2821735955) => o;
+    if (iteration == 7)  literal(32, 4249261313) => o;
+    if (iteration == 8)  literal(32, 1770035416) => o;
+    if (iteration == 9)  literal(32, 2336552879) => o;
+    if (iteration == 10) literal(32, 4294925233) => o;
+    if (iteration == 11) literal(32, 2304563134) => o;
+    if (iteration == 12) literal(32, 1804603682) => o;
+    if (iteration == 13) literal(32, 4254626195) => o;
+    if (iteration == 14) literal(32, 2792965006) => o;
+    if (iteration == 15) literal(32, 1236535329) => o;
+    if (iteration == 16) literal(32, 4129170786) => o;
+    if (iteration == 17) literal(32, 3225465664) => o;
+    if (iteration == 18) literal(32, 643717713)  => o;
+    if (iteration == 19) literal(32, 3921069994) => o;
+    if (iteration == 20) literal(32, 3593408605) => o;
+    if (iteration == 21) literal(32, 38016083)   => o;
+    if (iteration == 22) literal(32, 3634488961) => o;
+    if (iteration == 23) literal(32, 3889429448) => o;
+    if (iteration == 24) literal(32, 568446438)  => o;
+    if (iteration == 25) literal(32, 3275163606) => o;
+    if (iteration == 26) literal(32, 4107603335) => o;
+    if (iteration == 27) literal(32, 1163531501) => o;
+    if (iteration == 28) literal(32, 2850285829) => o;
+    if (iteration == 29) literal(32, 4243563512) => o;
+    if (iteration == 30) literal(32, 1735328473) => o;
+    if (iteration == 31) literal(32, 2368359562) => o;
+    if (iteration == 32) literal(32, 4294588738) => o;
+    if (iteration == 33) literal(32, 2272392833) => o;
+    if (iteration == 34) literal(32, 1839030562) => o;
+    if (iteration == 35) literal(32, 4259657740) => o;
+    if (iteration == 36) literal(32, 2763975236) => o;
+    if (iteration == 37) literal(32, 1272893353) => o;
+    if (iteration == 38) literal(32, 4139469664) => o;
+    if (iteration == 39) literal(32, 3200236656) => o;
+    if (iteration == 40) literal(32, 681279174)  => o;
+    if (iteration == 41) literal(32, 3936430074) => o;
+    if (iteration == 42) literal(32, 3572445317) => o;
+    if (iteration == 43) literal(32, 76029189)   => o;
+    if (iteration == 44) literal(32, 3654602809) => o;
+    if (iteration == 45) literal(32, 3873151461) => o;
+    if (iteration == 46) literal(32, 530742520)  => o;
+    if (iteration == 47) literal(32, 3299628645) => o;
+    if (iteration == 48) literal(32, 4096336452) => o;
+    if (iteration == 49) literal(32, 1126891415) => o;
+    if (iteration == 50) literal(32, 2878612391) => o;
+    if (iteration == 51) literal(32, 4237533241) => o;
+    if (iteration == 52) literal(32, 1700485571) => o;
+    if (iteration == 53) literal(32, 2399980690) => o;
+    if (iteration == 54) literal(32, 4293915773) => o;
+    if (iteration == 55) literal(32, 2240044497) => o;
+    if (iteration == 56) literal(32, 1873313359) => o;
+    if (iteration == 57) literal(32, 4264355552) => o;
+    if (iteration == 58) literal(32, 2734768916) => o;
+    if (iteration == 59) literal(32, 1309151649) => o;
+    if (iteration == 60) literal(32, 4149444226) => o;
+    if (iteration == 61) literal(32, 3174756917) => o;
+    if (iteration == 62) literal(32, 718787259)  => o;
+    if (iteration == 63) literal(32, 3951481745) => o;
+}
