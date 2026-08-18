@@ -1,0 +1,493 @@
+interface word wire[32]
+interface md5_input_block word[16]
+
+interface md5_state {
+    a: word;
+    b: word;
+    c: word;
+    d: word;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR - STREAMING MD5, WHOLE-CHUNK ONLY */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Hashes a message streamed across any number of beats, on the simplifying assumption that EVERY
+ * beat carries a full 32 bytes - i.e. the message length is always a multiple of 256 bits and `keep`
+ * is ignored entirely (assumed all-ones, never read). The sibling `md5-stream` application drops that
+ * assumption and handles a partially-valid final beat; this one exists because that generality is
+ * most of its hardware and nearly all of its complexity, and a 256-bit-aligned stream doesn't need
+ * any of it. Concretely, dropping partial beats removes:
+ *
+ *   - the popcount over `keep` (the valid-byte count is the constant 32),
+ *   - the runtime byte-lane realignment of a short beat (32 lanes x a 32-way mux each),
+ *   - the whole byte-granular padding datapath: 64 per-byte generic functions, each selecting
+ *     between message data / the 0x80 marker / a length byte / zero against a runtime byte index.
+ *
+ * What's left is that padding only ever takes one of three fixed shapes, chosen by which case this
+ * cycle is in, with the 64-bit length as the only dynamic content - see the three `block_*` layouts
+ * in packet_body_processor below.
+ *
+ * Byte-lane convention (inherited from the original single-block md5/processor.gapl, and the reason
+ * md5_hash_block_from_input is reused from it byte-for-byte): within a beat's wire[256] `data`, byte
+ * lane j (bits[8j:8j+7]) holds the message byte that is chronologically LATER the LOWER j is - lane 0
+ * is the beat's last byte, lane 31 its first. The same holds across a 512-bit block's two halves:
+ * bits[256:511] holds the chronologically EARLIER 32 bytes, bits[0:255] the LATER 32. So a block byte
+ * position p (0 = the block's first byte, 63 = its last) lives at block bits [504-8p : 511-8p], and
+ * assembling a block from two successive beats is a direct, unshifted copy.
+ *
+ * State is carried across beats in registers, and each packet gets a fresh Engine (hence all-zero
+ * registers) in simulation - see netfpga/sim-kernel-test's runSimKernelTest.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    literal(1, 1) => vector_to_wire() => declare true_b: boolean;
+    literal(1, 0) => vector_to_wire() => declare false_b: boolean;
+
+    declare pending_half_reg:  register(wire[256]);
+    declare half_filled_reg:   register(boolean);
+    declare state_reg:         register(md5_state);
+    declare started_reg:       register(boolean);
+    declare length_bits_reg:   register(wire[64]);
+    declare pending_final_reg: register(boolean);
+
+    /*
+     * Case decode. `pending_final_reg` means "this cycle is the synthetic pad-only block owed from
+     * the previous one"; it masks every input-driven case off, so the four cases below plus the
+     * followup are mutually exclusive, and an idle cycle (no valid input, nothing owed) is none of
+     * them.
+     */
+    pending_final_reg => not() => declare not_followup: boolean;
+    i.last          => not() => declare not_last: boolean;
+    half_filled_reg => not() => declare not_half_filled: boolean;
+
+    i.valid, i.last => and() => declare valid_and_last: boolean;
+    valid_and_last, not_followup => and() => declare is_terminal: boolean;
+
+    i.valid, not_last => and() => declare valid_and_not_last: boolean;
+    valid_and_not_last, not_followup => and() => declare is_normal: boolean;
+
+    /* A beat lands either at a fresh block boundary or as the second half of a pending pair. */
+    is_normal,   not_half_filled => and() => declare is_normal_start: boolean;
+    is_normal,   half_filled_reg => and() => declare is_normal_complete: boolean;
+    is_terminal, not_half_filled => and() => declare is_terminal_short: boolean;
+    is_terminal, half_filled_reg => and() => declare is_terminal_full: boolean;
+
+    /* Running message length. Every beat contributes exactly 256 bits. */
+    literal(64, 256) => declare beat_bits: wire[64];
+    length_bits_reg, beat_bits => add(64) => declare length_after_beat: wire[64];
+    pending_final_reg, length_bits_reg, length_after_beat => if_else(wire[64]) => declare length_active: wire[64];
+
+    /*
+     * The three block layouts.
+     *
+     * block_full - a complete 64 bytes of message, no padding at all. Used both when an ordinary
+     *   beat completes a pending pair and when the FINAL beat does: a full block leaves no room for
+     *   even the marker, so that case owes a followup block (pending_final_reg) next cycle.
+     * block_terminal_short - the final beat sits alone at a block boundary, so the block holds 32
+     *   message bytes and padding finishes right here: marker at position 32, zeros, length at 56..63.
+     * block_followup - the synthetic pad-only block: marker at position 0, zeros, length at 56..63.
+     *
+     * These are the only shapes reachable, precisely because a beat is always 32 bytes: the block's
+     * message byte count is only ever 32 or 64, so "does the marker fit" and "does the length fit"
+     * both collapse from runtime byte-index comparisons into the single flag half_filled_reg.
+     */
+    declare block_full: wire[512];
+    pending_half_reg => block_full[256:511];
+    i.data           => block_full[0:255];
+
+    declare block_terminal_short: wire[512];
+    i.data => block_terminal_short[256:511];
+    length_active => md5_stream_padding_tail() => block_terminal_short[0:255];
+
+    declare block_followup: wire[512];
+    literal(8, 128) => block_followup[504:511];
+    literal(440, 0) => block_followup[64:503];
+    length_active => md5_stream_length_field() => block_followup[0:63];
+
+    is_terminal_short, block_terminal_short, block_full => if_else(wire[512]) => declare block_short_or_full: wire[512];
+    pending_final_reg, block_followup, block_short_or_full => if_else(wire[512]) => declare block_active: wire[512];
+
+    /* The compression function's incoming state: the MD5 magic constants until the first block has
+     * been absorbed, the running state thereafter. */
+    md5_stream_initial_state() => declare magic_initial_state: md5_state;
+    started_reg, state_reg, magic_initial_state => if_else(md5_state) => declare input_state: md5_state;
+
+    block_active => md5_hash_block_from_input() => declare block_words: md5_input_block;
+    block_words, input_state => md5_hash_block() => declare digest: md5_state;
+
+    /* The result is final exactly when this cycle's block carried the length field. */
+    is_terminal_short, pending_final_reg => or() => declare emits_result: boolean;
+
+    emits_result => o.valid;
+    emits_result => o.last;
+
+    digest => md5_hash_output_from_state() => declare digest_bytes: wire[128];
+    declare formatted: wire[256];
+    digest_bytes    => formatted[128:255];
+    literal(128, 0) => formatted[0:127];
+    emits_result, formatted, literal(256, 0) => if_else(wire[256]) => o.data;
+
+    literal(1, 1) => vector_to_wire() => declare one_bit: wire;
+    one_bit => replicate(wire, 32) => o.keep;
+
+    /*
+     * Register updates.
+     *
+     * Invariant worth preserving: a cycle that emits the result must leave EVERY register alone.
+     * Engine.tick() settles, latches, then settles again with the same beat still applied to `i`, so
+     * a register that moved on such a cycle would be re-read against that same beat on the second
+     * settle - which is how an earlier version of md5-stream double-counted the final beat's length.
+     * Both cases that emit (is_terminal_short, and the followup) are excluded from every guard below:
+     * is_terminal_short by absorbs_block/advances_length, the followup by not_followup.
+     */
+    is_normal_complete, is_terminal_full => or() => declare absorbs_block: boolean;
+
+    absorbs_block, digest, state_reg => if_else(md5_state) => declare state_next: md5_state;
+    state_next => state_reg;
+
+    absorbs_block, true_b, started_reg => if_else(boolean) => declare started_next: boolean;
+    started_next => started_reg;
+
+    /* Stash the first beat of a pair; release the slot once the pair has been consumed. */
+    is_normal_start, i.data, pending_half_reg => if_else(wire[256]) => declare pending_half_next: wire[256];
+    pending_half_next => pending_half_reg;
+
+    absorbs_block,   false_b, half_filled_reg  => if_else(boolean) => declare half_filled_cleared: boolean;
+    is_normal_start, true_b,  half_filled_cleared => if_else(boolean) => declare half_filled_next: boolean;
+    half_filled_next => half_filled_reg;
+
+    /* A followup block is owed exactly when the final beat filled a block completely. This
+     * self-clears: is_terminal_full already carries not_followup, so it is false during the followup
+     * cycle itself. */
+    is_terminal_full => pending_final_reg;
+
+    /* Advance the length only on a beat that leaves the packet unfinished - see the invariant above.
+     * is_terminal_full does advance, because the followup block reads the register back. */
+    is_terminal_full, is_normal => or() => declare advances_length: boolean;
+    advances_length, length_after_beat, length_bits_reg => if_else(wire[64]) => declare length_next: wire[64];
+    length_next => length_bits_reg;
+}
+
+function md5_stream_initial_state() null => o: md5_state
+{
+    literal(32, 1732584193) => o.a;
+    literal(32, 4023233417) => o.b;
+    literal(32, 2562383102) => o.c;
+    literal(32, 271733878)  => o.d;
+}
+
+/*
+ * The 64-bit little-endian message-length field as it sits in a block's last 8 bytes (positions
+ * 56..63, i.e. block bits [0:63]). Position 56+k holds length byte k, and position p occupies block
+ * bits [504-8p : 511-8p], so laying the field out is a byte-order reversal of length_bits.
+ */
+function md5_stream_length_field() length_bits: wire[64] => o: wire[64]
+{
+    length_bits[0:7]   => o[56:63];
+    length_bits[8:15]  => o[48:55];
+    length_bits[16:23] => o[40:47];
+    length_bits[24:31] => o[32:39];
+    length_bits[32:39] => o[24:31];
+    length_bits[40:47] => o[16:23];
+    length_bits[48:55] => o[8:15];
+    length_bits[56:63] => o[0:7];
+}
+
+/*
+ * The low half (block byte positions 32..63) of a block holding exactly 32 message bytes: the 0x80
+ * marker at position 32, zeros through position 55, then the length field. Entirely static apart
+ * from the length - which is the whole point of assuming whole 32-byte chunks.
+ */
+function md5_stream_padding_tail() length_bits: wire[64] => o: wire[256]
+{
+    literal(8, 128) => o[248:255];
+    literal(184, 0) => o[64:247];
+    length_bits => md5_stream_length_field() => o[0:63];
+}
+
+function add_words() lhs: word, rhs: word => result: word
+{
+    lhs, rhs => add(32) => result;
+}
+
+function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
+{
+    i[0:31]    => reverse_endianess() => o[15];
+    i[32:63]   => reverse_endianess() => o[14];
+    i[64:95]   => reverse_endianess() => o[13];
+    i[96:127]  => reverse_endianess() => o[12];
+    i[128:159] => reverse_endianess() => o[11];
+    i[160:191] => reverse_endianess() => o[10];
+    i[192:223] => reverse_endianess() => o[9];
+    i[224:255] => reverse_endianess() => o[8];
+    i[256:287] => reverse_endianess() => o[7];
+    i[288:319] => reverse_endianess() => o[6];
+    i[320:351] => reverse_endianess() => o[5];
+    i[352:383] => reverse_endianess() => o[4];
+    i[384:415] => reverse_endianess() => o[3];
+    i[416:447] => reverse_endianess() => o[2];
+    i[448:479] => reverse_endianess() => o[1];
+    i[480:511] => reverse_endianess() => o[0];
+}
+
+function md5_hash_output_from_state() i: md5_state => o: wire[128]
+{
+    i.a => reverse_endianess() => o[96:127];
+    i.b => reverse_endianess() => o[64:95];
+    i.c => reverse_endianess() => o[32:63];
+    i.d => reverse_endianess() => o[0:31];
+}
+
+function left_rotate() i: word => o: word
+{
+    i[0:30] => o[1:31];
+    i[31] => o[0];
+}
+
+function reverse_endianess() i: word => o: word
+{
+    i[0:7]  => o[24:31];
+    i[8:15] => o[16:23];
+    i[16:23] => o[8:15];
+    i[24:31] => o[0:7];
+}
+
+function left_rotate_by(count: integer) i: word => o: word
+{
+    i => repeat(word, count, left_rotate) => o;
+}
+
+function md5_hash_block() i: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    i, input_state => md5_hash_block_from_iteration(0) => declare final_local_state: md5_state;
+
+    input_state.a, final_local_state.a => add_words() => output_state.a;
+    input_state.b, final_local_state.b => add_words() => output_state.b;
+    input_state.c, final_local_state.c => add_words() => output_state.c;
+    input_state.d, final_local_state.d => add_words() => output_state.d;
+}
+
+function md5_hash_block_from_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    if (iteration < 63) {
+        m, input_state => md5_iteration(iteration) => declare output_state_from_iteration: md5_state;
+        m, output_state_from_iteration => md5_hash_block_from_iteration(iteration + 1) => output_state;
+    } else {
+        m, input_state => md5_iteration(iteration) => output_state;
+    }
+}
+
+function md5_iteration(iteration: integer) m: md5_input_block, input_state: md5_state => output_state: md5_state
+{
+    declare f: word;
+    declare k_i: word;
+    declare m_g: word;
+
+    k_table(iteration) => k_i;
+
+    if (iteration <= 15) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.b, input_state.c => bitwise_and(32) => or1;
+
+        input_state.b => bitwise_not(32) => or21;
+        or21, input_state.d => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[iteration] => m_g;
+    } else if (iteration <= 31) {
+        declare or1: word;
+        declare or2: word;
+        declare or21: word;
+
+        input_state.d, input_state.b => bitwise_and(32) => or1;
+
+        input_state.d => bitwise_not(32) => or21;
+        or21, input_state.c => bitwise_and(32) => or2;
+
+        or1, or2 => bitwise_or(32) => f;
+
+        m[(5 * iteration + 1) % 16] => m_g;
+    } else if (iteration <= 47) {
+        declare xor1: word;
+
+        input_state.b, input_state.c => bitwise_xor(32) => xor1;
+
+        xor1, input_state.d => bitwise_xor(32) => f;
+
+        m[(3 * iteration + 5) % 16] => m_g;
+    } else if (iteration <= 63) {
+        declare xor2: word;
+        declare xor22: word;
+
+        input_state.d => bitwise_not(32) => xor22;
+        input_state.b, xor22 => bitwise_or(32) => xor2;
+
+        input_state.c, xor2 => bitwise_xor(32) => f;
+
+        m[(7 * iteration) % 16] => m_g;
+    }
+
+    declare f2: word;
+    declare f21: word;
+    declare f22: word;
+
+    f, input_state.a => add_words() => f21;
+    k_i, m_g => add_words() => f22;
+
+    f21, f22
+        => add_words()
+        => left_rotate_for_iteration(iteration)
+        => f2;
+
+    input_state.d => output_state.a;
+    input_state.c => output_state.d;
+    input_state.b => output_state.c;
+    input_state.b, f2 => add_words() => output_state.b;
+}
+
+function left_rotate_for_iteration(iteration: integer) i: word => o: word
+{
+    if (iteration == 0)  i => left_rotate_by(7)  => o;
+    if (iteration == 1)  i => left_rotate_by(12) => o;
+    if (iteration == 2)  i => left_rotate_by(17) => o;
+    if (iteration == 3)  i => left_rotate_by(22) => o;
+    if (iteration == 4)  i => left_rotate_by(7)  => o;
+    if (iteration == 5)  i => left_rotate_by(12) => o;
+    if (iteration == 6)  i => left_rotate_by(17) => o;
+    if (iteration == 7)  i => left_rotate_by(22) => o;
+    if (iteration == 8)  i => left_rotate_by(7)  => o;
+    if (iteration == 9)  i => left_rotate_by(12) => o;
+    if (iteration == 10) i => left_rotate_by(17) => o;
+    if (iteration == 11) i => left_rotate_by(22) => o;
+    if (iteration == 12) i => left_rotate_by(7)  => o;
+    if (iteration == 13) i => left_rotate_by(12) => o;
+    if (iteration == 14) i => left_rotate_by(17) => o;
+    if (iteration == 15) i => left_rotate_by(22) => o;
+    if (iteration == 16) i => left_rotate_by(5)  => o;
+    if (iteration == 17) i => left_rotate_by(9)  => o;
+    if (iteration == 18) i => left_rotate_by(14) => o;
+    if (iteration == 19) i => left_rotate_by(20) => o;
+    if (iteration == 20) i => left_rotate_by(5)  => o;
+    if (iteration == 21) i => left_rotate_by(9)  => o;
+    if (iteration == 22) i => left_rotate_by(14) => o;
+    if (iteration == 23) i => left_rotate_by(20) => o;
+    if (iteration == 24) i => left_rotate_by(5)  => o;
+    if (iteration == 25) i => left_rotate_by(9)  => o;
+    if (iteration == 26) i => left_rotate_by(14) => o;
+    if (iteration == 27) i => left_rotate_by(20) => o;
+    if (iteration == 28) i => left_rotate_by(5)  => o;
+    if (iteration == 29) i => left_rotate_by(9)  => o;
+    if (iteration == 30) i => left_rotate_by(14) => o;
+    if (iteration == 31) i => left_rotate_by(20) => o;
+    if (iteration == 32) i => left_rotate_by(4)  => o;
+    if (iteration == 33) i => left_rotate_by(11) => o;
+    if (iteration == 34) i => left_rotate_by(16) => o;
+    if (iteration == 35) i => left_rotate_by(23) => o;
+    if (iteration == 36) i => left_rotate_by(4)  => o;
+    if (iteration == 37) i => left_rotate_by(11) => o;
+    if (iteration == 38) i => left_rotate_by(16) => o;
+    if (iteration == 39) i => left_rotate_by(23) => o;
+    if (iteration == 40) i => left_rotate_by(4)  => o;
+    if (iteration == 41) i => left_rotate_by(11) => o;
+    if (iteration == 42) i => left_rotate_by(16) => o;
+    if (iteration == 43) i => left_rotate_by(23) => o;
+    if (iteration == 44) i => left_rotate_by(4)  => o;
+    if (iteration == 45) i => left_rotate_by(11) => o;
+    if (iteration == 46) i => left_rotate_by(16) => o;
+    if (iteration == 47) i => left_rotate_by(23) => o;
+    if (iteration == 48) i => left_rotate_by(6)  => o;
+    if (iteration == 49) i => left_rotate_by(10) => o;
+    if (iteration == 50) i => left_rotate_by(15) => o;
+    if (iteration == 51) i => left_rotate_by(21) => o;
+    if (iteration == 52) i => left_rotate_by(6)  => o;
+    if (iteration == 53) i => left_rotate_by(10) => o;
+    if (iteration == 54) i => left_rotate_by(15) => o;
+    if (iteration == 55) i => left_rotate_by(21) => o;
+    if (iteration == 56) i => left_rotate_by(6)  => o;
+    if (iteration == 57) i => left_rotate_by(10) => o;
+    if (iteration == 58) i => left_rotate_by(15) => o;
+    if (iteration == 59) i => left_rotate_by(21) => o;
+    if (iteration == 60) i => left_rotate_by(6)  => o;
+    if (iteration == 61) i => left_rotate_by(10) => o;
+    if (iteration == 62) i => left_rotate_by(15) => o;
+    if (iteration == 63) i => left_rotate_by(21) => o;
+}
+
+function k_table(iteration: integer) null => o: word
+{
+    if (iteration == 0)  literal(32, 3614090360) => o;
+    if (iteration == 1)  literal(32, 3905402710) => o;
+    if (iteration == 2)  literal(32, 606105819)  => o;
+    if (iteration == 3)  literal(32, 3250441966) => o;
+    if (iteration == 4)  literal(32, 4118548399) => o;
+    if (iteration == 5)  literal(32, 1200080426) => o;
+    if (iteration == 6)  literal(32, 2821735955) => o;
+    if (iteration == 7)  literal(32, 4249261313) => o;
+    if (iteration == 8)  literal(32, 1770035416) => o;
+    if (iteration == 9)  literal(32, 2336552879) => o;
+    if (iteration == 10) literal(32, 4294925233) => o;
+    if (iteration == 11) literal(32, 2304563134) => o;
+    if (iteration == 12) literal(32, 1804603682) => o;
+    if (iteration == 13) literal(32, 4254626195) => o;
+    if (iteration == 14) literal(32, 2792965006) => o;
+    if (iteration == 15) literal(32, 1236535329) => o;
+    if (iteration == 16) literal(32, 4129170786) => o;
+    if (iteration == 17) literal(32, 3225465664) => o;
+    if (iteration == 18) literal(32, 643717713)  => o;
+    if (iteration == 19) literal(32, 3921069994) => o;
+    if (iteration == 20) literal(32, 3593408605) => o;
+    if (iteration == 21) literal(32, 38016083)   => o;
+    if (iteration == 22) literal(32, 3634488961) => o;
+    if (iteration == 23) literal(32, 3889429448) => o;
+    if (iteration == 24) literal(32, 568446438)  => o;
+    if (iteration == 25) literal(32, 3275163606) => o;
+    if (iteration == 26) literal(32, 4107603335) => o;
+    if (iteration == 27) literal(32, 1163531501) => o;
+    if (iteration == 28) literal(32, 2850285829) => o;
+    if (iteration == 29) literal(32, 4243563512) => o;
+    if (iteration == 30) literal(32, 1735328473) => o;
+    if (iteration == 31) literal(32, 2368359562) => o;
+    if (iteration == 32) literal(32, 4294588738) => o;
+    if (iteration == 33) literal(32, 2272392833) => o;
+    if (iteration == 34) literal(32, 1839030562) => o;
+    if (iteration == 35) literal(32, 4259657740) => o;
+    if (iteration == 36) literal(32, 2763975236) => o;
+    if (iteration == 37) literal(32, 1272893353) => o;
+    if (iteration == 38) literal(32, 4139469664) => o;
+    if (iteration == 39) literal(32, 3200236656) => o;
+    if (iteration == 40) literal(32, 681279174)  => o;
+    if (iteration == 41) literal(32, 3936430074) => o;
+    if (iteration == 42) literal(32, 3572445317) => o;
+    if (iteration == 43) literal(32, 76029189)   => o;
+    if (iteration == 44) literal(32, 3654602809) => o;
+    if (iteration == 45) literal(32, 3873151461) => o;
+    if (iteration == 46) literal(32, 530742520)  => o;
+    if (iteration == 47) literal(32, 3299628645) => o;
+    if (iteration == 48) literal(32, 4096336452) => o;
+    if (iteration == 49) literal(32, 1126891415) => o;
+    if (iteration == 50) literal(32, 2878612391) => o;
+    if (iteration == 51) literal(32, 4237533241) => o;
+    if (iteration == 52) literal(32, 1700485571) => o;
+    if (iteration == 53) literal(32, 2399980690) => o;
+    if (iteration == 54) literal(32, 4293915773) => o;
+    if (iteration == 55) literal(32, 2240044497) => o;
+    if (iteration == 56) literal(32, 1873313359) => o;
+    if (iteration == 57) literal(32, 4264355552) => o;
+    if (iteration == 58) literal(32, 2734768916) => o;
+    if (iteration == 59) literal(32, 1309151649) => o;
+    if (iteration == 60) literal(32, 4149444226) => o;
+    if (iteration == 61) literal(32, 3174756917) => o;
+    if (iteration == 62) literal(32, 718787259)  => o;
+    if (iteration == 63) literal(32, 3951481745) => o;
+}
