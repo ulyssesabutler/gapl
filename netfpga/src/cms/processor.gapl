@@ -76,18 +76,6 @@ interface sketch(
 
 interface sketch4(hash_function_depth: integer) sketch(4, hash_function_depth)
 
-function count_min_left_pad(
-    original: integer,
-    padding: integer,
-) i: wire[original] => o: wire[original + padding] {
-    i => o[0:original - 1];
-    literal(padding, 0) => o[original:original + padding - 1];
-}
-
-function count_min_boolean_to_int(size: integer) i: wire => o: wire[size] {
-    i => wire_to_vector() => count_min_left_pad(1, size - 1) => o;
-}
-
 function count_min_increment_sketch_column(
     depth: integer,
 ) index: sketch_column_index, original: sketch_column(depth) => updated: sketch_column(depth) {
@@ -104,7 +92,7 @@ function count_min_increment_sketch_column(
             depth,
             unpair(sketch_column_index, sketch_column_index, boolean, equals(4)),
         )
-        => vector_map(boolean, count, depth, count_min_boolean_to_int(4))
+        => vector_map(boolean, count, depth, boolean_to_int(4))
         => declare increment_vector: sketch_column(depth);
 
     // Now, let's add the increment vector to the input column
