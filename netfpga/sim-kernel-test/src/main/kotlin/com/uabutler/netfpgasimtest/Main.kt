@@ -142,10 +142,16 @@ private fun simulatePacket(
             engine.writeInputPort("i", idleInput())
         }
 
+        // Read this cycle's output via settle() *before* tick()'s edge, not after: tick() latches
+        // registers for next cycle, and a combinational output computed from a register (e.g. a
+        // membership check against a filter state also being updated by this same beat) must see
+        // that register's value as of the start of this cycle, not the value it's about to latch to.
+        engine.settle()
+        val outBeat = readOutputBeat(engine)
+
         tick()
         cycle++
 
-        val outBeat = readOutputBeat(engine)
         if (outBeat != null) {
             println(
                 "Packet $packetIndex Output beat ${outputs.size}:\n" +
