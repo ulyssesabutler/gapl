@@ -128,7 +128,7 @@ if {[get_ips -quiet clk_wiz_ip] eq ""} {
     # simulation's clk_wiz_ip can't silently drift out of sync with the real synthesized one - this
     # used to be a separate hand-written -dict literal, stuck at whatever period someone last typed
     # here by hand.
-    source ./tcl_generated/clk_wiz_config.tcl
+    source $::env(NF_DESIGN_DIR)/hw/tcl_generated/clk_wiz_config.tcl
     set_property generate_synth_checkpoint false [get_files clk_wiz_ip.xci]
     reset_target all [get_ips clk_wiz_ip]
     generate_target all [get_ips clk_wiz_ip]
