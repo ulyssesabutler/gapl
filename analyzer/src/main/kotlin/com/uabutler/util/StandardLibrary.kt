@@ -21,6 +21,11 @@ enum class StandardLibraryFunctions(val identifier: String) {
     VECTOR_FLATTEN("vector_flatten"),
     STREAM_ANY("stream_any"),
     IF_ELSE("if_else"),
+    LITERAL_BIT("literal_bit"),
+    SINGLE_SHIFT_RIGHT("single_shift_right"),
+    SINGLE_SHIFT_LEFT("single_shift_left"),
+    CONSTANT_SHIFT_RIGHT("constant_shift_right"),
+    CONSTANT_SHIFT_LEFT("constant_shift_left"),
     ;
 }
 
@@ -236,4 +241,26 @@ function ${StandardLibraryFunctions.IF_ELSE.identifier}(T: interface) condition:
     selector, options => mux(T, 2, 1) => o;
 }
 
+function ${StandardLibraryFunctions.LITERAL_BIT.identifier}(value: integer) null => o: wire {
+    literal(1, value) => declare vector: wire[1];
+    vector[0] => o;
+}
+
+function ${StandardLibraryFunctions.SINGLE_SHIFT_RIGHT.identifier}(size: integer) i: wire[size] => o: wire[size] {
+    i[1:size - 1] => o[0:size - 2];
+    ${StandardLibraryFunctions.LITERAL_BIT.identifier}(0) => o[size - 1];
+}
+
+function ${StandardLibraryFunctions.SINGLE_SHIFT_LEFT.identifier}(size: integer) i: wire[size] => o: wire[size] {
+    i[0:size - 2] => o[1:size - 1];
+    ${StandardLibraryFunctions.LITERAL_BIT.identifier}(0) => o[0];
+}
+
+function ${StandardLibraryFunctions.CONSTANT_SHIFT_RIGHT.identifier}(size: integer, shift_amount: integer) i: wire[size] => o: wire[size] {
+    i => ${StandardLibraryFunctions.REPEAT.identifier}(wire[size], shift_amount, ${StandardLibraryFunctions.SINGLE_SHIFT_RIGHT.identifier}(size)) => o;
+}
+
+function ${StandardLibraryFunctions.CONSTANT_SHIFT_LEFT.identifier}(size: integer, shift_amount: integer) i: wire[size] => o: wire[size] {
+    i => ${StandardLibraryFunctions.REPEAT.identifier}(wire[size], shift_amount, ${StandardLibraryFunctions.SINGLE_SHIFT_LEFT.identifier}(size)) => o;
+}
 """
