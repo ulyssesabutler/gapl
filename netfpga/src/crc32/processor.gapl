@@ -1,0 +1,53 @@
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data  => crc32_256() => o.data;
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* CRC32 BODY */
+
+function crc32_256() i: wire[256] => o: wire[256] {
+    i => crc32_256_core() => bitwise_not(32) => left_pad(32, 224) => o;
+}
+
+function crc32_256_core() i: wire[256] => o: wire[32] {
+    i => vector_chunk(wire, 8, 32)
+        => reverse(wire[8], 32)
+        => declare i_bytes: wire[8][32];
+
+    literal(32, 4294967295) => declare crc_init: wire[32];
+    i_bytes, crc_init
+        => combinational_vector_fold(wire[8], wire[32], 32, crc32_add_byte)
+        => o;
+}
+
+function crc32_add_byte() i: wire[8], crc: wire[32] => o: wire[32] {
+    i => left_pad(8, 24) => declare padded_i: wire[32];
+    crc, padded_i
+        => bitwise_xor(32)
+        => crc32_division()
+        => o;
+}
+
+function crc32_division() crc_in: wire[32] => crc_out: wire[32] {
+    crc_in => repeat(wire[32], 8, crc32_division_round()) => crc_out;
+}
+
+function crc32_division_round() crc_in: wire[32] => crc_out: wire[32] {
+    crc_in => single_shift_right(32) => declare crc_shifted: wire[32];
+    crc_shifted, literal(32, 3988292384) => bitwise_xor(32) => declare xor_result: wire[32];
+
+    crc_in[0], xor_result, crc_shifted
+        => if_else(wire[32]) => crc_out;
+}
