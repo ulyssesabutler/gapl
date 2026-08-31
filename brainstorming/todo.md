@@ -237,6 +237,32 @@ There are a few different validations we need to do, but currently don't.
   unfounded in practice - not rigorously isolated/re-verified in a clean two-runs-in-a-row test,
   but no longer looks like a real problem.
 
+- **Sweep `netfpga/build.gradle.kts` for more "declared the file, not the value" task inputs.**
+  Two separate silent-staleness bugs in this file have now had the same shape: a task declared a
+  *file* as its input when the thing that actually drives its behavior is a *value* derived from
+  that file **plus** other sources. First was `generateGaplVerilog` tracking only
+  `gaplTargetFile`, so switching `-PprogramVariationName` reused the previous variation's Verilog
+  (fixed by declaring `compilePropsFile`). Second was that same task still tracking only
+  `compilePropsFile`, while `propString`/`propBool` let a command-line `-P` override win over it -
+  so `-PretimingClockPeriod=20` after `=200` stayed UP-TO-DATE and silently re-simulated the
+  period-200 kernel (fixed 2026-08-31 by declaring the resolved settings as
+  `inputs.property(...)`; see the memory note `project-netfpga-generategaplverilog-stale-p-override`).
+
+  Both produce *stale-but-plausible PASSes* rather than visible errors, which is what makes this
+  class expensive - the second one invalidated an entire retiming sweep before anyone noticed.
+  Nothing has audited the file's other tasks for the same pattern. The rule to check each against:
+  **every value that can change what a task does must be reachable from its declared inputs.**
+  Anything read through `propString`/`propBool`/`propOrEnv`/`optPropOrEnv` and then baked into a
+  command line, a generated file, or a tool invocation is a candidate, since all four of those
+  helpers consult Gradle properties and/or the environment, neither of which is a tracked file.
+  Prime suspects, none verified: `clockPeriodNs` (feeds `solveClkWizConfig` and the generated
+  timing constraint), `nfProjectName`/`nfDesignDir`, `clockWizPart`/`clockWizPrimInFreqMhz`, and
+  the `testInputs`/`testExpectedOutputs` overrides on the test-running tasks. Note the deliberate
+  counter-example when doing this: `logLevel` is intentionally *not* an input to
+  `generateGaplVerilog`, because it cannot change the emitted Verilog and tracking it would force
+  a recompile whenever someone re-ran with `-PlogLevel=debug` just to read the log - so the sweep
+  is "does this value change the output?", not "is this value untracked?".
+
 ## NetFPGA partial synthesis (see the "partial synthesis" plan discussed with the user)
 - `:netfpga:build` now produces a real bitstream end-to-end (verified: 36m42s,
   `reference_switch.bit`), with the GAPL kernel packaged as its own checkpointed IP
