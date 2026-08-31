@@ -1057,6 +1057,149 @@ tasks.register<Exec>("runKernelTest") {
     }
 }
 
+// Wrapper-level Verilator test. buildKernelTest/runKernelTest above drive the generated
+// packet_body_processor directly, supplying `enable` and `reset` from the C++ harness. That cannot
+// exercise the kernel the way the hardware actually does: on the board, processor_controller
+// derives `enable` from input availability and downstream readiness, and axis_mutual_exclusion
+// decides when the kernel is reset. This pair builds gapl_wrapper instead - the real wrapper, with
+// both axis_queues, the controller, the mutual-exclusion block and the byte reversers - and speaks
+// only AXI-Stream to it, so those signals are produced by the design under test rather than by the
+// harness. It is the fast counterpart to runSimulation: same wrapper semantics, no Vivado.
+//
+// Deliberately kept as its own task pair rather than folded into buildKernelTest/runKernelTest -
+// it needs a different top module, a different Verilog file set (the wrapper HDL plus NetFPGA's
+// small-FIFO cores) and is expected to be reached for rarely, when a design passes the
+// kernel-level test but misbehaves in the full datapath.
+val wrapperTestDir = layout.projectDirectory.dir("wrapper-test").asFile
+
+// The util/ sources (hex/options/string_utils) are shared with kernel-test rather than duplicated;
+// only the harness proper (test.cpp) is specific to this task.
+val wrapperTestUtilDir = kernelTestDir.resolve("util")
+
+val wrapperTestCppSources = (
+    fileTree(wrapperTestDir) { include("**/*.cpp") }.files +
+        fileTree(wrapperTestUtilDir) { include("**/*.cpp") }.files
+    ).sortedBy { it.absolutePath }
+
+val wrapperTestHeaders = (
+    fileTree(wrapperTestDir) { include("**/*.h", "**/*.hpp") }.files +
+        fileTree(wrapperTestUtilDir) { include("**/*.h", "**/*.hpp") }.files
+    ).sortedBy { it.absolutePath }
+
+// Taken from the checked-in project sources under $nfDesignDir/hw/hdl, NOT from the packaged core
+// at lib/hw/contrib/cores/gapl_kernel_v1_0_0/hdl. Those are copies produced by
+// packageCoreGaplKernel, so depending on them would make this task require a prior packaging run
+// (and, in a fresh checkout, they do not exist at all). The packaged directory also holds an
+// *installed* GAPLprocessor.v from whichever application was packaged last, which is exactly the
+// stale copy this task must not pick up - hence every file listed explicitly rather than resolved
+// by a `-y` directory search.
+val wrapperHdlFiles = listOf(
+    "gapl_wrapper.v",
+    "util/processor_controller.v",
+    "util/reverse_bytes.v",
+    "util/axis/axis_queue.v",
+    "util/axis/axis_mutual_exclusion.v",
+    "util/axis/axis_pad_output.v",
+).map { file("$nfDesignDir/hw/hdl/$it") } + listOf(
+    "fallthrough_small_fifo.v",
+    "small_fifo.v",
+).map { file("$sumeFolder/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0/hdl/$it") }
+
+val verilatorWrapperOutDir = layout.buildDirectory.dir("verilator/wrapper-test")
+val verilatorWrapperExe = verilatorWrapperOutDir.map { it.asFile.resolve("wrapper_test") }
+
+tasks.register<Exec>("buildWrapperTest") {
+    group = "verilator"
+    description = "Build wrapper-test Verilator executable: gapl_wrapper + generated GAPL Verilog"
+    dependsOn("generateGaplVerilog")
+
+    val vProcProvider = gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) }
+
+    inputs.files(vProcProvider)
+    inputs.files(wrapperHdlFiles)
+    inputs.files(wrapperTestCppSources)
+    inputs.files(wrapperTestHeaders)
+    outputs.file(verilatorWrapperExe)
+
+    // Same ccache hazard as buildKernelTest - see its comment. Verilator regenerates this design's
+    // *.cpp at a fixed path whenever the selected application changes, which is exactly the
+    // path+size+mtime pattern that can make ccache serve a stale object.
+    environment("CCACHE_DISABLE", "1")
+
+    doFirst {
+        val outDir = verilatorWrapperOutDir.get().asFile
+        outDir.mkdirs()
+
+        wrapperHdlFiles.forEach {
+            if (!it.exists()) throw GradleException("wrapper-test: missing Verilog source ${it.absolutePath}")
+        }
+
+        val vFiles = (listOf(vProcProvider.get()) + wrapperHdlFiles)
+            .joinToString(" ") { "\"${it.absolutePath}\"" }
+        val cppArgs = wrapperTestCppSources.joinToString(" ") { "\"${it.absolutePath}\"" }
+        val incDirs = listOf(wrapperTestDir, kernelTestDir)
+            .filter { it.exists() }
+            .joinToString(" ") { "-I\\\"${it.absolutePath}\\\"" }
+
+        commandLine(bash("""
+            set -euo pipefail
+
+            "$verilatorBin" --version
+
+            # -Wno-fatal: the NetFPGA small-FIFO cores are vendored third-party Verilog and trip
+            # several of Verilator's lint checks; those are not ours to fix and must not fail the
+            # build. Warnings from the GAPL-generated Verilog are still printed.
+            #
+            # --no-timing: small_fifo.v carries `#1` intra-assignment delays, but every one of them
+            # sits inside a `// synthesis translate_off` guard, so synthesis - and therefore the
+            # real board - never sees them. --no-timing makes Verilator treat timing controls as
+            # no-ops, which is precisely that behaviour; --timing would instead honour delays the
+            # hardware does not have, making this harness diverge from the design under test.
+            "$verilatorBin" -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL \
+              --no-timing --trace --cc \
+              --top-module gapl_wrapper \
+              --Mdir "$outDir" \
+              $vFiles \
+              --exe $cppArgs \
+              -CFLAGS "-std=c++17 $incDirs" \
+              --build -j 0 \
+              -o wrapper_test
+        """.trimIndent()))
+    }
+}
+
+tasks.register<Exec>("runWrapperTest") {
+    group = "verilator"
+    description = "Run wrapper-test: test.properties vectors through the real gapl_wrapper"
+    dependsOn("buildWrapperTest")
+    outputs.upToDateWhen { false } // always run
+
+    doFirst {
+        val outDir = verilatorWrapperOutDir.get().asFile
+        val exe = verilatorWrapperExe.get()
+        if (!exe.exists()) throw GradleException("wrapper-test executable not found at ${exe.absolutePath}")
+
+        fun splitCsv(s: String): List<String> =
+            s.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+        val inputs = splitCsv(testInputs.trim())
+        val expected = splitCsv(testExpectedOutputs.trim())
+
+        val waveFile = layout.buildDirectory
+            .file("verilator/wrapper-test/wrapper_test.vcd")
+            .get().asFile
+        waveFile.parentFile.mkdirs()
+
+        val args = mutableListOf<String>()
+        inputs.forEach { args += listOf("-i", it) }
+        expected.forEach { args += listOf("-o", it) }
+        args += listOf("-w", waveFile.absolutePath)
+
+        workingDir = outDir
+        commandLine(listOf(exe.absolutePath) + args)
+    }
+}
+
 // simengine counterpart to buildKernelTest/runKernelTest above: runs the SAME test.properties
 // packet vectors against packet_body_processor directly through simengine's Engine, bypassing
 // Verilog/Verilator (and the compiler entirely - it reads gaplTargetFile's source directly, not

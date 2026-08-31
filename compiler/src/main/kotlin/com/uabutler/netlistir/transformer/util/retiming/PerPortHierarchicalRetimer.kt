@@ -59,10 +59,10 @@ class PerPortHierarchicalRetimer(
                 Logger.info { "Clock Period:   ${summary.clockPeriod}" }
                 Logger.info { "Register Count: ${summary.ownRegisterCount}" }
                 graph.inputPorts.forEach { port ->
-                    Logger.info { "  in  ${port.value.name()}: lag=${summary.portLags[port]} delay=${summary.inputDelays[port]}" }
+                    Logger.info { "  in  ${port.value.name()}: lag=${summary.portLags[port]} delay=${summary.inputDelays[port]} component=${summary.portComponents[port]}" }
                 }
                 graph.outputPorts.forEach { port ->
-                    Logger.info { "  out ${port.value.name()}: lag=${summary.portLags[port]} delay=${summary.outputDelays[port]}" }
+                    Logger.info { "  out ${port.value.name()}: lag=${summary.portLags[port]} delay=${summary.outputDelays[port]} component=${summary.portComponents[port]}" }
                 }
                 Logger.finish()
             }

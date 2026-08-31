@@ -102,6 +102,61 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         val equalityConstraints: List<NodeEqualityConstraint<N>>,
     )
 
+    /**
+     * The invariant this whole scheme rests on: a child is solved first and its internal register
+     * counts are then fixed, so the parent must reproduce each child's own port-lag *differences*
+     * exactly. Get that wrong by even one register and two signals that converge inside the child -
+     * classically a `valid` and the data it gates - arrive a cycle apart, silently changing what
+     * the circuit computes while every interface-level property (beat counts, `last`, output
+     * timing) still looks correct.
+     *
+     * Nothing else catches this. The top-level port-alignment constraints only align the *top*
+     * module's own ports with its environment; a mis-reproduced child boundary is invisible to
+     * them. Flat Leiserson-Saxe gets the property for free (both edges into a convergence point are
+     * computed against the same r(sink)), which is exactly the guarantee per-port hierarchical
+     * retiming trades away in exchange for letting one port's path be pipelined independently.
+     *
+     * Checked per component, because only ports the child actually relates have a meaningful lag
+     * difference - see [PortBoundarySummary.portComponents].
+     */
+    private fun checkChildPortLagsReproduced(
+        graph: PortHierarchicalCircuitGraph<G, N, E>,
+        childResults: Map<PortHierarchicalCircuitGraph<G, N, E>, SolveResult<G, N, E>>,
+        flatByChildPort: Map<PortHierarchicalCircuitGraph.Node<N>, WeightedGraph.Node<N>>,
+        nodeLags: Map<WeightedGraph.Node<N>, Int>,
+    ) {
+        graph.childInstances().forEach { instance ->
+            val summary = childResults[instance.childGraph]?.summary ?: return@forEach
+
+            instance.ports
+                .groupBy { summary.portComponents[it.port] ?: -1 }
+                .forEach { (_, componentPorts) ->
+                    val reference = componentPorts.first()
+                    val referenceChildLag = summary.portLags[reference.port] ?: return@forEach
+                    val referenceParentLag = flatByChildPort[reference]?.let { nodeLags[it] } ?: return@forEach
+
+                    componentPorts.drop(1).forEach { portNode ->
+                        val childLag = summary.portLags[portNode.port] ?: return@forEach
+                        val parentLag = flatByChildPort[portNode]?.let { nodeLags[it] } ?: return@forEach
+
+                        val expected = childLag - referenceChildLag
+                        val actual = parentLag - referenceParentLag
+
+                        if (expected != actual) {
+                            Logger.error {
+                                "Retiming boundary mismatch in ${graph.value}: child " +
+                                    "${instance.childGraph.value} port ${portNode.port.value} is " +
+                                    "$actual register(s) from ${reference.port.value} on the parent " +
+                                    "side, but the child's own solve requires $expected. The " +
+                                    "emitted circuit will misalign these two signals by " +
+                                    "${expected - actual} cycle(s)."
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
     private fun solveSingle(
         graph: PortHierarchicalCircuitGraph<G, N, E>,
         childResults: Map<PortHierarchicalCircuitGraph<G, N, E>, SolveResult<G, N, E>>,
@@ -189,6 +244,8 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         }
         val nodeLags = minimalRegisterSolver.lastSolveNodeLags
             ?: throw IllegalStateException("MinimalRegisterSolver returned a solution without recording its retiming labels")
+
+        checkChildPortLagsReproduced(graph, childResults, flatByChildPort, nodeLags)
 
         // Step 6: rebuild this graph with retimed weights, pointing children at their retimed graphs.
         // Port LeafNodes are unchanged by retiming (only edge weights move), so a ChildPortNode only
