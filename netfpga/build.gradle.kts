@@ -248,6 +248,28 @@ tasks.register("generateGaplVerilog") {
     if (retime) {
         inputs.file(delayModelFile)
     }
+
+    // Declaring compilePropsFile above is necessary but NOT sufficient: propString/propBool let a
+    // command-line -P override win over the file, so the flags actually passed to the compiler are
+    // not a function of that file alone. Tracking only the file meant
+    //     ./gradlew :netfpga:runSimulation ... -PretimingClockPeriod=200   # regenerates
+    //     ./gradlew :netfpga:runSimulation ... -PretimingClockPeriod=20    # UP-TO-DATE (!)
+    // silently re-simulating the period-200 Verilog under the period-20 label - a whole retiming
+    // sweep once "passed" this way while every run tested one stale kernel, which corrupts
+    // conclusions far more insidiously than an outright error would. Declaring the *resolved*
+    // values covers both paths at once (file and -P), since these are what the command line below
+    // is actually built from.
+    inputs.property("retime", retime)
+    inputs.property("retimingClockPeriod", retimingClockPeriod)
+    inputs.property("retimingSolver", retimingSolver).optional(true)
+    inputs.property("retimingMaintainsTiming", retimingMaintainsTiming)
+    inputs.property("flattenMode", flattenMode)
+
+    // logLevel is deliberately NOT an input. It's the one setting in the command line below that
+    // cannot change the emitted Verilog - it only makes the compiler more or less chatty on stdout
+    // - so tracking it would force a full recompile every time someone re-ran with -PlogLevel=debug
+    // to read the log, which is exactly when a rebuild is least wanted.
+
     outputs.dir(gaplVerilogOut)
 
     doLast {
