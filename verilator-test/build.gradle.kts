@@ -12,7 +12,7 @@ plugins {
 data class TestProperties(
     var flatten: Boolean = true,
     var literalSimplication: Boolean = true,
-    var constantSimplification: Boolean = false,
+    var constantSimplification: Boolean = true,
     var waveform: Boolean = false,
     var topModule: String? = null,
     var retimeDelayModel: String? = null,
@@ -75,11 +75,11 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
         add(outputVerilogFile.absolutePath)
 
         if (!properties.literalSimplication) { add("--no-literal-simplification") }
-        // -PconstantSimplification=true turns the pass on for every test at once, which is how it
-        // gets exercised against the whole corpus without editing each fixture's test.properties.
-        if (properties.constantSimplification ||
-            (project.findProperty("constantSimplification") as String?)?.toBoolean() == true
-        ) { add("--constant-simplification") }
+        // On by default, matching the compiler. -PconstantSimplification=false turns it off across
+        // the whole corpus at once, which is how its effect gets isolated.
+        val constantSimplification = (project.findProperty("constantSimplification") as String?)
+            ?.toBoolean() ?: properties.constantSimplification
+        if (!constantSimplification) { add("--no-constant-simplification") }
 
         if (!properties.flatten) {
             add("--flatten")
