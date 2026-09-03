@@ -105,11 +105,28 @@ object NetlistLeisersonCircuitConverter {
         // A LiteralFunction node is not in any delay model's operator table, so YamlDelayModel.forNode
         // falls through to the model-wide `default` (1 for netfpga/delay.yaml) and prices a constant
         // tie-off as if it were logic. That makes every path *starting at a constant* exactly one tick
-        // longer than the same path starting at an input port, which is what forces a register onto a
-        // constant leg in the per-port hierarchical solver - see that solver's
-        // reportRetimedConstantSources. Returning 0 here does remove those registers, but it also made
-        // netfpga's bloom_filter infeasible at period 9 in three of three runs, so it is not a
-        // drop-in fix and is deliberately NOT applied.
+        // longer than the same path starting at an input port, which is what pressures the per-port
+        // hierarchical solver into parking a register on a constant leg - see that solver's
+        // reportRetimedConstantSources.
+        //
+        // Returning 0 here is defensible on its own terms - a tie-off has no propagation delay - but
+        // it is NOT applied, for two measured reasons.
+        //
+        // It breaks netfpga's bloom_filter at clock period 9, and the mechanism is understood: with
+        // literals free, `update_indices` no longer needs the three mask registers it was using to
+        // meet period 9, so `indices -> new_state` becomes purely combinational. That lengthens the
+        // longest zero-register path ending at `new_state` from 8 to 9, and the parent's feedback
+        // loop - which was exactly at the limit, 8 + 1 for the if_else - becomes 10. Period 10 and
+        // above are unaffected, which is the signature of zero slack rather than of a broken model.
+        // Note what that failure really is: a child minimising its own registers, with no way to know
+        // its parent holds a loop through it. Repricing constants only exposed it.
+        //
+        // And it does not fix the bug it looks like it should. Constants one node downstream of a
+        // literal - past a wire_to_vector or a left_pad - are still priced as logic and still collect
+        // registers: netfpga bloom-filter at period 20 still fails, with 387 constant-carrying
+        // registers in the emitted design. The transitive case needs a constraint on the literal's
+        // *lag* (r(literal) >= r(input port)), which telescopes over intermediate nodes, rather than
+        // a delay fix.
         return when (node) {
             is VirtualNode,
             is IONode,

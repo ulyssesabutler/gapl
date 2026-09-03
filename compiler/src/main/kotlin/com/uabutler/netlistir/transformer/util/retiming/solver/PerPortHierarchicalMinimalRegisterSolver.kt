@@ -383,6 +383,26 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
                 }
         }
 
+        // Logged as each module finishes rather than only after the whole solve succeeds, so a
+        // failure higher up still leaves its children's boundaries visible.
+        Logger.debug {
+            val name = (graph.inputPorts + graph.outputPorts).firstOrNull()
+                ?.let { (it.value as? com.uabutler.netlistir.netlist.Node)?.parentModule?.invocation?.gaplFunctionName }
+                ?: "?"
+            val lags = (graph.inputPorts + graph.outputPorts).joinToString(", ") { port ->
+                val delay = summary.inputDelays[port] ?: summary.outputDelays[port]
+                "${(port.value as? com.uabutler.netlistir.netlist.Node)?.name()}=${summary.portLags[port]}" +
+                    "/d$delay/c${summary.portComponents[port]}"
+            }
+            val pairs = summary.pairRegisters.entries.joinToString(", ") { (pair, registers) ->
+                val input = (pair.input.value as? com.uabutler.netlistir.netlist.Node)?.name()
+                val output = (pair.output.value as? com.uabutler.netlistir.netlist.Node)?.name()
+                val combinational = summary.pairCombinationalDelays[pair]
+                "$input->$output regs=$registers" + (combinational?.let { " comb=$it" } ?: "")
+            }
+            "boundary $name: own=${summary.ownRegisterCount} lags[$lags] pairs[$pairs]"
+        }
+
         SolveResult(
             retimedGraph = retimedGraph,
             summary = summary,
