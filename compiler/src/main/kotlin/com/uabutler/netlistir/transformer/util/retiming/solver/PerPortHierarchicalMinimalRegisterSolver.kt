@@ -54,11 +54,21 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
     // See MinimalRegisterSolver's own parameter of this name - it is what makes the objective count
     // flip-flops rather than edges, and it is passed straight through to the per-module solve.
     private val edgeSourceBits: (WeightedGraph.Edge<N, E>) -> Collection<Any> = { listOf(Any()) },
+    /** See `--verify-retiming`: runs [PerPortHierarchicalRetimingVerifier] after a successful solve. */
+    private val verify: Boolean = false,
 ) : PortHierarchicalSolver<G, N, E>(PortHierarchicalRetimingProblem(graphs)) {
 
-    private data class SolveResult<G, N, E>(
+    /**
+     * [leafLags] and [childPortLags] are this module's own `r` values, kept because the verifier has
+     * to re-derive one monolithic lag per node from them and they cannot be recovered from
+     * [retimedGraph] alone - only edge weight *differences* survive into the retimed graph.
+     */
+    internal data class SolveResult<G, N, E>(
         val retimedGraph: PortHierarchicalCircuitGraph<G, N, E>,
         val summary: PortBoundarySummary<N>,
+        val sourceGraph: PortHierarchicalCircuitGraph<G, N, E>,
+        val leafLags: Map<PortHierarchicalCircuitGraph.LeafNode<N>, Int>,
+        val childPortLags: Map<PortHierarchicalCircuitGraph.Node<N>, Int>,
     )
 
     private var lastSolveSummaries: Map<PortHierarchicalCircuitGraph<G, N, E>, PortBoundarySummary<N>> = emptyMap()
@@ -91,6 +101,10 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
 
         lastSolveSummaries = IdentityHashMap<PortHierarchicalCircuitGraph<G, N, E>, PortBoundarySummary<N>>().apply {
             results.forEach { (graph, result) -> put(graph, result.summary) }
+        }
+
+        if (verify) {
+            PerPortHierarchicalRetimingVerifier(results, targetClockPeriod).verify(problem.topLevelGraphs)
         }
 
         return PortHierarchicalRetimingProblem(problem.graphs.map { results.getValue(it).retimedGraph })
@@ -154,6 +168,54 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
                         }
                     }
                 }
+        }
+    }
+
+    /**
+     * Reports every edge the solver retimed onto a *constant source* - a node with no inputs, whose
+     * output is time-invariant.
+     *
+     * The monolithic path cannot produce one: `NetlistLeisersonCircuitConverter.fromModule` gives
+     * every input-less node an edge from its `SuperInputNode`, and `MinimalRegisterSolver` pins
+     * `r(sink) - r(source) = 0` across every VirtualIONode edge, so a literal's lag is welded to the
+     * input ports' lag and can never drift. The per-port graphs have no such node (see step 5's
+     * comment), and the explicit constraints added here only relate a *top-level* module's own
+     * ports - nothing pins a literal. Its sole constraint is then `w_r >= 0` on its one outgoing
+     * edge, leaving `r(literal)` free to sit below `r(consumer)` and materialise a register.
+     *
+     * That register is latency-neutral for every data path, so port-lag auditing cannot see it - but
+     * it is not value-neutral: the emitter resets registers to 0, not to the constant they carry, so
+     * for one enabled cycle after each reset the consumer reads 0 instead of the constant.
+     */
+    /** A node whose output is a compile-time constant, and so must never sit behind a register. */
+    private fun isConstantSource(node: N): Boolean =
+        node is com.uabutler.netlistir.netlist.PredefinedFunctionNode &&
+            node.predefinedFunction is com.uabutler.netlistir.util.LiteralFunction
+
+    private fun reportRetimedConstantSources(
+        graph: PortHierarchicalCircuitGraph<G, N, E>,
+        flatEdges: List<WeightedGraph.Edge<N, E>>,
+        nodeLags: Map<WeightedGraph.Node<N>, Int>,
+    ) {
+        flatEdges.forEach { edge ->
+            val source = edge.source.value
+            if (!isConstantSource(source)) return@forEach
+            source as com.uabutler.netlistir.netlist.PredefinedFunctionNode
+
+            val sourceLag = nodeLags[edge.source] ?: return@forEach
+            val sinkLag = nodeLags[edge.sink] ?: return@forEach
+            val retimedWeight = edge.weight + sinkLag - sourceLag
+            if (retimedWeight <= 0) return@forEach
+
+            val literal = source.predefinedFunction as com.uabutler.netlistir.util.LiteralFunction
+            Logger.warn {
+                "Retimed $retimedWeight register(s) onto the constant source ${source.name()} " +
+                    "(literal $literal) in ${source.parentModule.invocation.gaplFunctionName}: " +
+                    "r(source)=$sourceLag r(sink)=$sinkLag w=${edge.weight} " +
+                    "delay(source)=${edge.source.weight} bits=${edgeSourceBits(edge).size}. " +
+                    "A constant is time-invariant only in steady state - this register resets to 0, " +
+                    "so its consumer reads 0 instead of the constant for one cycle after every reset."
+            }
         }
     }
 
@@ -229,6 +291,24 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
             }
         }
 
+        // Step 4b: no edge out of a constant may carry a register. A literal is time-invariant only
+        // in *steady state*: the emitter resets every register to 0, not to the constant it carries,
+        // so a register parked here feeds its consumer 0 instead of the constant for one enabled
+        // cycle after each reset. Where the environment resets per packet - netfpga's
+        // axis_mutual_exclusion does exactly that - the first beat of every packet is then computed
+        // against the wrong constant, while every register count, port lag and latency stays correct
+        // and every audit passes.
+        //
+        // Pinning `w_r = 0` here is the per-port equivalent of what the monolithic path gets for
+        // free: `NetlistLeisersonCircuitConverter.fromModule` gives every input-less node an edge
+        // from its SuperInputNode, and MinimalRegisterSolver pins `r(sink) - r(source) = 0` across
+        // VirtualIONode edges, welding a literal's lag to the input ports'. These graphs have no
+        // such node (see step 5), so the constraint has to be stated outright.
+        allFlatEdges.forEach { edge ->
+            if (!isConstantSource(edge.source.value)) return@forEach
+            equalityConstraints.add(NodeEqualityConstraint(edge.source, edge.sink, -edge.weight.toLong()))
+        }
+
         val flatGraph = LeisersonCircuitGraph(graph.value, allFlatNodes, allFlatEdges)
 
         // Step 5: solve. These graphs contain no VirtualIONodes, so MinimalRegisterSolver's own
@@ -246,6 +326,7 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
             ?: throw IllegalStateException("MinimalRegisterSolver returned a solution without recording its retiming labels")
 
         checkChildPortLagsReproduced(graph, childResults, flatByChildPort, nodeLags)
+        reportRetimedConstantSources(graph, allFlatEdges, nodeLags)
 
         // Step 6: rebuild this graph with retimed weights, pointing children at their retimed graphs.
         // Port LeafNodes are unchanged by retiming (only edge weights move), so a ChildPortNode only
@@ -302,7 +383,17 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
                 }
         }
 
-        SolveResult(retimedGraph, summary)
+        SolveResult(
+            retimedGraph = retimedGraph,
+            summary = summary,
+            sourceGraph = graph,
+            leafLags = IdentityHashMap<PortHierarchicalCircuitGraph.LeafNode<N>, Int>().apply {
+                flatByLeaf.forEach { (leaf, flat) -> nodeLags[flat]?.let { put(leaf, it) } }
+            },
+            childPortLags = IdentityHashMap<PortHierarchicalCircuitGraph.Node<N>, Int>().apply {
+                flatByChildPort.forEach { (portNode, flat) -> nodeLags[flat]?.let { put(portNode, it) } }
+            },
+        )
     }
 
     /**
@@ -402,6 +493,63 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         return ChildExpansion(boundaryNodes, constraints)
     }
 
+    /**
+     * Maximum register count on any path from [source] to each node reachable from it, or null when
+     * a cycle is reachable - a longest path is unbounded then, and a module with a feedback loop
+     * through the pair is not the case this is trying to catch anyway.
+     *
+     * Kahn's algorithm over the reachable subgraph only, so an unreachable cycle elsewhere in the
+     * module does not suppress the check.
+     */
+    private fun maxRegistersFrom(
+        graph: LeisersonCircuitGraph<G, N, E>,
+        source: WeightedGraph.Node<N>,
+    ): Map<WeightedGraph.Node<N>, Int>? {
+        val outgoing = IdentityHashMap<WeightedGraph.Node<N>, MutableList<WeightedGraph.Edge<N, E>>>()
+        graph.edges.forEach { outgoing.getOrPut(it.source) { mutableListOf() }.add(it) }
+
+        val reachable = java.util.Collections.newSetFromMap(IdentityHashMap<WeightedGraph.Node<N>, Boolean>())
+        val pending = ArrayDeque<WeightedGraph.Node<N>>()
+        reachable.add(source)
+        pending.add(source)
+        while (pending.isNotEmpty()) {
+            outgoing[pending.removeLast()]?.forEach { edge ->
+                if (reachable.add(edge.sink)) pending.add(edge.sink)
+            }
+        }
+
+        val inDegree = IdentityHashMap<WeightedGraph.Node<N>, Int>()
+        reachable.forEach { inDegree[it] = 0 }
+        reachable.forEach { node ->
+            outgoing[node]?.forEach { edge ->
+                if (edge.sink in reachable) inDegree[edge.sink] = inDegree.getValue(edge.sink) + 1
+            }
+        }
+
+        val best = IdentityHashMap<WeightedGraph.Node<N>, Int>()
+        best[source] = 0
+        val ready = ArrayDeque(reachable.filter { inDegree.getValue(it) == 0 })
+        var processed = 0
+        while (ready.isNotEmpty()) {
+            val node = ready.removeFirst()
+            processed++
+            val here = best[node]
+            outgoing[node]?.forEach { edge ->
+                if (edge.sink !in reachable) return@forEach
+                if (here != null) {
+                    val candidate = here + edge.weight
+                    val existing = best[edge.sink]
+                    if (existing == null || candidate > existing) best[edge.sink] = candidate
+                }
+                val remaining = inDegree.getValue(edge.sink) - 1
+                inDegree[edge.sink] = remaining
+                if (remaining == 0) ready.add(edge.sink)
+            }
+        }
+
+        return if (processed == reachable.size) best else null
+    }
+
     private fun computePortBoundarySummary(
         graph: PortHierarchicalCircuitGraph<G, N, E>,
         retimedFlatGraph: LeisersonCircuitGraph<G, N, E>,
@@ -423,6 +571,7 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
 
         graph.inputPorts.forEach { inputPort ->
             val connections = retimedFlatGraph.findFastestConnectionsFromNode(flatByLeaf.getValue(inputPort))
+            val longestRegisters = maxRegistersFrom(retimedFlatGraph, flatByLeaf.getValue(inputPort))
 
             // The longest combinational path starting at this port and ending anywhere other than an
             // output port - i.e. ending at a register.
@@ -437,6 +586,14 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
                 val pair = PortPair(inputPort, outputPort)
                 pairRegisters[pair] = connection.registerCount
                 if (connection.registerCount == 0) pairCombinationalDelays[pair] = connection.delay
+
+                // NOTE: pairRegisters is the MINIMUM over paths, because
+                // findFastestConnectionsFromNode is a shortest-path search keyed on register count.
+                // Whether that is wrong is checked properly by PerPortHierarchicalRetimingVerifier
+                // (`--verify-retiming`), which works on the flattened design and can tell a
+                // feed-forward path from a loop-carried one. A check that lived here could not: it
+                // saw the module's own contracted graph, counted the state feedback path as a data
+                // path, and reported every stateful design as unbalanced.
             }
         }
 

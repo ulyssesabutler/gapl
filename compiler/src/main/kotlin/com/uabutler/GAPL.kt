@@ -139,6 +139,16 @@ class Gapl : CliktCommand(name = "gapl") {
         help = "Should the retiming algorithm maintain the timing characteristics of the original circuit?",
     ).flag(default = false)
 
+    private val verifyRetiming: Boolean by option(
+        "--verify-retiming",
+        help = "After a per-port hierarchical retiming, flatten the whole design, derive one " +
+            "monolithic lag per node from the per-module lags, and check the result against plain " +
+            "Leiserson-Saxe constraints. Reports contradictions the per-module solves cannot see - " +
+            "chiefly a module whose port pair has paths of unequal length, which mixes two beats at " +
+            "its output and reports the shorter length to its caller. Diagnostic only: findings are " +
+            "logged, and the emitted Verilog is unchanged.",
+    ).flag(default = false)
+
     private val logLevel: Logger.Level by option(
         "--log-level",
         help = "Logging verbosity.",
@@ -157,6 +167,7 @@ class Gapl : CliktCommand(name = "gapl") {
             retimingSolverId = retimingSolver,
             retimingMinClockPeriodSolverId = retimingMinClockPeriodSolver,
             retimingMaintainTiming = retimingMaintainsTiming,
+            retimingVerify = verifyRetiming,
         )
 
         compile(inputFiles, output, options)

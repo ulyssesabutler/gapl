@@ -44,6 +44,7 @@ object Compiler {
         val retimingSolverId: RetimingSolverId?,
         val retimingMinClockPeriodSolverId: RetimingSolverId?,
         val retimingMaintainTiming: Boolean,
+        val retimingVerify: Boolean = false,
     ) {
         val analyzerOptions get() = Analyzer.Options(includeStdLib)
     }
@@ -151,6 +152,7 @@ object Compiler {
                         retimingSolverId = effectiveRetimingSolverId,
                         minClockPeriodSolverId = resolveMinClockPeriodSolverId(options, effectiveRetimingSolverId),
                         maintainTiming = options.retimingMaintainTiming,
+                        verify = options.retimingVerify,
                     ))
                 }
 

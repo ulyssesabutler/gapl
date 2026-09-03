@@ -102,6 +102,14 @@ object NetlistLeisersonCircuitConverter {
     }
 
     fun getDelay(node: Node, delay: PropagationDelay): Int {
+        // A LiteralFunction node is not in any delay model's operator table, so YamlDelayModel.forNode
+        // falls through to the model-wide `default` (1 for netfpga/delay.yaml) and prices a constant
+        // tie-off as if it were logic. That makes every path *starting at a constant* exactly one tick
+        // longer than the same path starting at an input port, which is what forces a register onto a
+        // constant leg in the per-port hierarchical solver - see that solver's
+        // reportRetimedConstantSources. Returning 0 here does remove those registers, but it also made
+        // netfpga's bloom_filter infeasible at period 9 in three of three runs, so it is not a
+        // drop-in fix and is deliberately NOT applied.
         return when (node) {
             is VirtualNode,
             is IONode,

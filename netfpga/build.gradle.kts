@@ -174,6 +174,9 @@ val retimingClockPeriod = propString("retimingClockPeriod", "min")!!
 
 val retimingSolver = propString("retimingSolver")
 val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
+// Diagnostic only (-PverifyRetiming=true): makes the compiler check its own hierarchical retiming
+// against a derived monolithic one. Declared as a task input below so toggling it rebuilds.
+val verifyRetiming = propBool("verifyRetiming", false)
 
 val flattenMode = propString("flatten", "recursive")!!
 
@@ -264,6 +267,7 @@ tasks.register("generateGaplVerilog") {
     inputs.property("retimingSolver", retimingSolver).optional(true)
     inputs.property("retimingMaintainsTiming", retimingMaintainsTiming)
     inputs.property("flattenMode", flattenMode)
+    inputs.property("verifyRetiming", verifyRetiming)
 
     // logLevel is deliberately NOT an input. It's the one setting in the command line below that
     // cannot change the emitted Verilog - it only makes the compiler more or less chatty on stdout
@@ -304,6 +308,7 @@ tasks.register("generateGaplVerilog") {
                     add(retimingSolver.lowercase())
                 }
                 if (retimingMaintainsTiming) { add("--retiming-maintains-timing") }
+                if (verifyRetiming) { add("--verify-retiming") }
             }
 
             add("--flatten")

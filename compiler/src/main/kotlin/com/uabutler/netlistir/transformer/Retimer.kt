@@ -33,6 +33,7 @@ class Retimer(
     val retimingSolverId: RetimingSolverId,
     val minClockPeriodSolverId: RetimingSolverId,
     val maintainTiming: Boolean,
+    val verify: Boolean = false,
 ): Transformer {
 
     enum class Mode(val mode: String) {
@@ -194,7 +195,7 @@ class Retimer(
         if (maintainTiming) throw Exception("Maintain timing is not supported yet")
         return when (retimingSolverId) {
             RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER ->
-                PerPortHierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
+                PerPortHierarchicalRetimer(original).retimeAll(delay, targetClockPeriod, verify)
             else -> HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
         }
     }
