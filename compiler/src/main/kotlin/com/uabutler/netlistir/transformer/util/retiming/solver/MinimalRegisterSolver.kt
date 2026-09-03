@@ -20,9 +20,17 @@ data class NodeEqualityConstraint<N>(
     val value: Long,
 )
 
+/** `r(sink) - r(source) >= value`. */
+data class NodeLowerBoundConstraint<N>(
+    val source: WeightedGraph.Node<N>,
+    val sink: WeightedGraph.Node<N>,
+    val value: Long,
+)
+
 class MinimalRegisterSolver<G, N, E>(
     problem: MonolithicRetimingProblem<G, N, E>,
     private val additionalEqualityConstraints: List<NodeEqualityConstraint<N>> = emptyList(),
+    private val additionalLowerBoundConstraints: List<NodeLowerBoundConstraint<N>> = emptyList(),
     /**
      * The individual driven bits an edge carries, identified so that two edges out of the same node
      * report the *same* object for a bit they both carry. That identity is what lets the objective
@@ -159,6 +167,7 @@ class MinimalRegisterSolver<G, N, E>(
             graph.edges.maxOfOrNull { kotlin.math.abs(it.weight.toLong()) } ?: 0L,
             timingConstrainedPaths.maxOfOrNull { kotlin.math.abs(1L - it.registerCount) } ?: 0L,
             additionalEqualityConstraints.maxOfOrNull { kotlin.math.abs(it.value) } ?: 0L,
+            additionalLowerBoundConstraints.maxOfOrNull { kotlin.math.abs(it.value) } ?: 0L,
         ).coerceAtLeast(1L)
 
         return (graph.nodes.size.toLong() - 1).coerceAtLeast(1L) * maxRightHandSide
@@ -329,6 +338,19 @@ class MinimalRegisterSolver<G, N, E>(
         }.count()
 
         Logger.trace { "Added $additionalConstraintCount additional equality constraints" }
+
+        // Step 7b: Additional lower bounds (r(sink) - r(source) >= value). An inequality where an
+        // equality would do matters: pinning a literal's lag *equal* to a consumer's forces every
+        // consumer of that literal to share one lag, which makes a constant feeding several stages
+        // of a pipeline infeasible outright.
+        val additionalLowerBoundCount = additionalLowerBoundConstraints.onEach { constraint ->
+            val sourceTerm = LinearExpr.term(retimingLabelVariables[constraint.source]!!, -1L)
+            val sinkTerm = retimingLabelVariables[constraint.sink]!!
+            val linearExpression = LinearExpr.sum(listOf(sourceTerm, sinkTerm).toTypedArray())
+            model.addGreaterOrEqual(linearExpression, constraint.value)
+        }.count()
+
+        Logger.trace { "Added $additionalLowerBoundCount additional lower bound constraints" }
 
         // Step 8: Add an anchor constraint
         val anchorNode = graph.nodes.first()

@@ -228,6 +228,7 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         val allFlatNodes = mutableListOf<WeightedGraph.Node<N>>()
         val allFlatEdges = mutableListOf<WeightedGraph.Edge<N, E>>()
         val equalityConstraints = mutableListOf<NodeEqualityConstraint<N>>()
+        val lowerBoundConstraints = mutableListOf<NodeLowerBoundConstraint<N>>()
 
         // Step 1: this module's own nodes
         val flatByLeaf = IdentityHashMap<PortHierarchicalCircuitGraph.LeafNode<N>, WeightedGraph.Node<N>>()
@@ -291,29 +292,44 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
             }
         }
 
-        // Step 4b: no edge out of a constant may carry a register. A literal is time-invariant only
-        // in *steady state*: the emitter resets every register to 0, not to the constant it carries,
-        // so a register parked here feeds its consumer 0 instead of the constant for one enabled
-        // cycle after each reset. Where the environment resets per packet - netfpga's
-        // axis_mutual_exclusion does exactly that - the first beat of every packet is then computed
-        // against the wrong constant, while every register count, port lag and latency stays correct
-        // and every audit passes.
+        // Step 4b: a constant must never reach a consumer *later* than the data it is combined
+        // with. A literal is time-invariant only in steady state - the emitter resets every register
+        // to 0, not to the value it carries - so if the constant sits behind more registers than the
+        // data path feeding the same node, the first beat after each reset is computed against zero.
+        // Where the environment resets per packet, as netfpga's axis_mutual_exclusion does, that
+        // corrupts every packet's first beat while every register count, port lag and latency stays
+        // correct and every audit passes.
         //
-        // Pinning `w_r = 0` here is the per-port equivalent of what the monolithic path gets for
-        // free: `NetlistLeisersonCircuitConverter.fromModule` gives every input-less node an edge
-        // from its SuperInputNode, and MinimalRegisterSolver pins `r(sink) - r(source) = 0` across
+        // With `j` registers from the literal to a consumer and `k` from an input port to the same
+        // consumer, the requirement is `j <= k`, which is exactly `r(literal) >= r(port)`. State it
+        // that way rather than pinning `w_r = 0` on the literal's own edges: that pins every
+        // consumer of one literal to a single lag, so a constant feeding several stages of a
+        // pipeline cannot have registers between those stages at all, and the module goes
+        // infeasible. See verilator-test/tests/constant-argument, which is that shape.
+        //
+        // This is the per-port equivalent of what the monolithic path gets for free:
+        // `NetlistLeisersonCircuitConverter.fromModule` gives every input-less node an edge from its
+        // SuperInputNode, and MinimalRegisterSolver pins `r(sink) - r(source) = 0` across
         // VirtualIONode edges, welding a literal's lag to the input ports'. These graphs have no
-        // such node (see step 5), so the constraint has to be stated outright.
-        allFlatEdges.forEach { edge ->
-            if (!isConstantSource(edge.source.value)) return@forEach
-            equalityConstraints.add(NodeEqualityConstraint(edge.source, edge.sink, -edge.weight.toLong()))
+        // such node (see step 5).
+        val constantSources = allFlatNodes.filter { isConstantSource(it.value) }
+        val portNodes = graph.inputPorts.mapNotNull { flatByLeaf[it] }
+        constantSources.forEach { literal ->
+            portNodes.forEach { port ->
+                lowerBoundConstraints.add(NodeLowerBoundConstraint(port, literal, 0L))
+            }
         }
 
         val flatGraph = LeisersonCircuitGraph(graph.value, allFlatNodes, allFlatEdges)
 
         // Step 5: solve. These graphs contain no VirtualIONodes, so MinimalRegisterSolver's own
         // boundary pinning contributes nothing - every boundary constraint here is explicit.
-        val minimalRegisterSolver = MinimalRegisterSolver(MonolithicRetimingProblem(flatGraph), equalityConstraints, edgeSourceBits)
+        val minimalRegisterSolver = MinimalRegisterSolver(
+            MonolithicRetimingProblem(flatGraph),
+            equalityConstraints,
+            lowerBoundConstraints,
+            edgeSourceBits,
+        )
         val minimalResult = minimalRegisterSolver.solveOrNull(targetClockPeriod)
         if (minimalResult == null) {
             Logger.debug {

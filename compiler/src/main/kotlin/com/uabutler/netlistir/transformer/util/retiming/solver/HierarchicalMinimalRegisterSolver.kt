@@ -319,7 +319,7 @@ class HierarchicalMinimalRegisterSolver<G, N, E>(
         }
 
         // Step 3: Run the flat solver
-        val minimalRegisterSolver = MinimalRegisterSolver(MonolithicRetimingProblem(model.graph), equalityConstraints, edgeSourceBits)
+        val minimalRegisterSolver = MinimalRegisterSolver(MonolithicRetimingProblem(model.graph), equalityConstraints, edgeSourceBits = edgeSourceBits)
         val minimalResult = minimalRegisterSolver.solveOrNull(targetClockPeriod)
         if (minimalResult == null) {
             // Debug, not error: this fires routinely for every infeasible probe during
