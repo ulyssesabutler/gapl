@@ -28,8 +28,21 @@ data class Reference(
 
 data class IntLiteral(
     val value: BigInteger,
+    /**
+     * Width of the constant, when it has one.
+     *
+     * An unsized Verilog constant takes its width from its value, so a wide literal whose top bits
+     * happen to be zero silently narrows: a 2048-bit constant with three leading zeros is a 2045-bit
+     * constant, and Verilator rejects the assignment. Emitting the width makes the constant say how
+     * wide it is instead of leaving it to be inferred.
+     */
+    val width: Int? = null,
 ): Expression() {
-    override fun verilogSerialize() = value.toString()
+    override fun verilogSerialize() =
+        if (width == null) value.toString()
+        // Masked because a Verilog sized constant is unsigned; a negative value would otherwise
+        // serialise with a leading '-'.
+        else "$width'h${(value and ((BigInteger.ONE shl width) - BigInteger.ONE)).toString(16)}"
 }
 
 data class BinaryOperation(

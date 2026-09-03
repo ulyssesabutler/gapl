@@ -99,7 +99,10 @@ class Gapl : CliktCommand(name = "gapl") {
 
     private val constantSimplification: Boolean by option(
         "--constant-simplification",
-        hidden = true, // experimental, unconditionally crashes - see compiler/CLAUDE.md gotchas
+        help = "Replace every node whose inputs are all constants with the constant it evaluates " +
+            "to, repeating until nothing is left to fold. Off by default because it also folds a " +
+            "register fed only by a constant, which changes that register's value for one cycle " +
+            "after reset.",
     ).flag(default = false)
 
     private val retime: File? by option(

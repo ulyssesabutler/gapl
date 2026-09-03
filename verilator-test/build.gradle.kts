@@ -12,6 +12,7 @@ plugins {
 data class TestProperties(
     var flatten: Boolean = true,
     var literalSimplication: Boolean = true,
+    var constantSimplification: Boolean = false,
     var waveform: Boolean = false,
     var topModule: String? = null,
     var retimeDelayModel: String? = null,
@@ -41,6 +42,7 @@ fun loadTestProperties(testDirectory: File): TestProperties {
         when (name.toString()) {
             "flatten" -> testProperties.flatten = value.toString().toBoolean()
             "literalSimplication" -> testProperties.literalSimplication = value.toString().toBoolean()
+            "constantSimplification" -> testProperties.constantSimplification = value.toString().toBoolean()
             "waveform" -> testProperties.waveform = value.toString().toBoolean()
             "topModule" -> testProperties.topModule = value.toString()
             "retime" -> if (value.toString().toBoolean()) testProperties.retimeDelayModel = testDirectory.listFiles()!!.first { it.isFile && it.name == "delay.yaml" }.absolutePath
@@ -73,6 +75,11 @@ fun createGaplCompileCommand(gaplFile: File, outputVerilogFile: File, properties
         add(outputVerilogFile.absolutePath)
 
         if (!properties.literalSimplication) { add("--no-literal-simplification") }
+        // -PconstantSimplification=true turns the pass on for every test at once, which is how it
+        // gets exercised against the whole corpus without editing each fixture's test.properties.
+        if (properties.constantSimplification ||
+            (project.findProperty("constantSimplification") as String?)?.toBoolean() == true
+        ) { add("--constant-simplification") }
 
         if (!properties.flatten) {
             add("--flatten")

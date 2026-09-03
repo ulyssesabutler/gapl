@@ -128,7 +128,6 @@ object Compiler {
                 if (options.constantSimplification) {
                     Logger.debug { "Constant Simplifier" }
                     add(ConstantSimplifier)
-                    TODO()
                 }
 
                 if (options.literalSimplification) {

@@ -48,7 +48,9 @@ conditional list and folds over it, **in this order**:
    source (see `../analyzer/CLAUDE.md`), so its functions show up as ordinary root modules after
    parsing; this drops the redundant standalone stdlib module definitions from the final output
    (their uses are already inlined/synthesized elsewhere).
-3. **`ConstantSimplifier`** (only if `--constant-simplification`) — **do not enable this**, see gotchas.
+3. **`ConstantSimplifier`** (only if `--constant-simplification`) — folds every node whose inputs are
+   all constants to the constant it evaluates to, repeating to a fixpoint. Off by default because it
+   also folds constant-fed registers; see gotchas.
 4. **`LiteralSimplifier`** (default on, `--no-literal-simplification` to disable) — dedupes identical
    literal nodes to one canonical node per `(size, value)` signature.
 5. **`PassThroughRemover`** — always runs. Cleans up `PassThroughNode`s left behind as inlining shims
@@ -168,13 +170,16 @@ runnable `gapl` binary at `compiler/build/install/gapl/bin/gapl` without buildin
   with an incompatible version of Kotlin." 5.0.0 is the last release built against Kotlin 2.0.0.
   Bumping Clikt requires bumping the project's Kotlin version first (untested — see the root
   `../CLAUDE.md` warning about Gradle/Kotlin version bumps having broken the build before).
-- **`--constant-simplification` always crashes if passed.** It's a `hidden = true` option in
-  `Gapl` (parseable, but excluded from `--help`) precisely because `Compiler.runNetlistTransformers`
-  calls an unconditional `TODO()` right after adding `ConstantSimplifier` to the pipeline, so this
-  flag always throws `NotImplementedError`. The underlying `ConstantSimplifier.kt` logic is actually
-  mostly implemented (full bit-array constant folding for binary/unary ops and registers) except
-  `MuxFunction`/`DemuxFunction`/`PriorityFunction`, which are separately stubbed `TODO("dont wanna")`
-  — so even fixing the outer crash wouldn't make this fully functional yet.
+- **`--constant-simplification` works now, but is off by default and changes reset behaviour.**
+  `ConstantSimplifier` replaces every node whose inputs are all constants with the constant it
+  evaluates to, repeating to a fixpoint. It was previously unusable (an unconditional `TODO()` in
+  `Compiler.runNetlistTransformers`, plus `TODO("dont wanna")` for mux/demux/priority, plus a
+  bit-order bug where LSB-first lists were read back MSB-first and no masking to the node's output
+  width). All of that is fixed; the pass folds AES from 220k to 169k lines of Verilog. It stays
+  opt-in because it also folds a **register** fed only by a constant, and the emitted register
+  resets to 0 rather than to the value it carries - so folding changes that register's output for
+  one cycle after each reset. A mux with an out-of-range selector, and records spread over several
+  wire vectors in mux/demux/priority, are deliberately left unfolded.
 - **Hierarchical retiming has hard cross-flag constraints, driven implicitly by `--flatten`, not
   obviously by anything `--retime`-related.** Any `--flatten` mode other than `all` forces
   `Retimer.Mode.HIERARCHICAL`, which requires `--retiming-solver`/`--retiming-min-clock-period-solver`
