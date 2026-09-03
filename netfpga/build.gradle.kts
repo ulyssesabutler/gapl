@@ -177,6 +177,9 @@ val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 // Diagnostic only (-PverifyRetiming=true): makes the compiler check its own hierarchical retiming
 // against a derived monolithic one. Declared as a task input below so toggling it rebuilds.
 val verifyRetiming = propBool("verifyRetiming", false)
+// -PconstantSimplification=true folds every all-constant node, including calls to user-defined
+// functions. Declared as a task input below so toggling it rebuilds.
+val constantSimplification = propBool("constantSimplification", false)
 
 val flattenMode = propString("flatten", "recursive")!!
 
@@ -268,6 +271,7 @@ tasks.register("generateGaplVerilog") {
     inputs.property("retimingMaintainsTiming", retimingMaintainsTiming)
     inputs.property("flattenMode", flattenMode)
     inputs.property("verifyRetiming", verifyRetiming)
+    inputs.property("constantSimplification", constantSimplification)
 
     // logLevel is deliberately NOT an input. It's the one setting in the command line below that
     // cannot change the emitted Verilog - it only makes the compiler more or less chatty on stdout
@@ -310,6 +314,8 @@ tasks.register("generateGaplVerilog") {
                 if (retimingMaintainsTiming) { add("--retiming-maintains-timing") }
                 if (verifyRetiming) { add("--verify-retiming") }
             }
+
+            if (constantSimplification) { add("--constant-simplification") }
 
             add("--flatten")
             add(flattenMode.lowercase())
