@@ -4,7 +4,9 @@ import com.uabutler.netlistir.netlist.BodyNode
 import com.uabutler.netlistir.netlist.InputWire
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
+import com.uabutler.netlistir.netlist.InputWireVectorGroup
 import com.uabutler.netlistir.netlist.ModuleInvocationNode
+import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.OutputWire
 import com.uabutler.netlistir.netlist.PassThroughNode
 import com.uabutler.netlistir.netlist.PredefinedFunctionNode
@@ -406,8 +408,104 @@ object ConstantSimplifier: Transformer {
         return changed
     }
 
+    /**
+     * Specialises a callee for call sites that disagree about a constant argument.
+     *
+     * [propagateConstantPorts] can only act when *every* call site drives a port with the same
+     * value, because it rewrites the one shared callee. When sites disagree - one passing a
+     * constant, another passing data or a different constant - the callee is cloned per distinct
+     * set of constant arguments, and each call site is pointed at its own clone. Propagation then
+     * handles each clone, since within a clone every (remaining) call site agrees by construction.
+     *
+     * The clone needs a fresh [Module.Invocation]: constants passed as wires are not part of that
+     * key, so a clone that reused it would collide with the original in the module map and in the
+     * emitted Verilog. The name is mangled rather than the parameter list extended, matching the
+     * `$p_0$` style the analyzer already uses for parameterised functions.
+     *
+     * The largest group keeps the original module, so a function called mostly with data and once
+     * with a constant costs one clone rather than two.
+     */
+    private fun specialiseDivergentCallSites(modules: MutableList<MutableModule>): Boolean {
+        // Call sites grouped by which of their arguments are constant, and to what.
+        data class Site(val parent: MutableModule, val call: ModuleInvocationNode)
+        val sitesByInvocation = mutableMapOf<Module.Invocation, MutableList<Site>>()
+        modules.forEach { parent ->
+            parent.getBodyNodes().filterIsInstance<ModuleInvocationNode>().forEach { call ->
+                sitesByInvocation.getOrPut(call.invocation) { mutableListOf() }.add(Site(parent, call))
+            }
+        }
+
+        var changed = false
+        sitesByInvocation.forEach { (invocation, sites) ->
+            if (sites.size < 2) return@forEach
+            val callee = modulesByInvocation[invocation] as? MutableModule ?: return@forEach
+
+            fun signature(site: Site): Map<String, List<Boolean>> =
+                site.call.inputWireVectorGroups.mapNotNull { group ->
+                    bitsOf(group.wires(), fromLiterals)?.let { group.identifier to it }
+                }.toMap()
+
+            val groups = sites.groupBy { signature(it) }
+            if (groups.size < 2) return@forEach
+            if (groups.keys.all { it.isEmpty() }) return@forEach
+
+            // Leave the biggest group on the original module.
+            val keep = groups.entries.maxByOrNull { it.value.size }!!.key
+            groups.forEach { (constants, group) ->
+                if (constants == keep || constants.isEmpty()) return@forEach
+
+                val name = "${invocation.gaplFunctionName}\$spec_${specialisationCounter++}\$"
+                val clone = callee.toMutableModule(invocation.copy(gaplFunctionName = name))
+                modules.add(clone)
+                modulesByInvocation = modulesByInvocation + (clone.invocation to clone)
+
+                group.forEach { site -> repointCall(site.parent, site.call, clone.invocation) }
+                changed = true
+                Logger.debug {
+                    "Specialised ${invocation.gaplFunctionName} as $name for ${group.size} call " +
+                        "site(s) with constant ${constants.keys.sorted()}"
+                }
+            }
+        }
+        return changed
+    }
+
+    /** Replaces [call] with an identical invocation of [target], keeping every connection. */
+    private fun repointCall(
+        parent: MutableModule,
+        call: ModuleInvocationNode,
+        target: Module.Invocation,
+    ) {
+        val replacement = ModuleInvocationNode(
+            identifier = "${call.name()}\$spec${specialisationCounter}",
+            parentModule = parent,
+            inputWireVectorGroupsBuilder = { node ->
+                call.inputWireVectorGroups.map { InputWireVectorGroup(it.identifier, node, it.gaplStructure) }
+            },
+            outputWireVectorGroupsBuilder = { node ->
+                call.outputWireVectorGroups.map { OutputWireVectorGroup(it.identifier, node, it.gaplStructure) }
+            },
+            invocation = target,
+        ).also { parent.addBodyNode(it) }
+
+        call.inputWires().zip(replacement.inputWires()).forEach { (from, to) ->
+            val source = parent.getConnectionForInputWireOrNull(from)?.source ?: return@forEach
+            parent.disconnect(from)
+            parent.connect(to, source)
+        }
+        call.outputWires().zip(replacement.outputWires()).forEach { (from, to) ->
+            parent.getConnectionsForOutputWire(from).toList().forEach { connection ->
+                parent.disconnect(connection.sink)
+                parent.connect(connection.sink, to)
+            }
+        }
+        parent.removeNode(call)
+    }
+
+    private var specialisationCounter = 0
+
     override fun transform(original: List<Module>): List<Module> {
-        val modules = original.map { it.toMutableModule() }
+        val modules = original.map { it.toMutableModule() }.toMutableList()
         modulesByInvocation = modules.associateBy { it.invocation }
 
         // Folding and propagation feed each other: folding a caller can make an argument constant,
@@ -415,7 +513,8 @@ object ConstantSimplifier: Transformer {
         var pass = 0
         while (pass++ < MAX_PROPAGATION_PASSES) {
             var changed = false
-            modules.forEach { if (foldModule(it)) changed = true }
+            modules.toList().forEach { if (foldModule(it)) changed = true }
+            if (specialiseDivergentCallSites(modules)) changed = true
             if (propagateConstantPorts(modules)) changed = true
             if (!changed) break
         }

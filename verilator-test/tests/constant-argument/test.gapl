@@ -1,0 +1,29 @@
+// A constant handed to a function as a *wire* argument, from two call sites that disagree.
+//
+// `offset` is not a static parameter, so both calls share one `accumulate` module and the constant
+// is an ordinary input port on the inside - invisible to anything that keys on literals. That is
+// the shape that defeated constant folding, the literal lag pin and the delay model on netfpga's
+// bloom-filter, where md5_single_round_hash passes the MD5 initial vector into md5_iteration.
+//
+// The two call sites pass *different* constants, so the callee cannot simply be rewritten in place
+// for both; it has to be specialised per call site.
+//
+// The chain is deep enough that retiming at a tight clock period must place registers inside
+// `accumulate`, which is what puts one on the constant path. Such a register resets to 0 rather
+// than to the constant it carries, so the first result after any reset is computed against zero -
+// which is only observable if the testbench resets mid-stream, as test.cpp does.
+
+function accumulate() offset: wire[8], i: wire[8] => o: wire[8] {
+    offset, i => add(8) => declare a: wire[8];
+    offset, a => add(8) => declare b: wire[8];
+    offset, b => add(8) => declare c: wire[8];
+    offset, c => add(8) => o;
+}
+
+function test() i: wire[8] => o: wire[8] {
+    literal(8, 3) => declare three: wire[8];
+    literal(8, 7) => declare seven: wire[8];
+
+    three, i => accumulate() => declare mid: wire[8];
+    seven, mid => accumulate() => o;
+}

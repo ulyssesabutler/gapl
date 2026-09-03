@@ -1,0 +1,6 @@
+# The delay model keys on the netlist function name (`addition`), not the GAPL call spelling
+# (`add`). Each add costs 4, so one accumulate chain is 16 and the pair is 32 - well above the
+# target period of 5, which is what forces registers into the middle of the chain.
+addition:
+  default: 4
+default: 1

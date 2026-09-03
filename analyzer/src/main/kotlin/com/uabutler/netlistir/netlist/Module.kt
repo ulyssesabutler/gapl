@@ -71,8 +71,16 @@ open class Module(
             .forEach { wire -> getConnectionForInputWire(wire) }
     }
 
-    fun toMutableModule(): MutableModule {
-        val newModule = MutableModule(invocation)
+    /**
+     * Deep copy of this module.
+     *
+     * [newInvocation] lets a caller give the copy a *different* identity, which is what
+     * specialising a callee for one call site needs - two clones of the same function differing
+     * only in a constant argument must not collide in the module map, and constants passed as
+     * wires are not part of [Invocation].
+     */
+    fun toMutableModule(newInvocation: Invocation = invocation): MutableModule {
+        val newModule = MutableModule(newInvocation)
 
         // Accumulate into mutable lists rather than reassigning via `wirePairs += WirePairs(...)`
         // each iteration - WirePairs.plus concatenates immutable lists, so that pattern was
