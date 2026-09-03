@@ -291,6 +291,7 @@ object ConstantSimplifier: Transformer {
     private var modulesByInvocation: Map<Module.Invocation, Module> = emptyMap()
 
     private const val MAX_EVALUATION_DEPTH = 32
+    private const val MAX_PROPAGATION_PASSES = 16
 
     private fun literalNodeFor(module: MutableModule, bits: List<Boolean>): PredefinedFunctionNode {
         val function = LiteralFunction(bits.size, valueOf(bits))
@@ -313,8 +314,8 @@ object ConstantSimplifier: Transformer {
         }
     }
 
-    private fun simplify(original: Module): Module {
-        val module = original.toMutableModule()
+    /** Folds this module to a fixpoint in place. True if anything changed. */
+    private fun foldModule(module: MutableModule): Boolean {
         var folded = 0
         var calls = 0
 
@@ -336,16 +337,88 @@ object ConstantSimplifier: Transformer {
         if (folded > 0) {
             Logger.debug {
                 "Constant-folded $folded node(s), $calls of them calls, " +
-                    "in ${original.invocation.gaplFunctionName}"
+                    "in ${module.invocation.gaplFunctionName}"
             }
         }
-        return module
+        return folded > 0
+    }
+
+    /**
+     * Pushes a constant *through* a call boundary, into the callee.
+     *
+     * A constant handed to a module as an argument is an ordinary input port on the inside - not a
+     * literal - so nothing within the callee can tell it is constant, and every constant-folding and
+     * retiming rule that keys on literals misses it. netfpga's bloom-filter is exactly this:
+     * `md5_single_round_hash` holds the MD5 initial vector as literals and passes it to
+     * `md5_iteration$p_0$`, which then registers it internally, and that register resets to 0
+     * instead of to the vector.
+     *
+     * A port is replaced only when **every** call site drives it with the same constant, which needs
+     * no cloning - the callee is still correct for all of its callers. Where call sites disagree the
+     * port is left alone; specialising it would mean cloning the callee under a fresh invocation
+     * identity, since wire-passed constants are not part of `Module.Invocation`.
+     *
+     * The port itself is left in the interface, now unused. That is deliberate: removing it would
+     * mean rewriting every call site's invocation node, and the emitted Verilog already carries
+     * unused `clock`/`reset`/`enable` ports on modules that need none.
+     */
+    private fun propagateConstantPorts(modules: List<MutableModule>): Boolean {
+        // Per callee, per port name, what each call site drives it with - null meaning "not constant".
+        val drivers = mutableMapOf<Module.Invocation, MutableMap<String, MutableList<List<Boolean>?>>>()
+
+        modules.forEach { parent ->
+            parent.getBodyNodes().filterIsInstance<ModuleInvocationNode>().forEach { call ->
+                call.inputWireVectorGroups.forEach { group ->
+                    drivers.getOrPut(call.invocation) { mutableMapOf() }
+                        .getOrPut(group.identifier) { mutableListOf() }
+                        .add(bitsOf(group.wires(), fromLiterals))
+                }
+            }
+        }
+
+        var changed = false
+        drivers.forEach { (invocation, ports) ->
+            val callee = modulesByInvocation[invocation] as? MutableModule ?: return@forEach
+            ports.forEach { (portName, seen) ->
+                val value = seen.firstOrNull() ?: return@forEach
+                if (seen.any { it == null || it != value }) return@forEach
+
+                val port = callee.getInputNodes().firstOrNull { it.name() == portName } ?: return@forEach
+                val wires = port.outputWires()
+                if (wires.size != value.size) return@forEach
+                // Nothing left to rewire means this port was already replaced on an earlier pass.
+                if (wires.none { callee.getConnectionsForOutputWire(it).isNotEmpty() }) return@forEach
+
+                val literal = literalNodeFor(callee, value)
+                wires.zip(literal.outputWires()).forEach { (from, to) ->
+                    callee.getConnectionsForOutputWire(from).toList().forEach { connection ->
+                        callee.disconnect(connection.sink)
+                        callee.connect(connection.sink, to)
+                    }
+                }
+                changed = true
+                Logger.debug {
+                    "Propagated a constant into ${invocation.gaplFunctionName}.$portName " +
+                        "(${value.size} bits, ${seen.size} call site(s))"
+                }
+            }
+        }
+        return changed
     }
 
     override fun transform(original: List<Module>): List<Module> {
-        // Callees are evaluated from the untransformed list: folding is semantic, so simplifying a
-        // module does not change what a call to it returns.
-        modulesByInvocation = original.associateBy { it.invocation }
-        return original.map { simplify(it) }
+        val modules = original.map { it.toMutableModule() }
+        modulesByInvocation = modules.associateBy { it.invocation }
+
+        // Folding and propagation feed each other: folding a caller can make an argument constant,
+        // and pushing a constant into a callee can make its body foldable. Alternate to a fixpoint.
+        var pass = 0
+        while (pass++ < MAX_PROPAGATION_PASSES) {
+            var changed = false
+            modules.forEach { if (foldModule(it)) changed = true }
+            if (propagateConstantPorts(modules)) changed = true
+            if (!changed) break
+        }
+        return modules
     }
 }
