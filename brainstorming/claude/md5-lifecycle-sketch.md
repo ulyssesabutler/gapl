@@ -2,7 +2,7 @@
 
 A paper design for a streaming MD5 on the NetFPGA pipeline, written to test the layer-1 / layer-2 /
 layer-3 decomposition before any implementation. The point is to hand-typecheck the pipeline and find
-out what breaks.
+out what breaks. See `type-system.md` for the design this exercises.
 
 Syntax follows `antlr/src/main/antlr/CST.g4`: generic parameters are ordinary parameters
 (`T: interface`, `n: integer`, `f: A => B`), no `parameter` keyword, no `<>`. Anything marked **NEW**
@@ -35,9 +35,9 @@ interface md5_digest wire[128]
 ```
 
 No `valid`, no `last`. Compare `netfpga/src/md5/processor.gapl`'s `netfpga_packet_body`, which carries
-both and passes them through by hand. `last` is derived by layer 2, `valid`/`ready` by layer 3. The
-stdlib's hand-rolled `valid(T)`/`last(T)` wrappers stop being needed as *interfaces* — though both
-come back below as the way pure functions observe lifecycle position.
+both and passes them through by hand at lines 30–32. `last` is derived by layer 2, `valid`/`ready` by
+layer 3. The stdlib's hand-rolled `valid(T)`/`last(T)` wrappers stop being needed as *interfaces* —
+though both come back below as the way pure functions observe lifecycle position.
 
 ## Layer 2: lifecycles — **NEW**
 
@@ -57,8 +57,8 @@ datatype md5_stream stream(md5_beat)
 datatype md5_blocks stream(md5_block)
 ```
 
-**A bare interface in a lifecycle position means `single`.** So `i: word => o: word` already declares
-a lifecycle and every existing signature in `processor.gapl` keeps its exact current text. The rule is
+**A bare interface in a lifecycle position means `single`.** So `i: word => o: word` already declares a
+lifecycle and every existing signature in `processor.gapl` keeps its exact current text. The rule is
 positional and worth stating carefully:
 
 | position | bare interface means |
@@ -366,7 +366,7 @@ Mitigations, in order of attractiveness:
 ### 4. The parameter system is on the critical path
 
 `regroup(32, 64)` needs byte-count arithmetic at compile time; `beat(bytes)` needs `8 * bytes`. Both
-land on the static-expression system, whose type layer is `SignatureGenericParameterType` — one
+land on the static-expression system, whose type layer is `SignatureGenericParameterType`— one
 `Integer` object and two `// TODO`s. The existing MD5 already leans on this machinery hard (64-deep
 static recursion, `(5 * iteration + 1) % 16`, static `if` chains), so it works, but layer-2 tooling
 makes the dependency structural rather than incidental.
@@ -392,23 +392,13 @@ unquantified.)
 
 ## Open questions
 
+See `type-system.md` §10 for the full list. The ones this sketch touches directly:
+
 - **`map` is overloaded** — beat-wise (generates logic) vs. per-lifecycle (generates nothing).
-  Deliberately deferred; needs distinct names eventually.
-- **Rate relationships between two ports have no syntax.** Blocks two-stream joins, `zip`, and any
-  `regroup` whose ratio isn't statically known. Doesn't block MD5. Probably the highest-priority
-  remaining gap in the lifecycle language.
-- **`enable` is not `reset`**, and after this change they sit on the same registers. A stalled cycle is
-  not a lifecycle boundary; cross-wiring them would be a subtle bug.
-- **Enable fanout.** A function-sized island puts its whole register set on one net. Fine at MD5's
-  scale, a placement problem later.
-- **One stall domain per island.** A function with two outputs consumed at genuinely different rates
-  can't be one island. Worth a diagnostic rather than a silently under-performing design.
-- **Memories need their own serializer rule** when BRAM primitives arrive — "gate every register" does
-  not extend correctly to BRAM read/write enables.
+- **Rate relationships between two ports have no syntax.** Doesn't block MD5 (`regroup`'s ratio is
+  static, and there are no two-stream joins), but blocks joins, `zip`, and dynamic `regroup`.
+- **`enable` is not `reset`**, and after this change they sit on the same registers.
+- **Enable fanout.** A function-sized island puts its whole register set on one net.
+- **Memories need their own serializer rule** when BRAM primitives arrive.
 - **`CombinationalLoopDetector` becomes the elastic-deadlock detector** once `ready` is a real netlist
-  wire, since forks and joins can close a cycle through it. Correct behaviour, but the diagnostic will
-  point at compiler-generated nodes in a flattened graph. Budget a good error message; this is the bill
-  for deferring wire sorts.
-- **`zip` on unequal-length streams**: no static check, no hardware error handling — but implement it to
-  **deadlock** (require both `last`s to coincide) rather than desynchronize, and assert in `simengine`.
-  Deadlock is loud and debuggable; desync corrupts every subsequent lifecycle.
+  wire. Budget a good error message.

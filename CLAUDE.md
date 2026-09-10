@@ -59,14 +59,23 @@ Concretely, as Gradle subprojects:
 - **`latency-finder`** — a small utility subproject, works with retiming delay models
   (`latency-finder/delay.yaml`).
 - **`python-tests`** — standalone Python scripts, unrelated to the Gradle build.
-- **`brainstorming/`** — not a Gradle subproject, just design-notes markdown (`functions.md`,
-  `interfaces.md`, `protocols.md`, `static-expressions.md`, `connector.md`, `design-patterns-in-the-wild.md`,
-  `parser.md`) plus two canonical per-effort design/status docs (`netfpga-partial-synthesis.md`,
-  `per-port-hierarchical-retiming.md` — each the entry point for its effort, with `todo.md` as the
-  backing detail) plus **`brainstorming/todo.md`** and **`brainstorming/future-work.md`** — check these
-  for standing, higher-level project TODOs/direction before assuming something hasn't been thought
-  about yet, and consider adding to them (rather than only leaving inline code comments) for
-  non-urgent findings a future session should know about.
+- **`brainstorming/`** — not a Gradle subproject, just design-notes markdown. **Start with
+  `brainstorming/claude/type-system.md`** — the active design work on GAPL's type system (the
+  three-layer model: spatial interfaces / temporal lifecycles / timing discipline), including decisions
+  made, their rationale, alternatives already rejected, and verified facts about this codebase that were
+  expensive to establish. `brainstorming/claude/md5-lifecycle-sketch.md` is the worked example;
+  `brainstorming/claude/applications.md` is the application roadmap with per-application feasibility.
+  `brainstorming/claude/` is also where the other canonical per-effort design/status docs live
+  (`netfpga-partial-synthesis.md`, `per-port-hierarchical-retiming.md` — each the entry point for its
+  effort, with `todo.md` as the backing detail). `brainstorming/protocols.md` is a current, still-active
+  rewrite of the spatial/temporal/timing framing the type-system work builds on. Everything under
+  `brainstorming/archive/` (`functions.md`, `interfaces.md`, an older draft of `protocols.md`,
+  `static-expressions.md`, `connector.md`, `design-patterns-in-the-wild.md`, `parser.md`, plus
+  `archive/examples/`) predates the type-system work and is superseded — still useful for motivation and
+  history, but see the syntax warning below. **`brainstorming/todo.md`** and
+  **`brainstorming/future-work.md`** carry standing higher-level TODOs; check these before assuming
+  something hasn't been thought about, and consider adding to them (rather than only leaving inline code
+  comments) for non-urgent findings a future session should know about.
 
 ## Build & verification conventions
 
@@ -114,3 +123,13 @@ Concretely, as Gradle subprojects:
   (data class) equality in a graph algorithm, silently merging distinct nodes from different call
   sites of the same function. If you're keying a collection by a netlist type and something is
   behaving as if two different things are "the same," check this first.
+- **Markdown design notes are not a reliable source of GAPL syntax.** `brainstorming/archive/interfaces.md`
+  and several `gapl-example/wip/*.gapl` files use `<T>` generics and a `parameter` keyword that do **not**
+  exist in the grammar. The authority is `antlr/src/main/antlr/CST.g4`: generic parameters are ordinary
+  parameters (`interface pair(T: interface, U: interface)`,
+  `function repeat(I: interface, factor: integer, operation: I => I)`), there is no `<>` syntax and no
+  `parameter` keyword, and `parameterDefinitionType` is `integer | interface | <inputs> => <outputs>`.
+  Check the grammar, or a current `.gapl` file under `netfpga/src/`, before writing GAPL.
+- **Uncommitted work does not survive.** Sessions run in ephemeral containers that get reclaimed; a
+  design document written but not pushed is lost with the container. Commit and push anything worth
+  keeping before the session goes idle.
