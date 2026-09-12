@@ -48,6 +48,27 @@ recurrences.
 `select(etherType)`), which is the alternation gap. Splitting the target this way keeps the immediate
 version feasible while making the general version an explicit, scheduled piece of work.
 
+**Shape settled in the 2026-09 layer-2 session.** The parser converts
+`infinite(stream(axi_beat))` → `infinite(packet)`, where `packet` is a datatype of the form
+`seq { header1: single(V1); header2: single(V2); headerbody: single(V3); body: stream(V4) }` and every
+`Vn` is a **view** of the one base interface `axi_beat` (`type-system.md` §3–§4). So views are not
+optional decoration for this application — the one-base-per-datatype rule makes them the mechanism that
+lets a `seq` have heterogeneous phases at all. The conversion itself generates only the phase-tracking
+FSM: same base, re-typed temporal structure, no datapath.
+
+Two things this application will run straight into:
+
+- **Headers do not align to beat boundaries.** An Ethernet header is 14 bytes and an IPv4 header 20, so
+  on a 32-byte beat they share beat 0 and the 5-tuple straddles beats 0 and 1. A phase's view therefore
+  routinely covers the tail of one protocol header and the head of the next — which is why the view
+  should be a struct of structs, and why **spatial alternation** (choosing an interpretation from a
+  field in the *same* beat) is needed alongside `choice`. See `type-system.md` §4.
+- **The fixed-offset restriction is load-bearing, not a shortcut.** Assuming IHL = 5 and one VLAN case
+  is what keeps the number of view variants enumerable. Lifting it makes the body's start offset a
+  computed value, at which point the layout depends on a term and you need either normalization (a
+  barrel shifter, with the offset carried as a value) or the deferred dynamic-offset package in
+  `type-system.md` §10 item 15.
+
 ### 2. CRC32 / Ethernet FCS
 
 A `fold` over the packet — same shape as MD5, but the per-beat step is a linear XOR network roughly ten

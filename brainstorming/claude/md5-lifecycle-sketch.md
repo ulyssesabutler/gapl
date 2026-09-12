@@ -178,9 +178,10 @@ never as control. That's the whole ergonomic bet.
 `map` requires a combinational `op`. Non-zero latency enters only through hard macros (BRAM, DSP,
 vendor IP), which are latency-declaring channel functions rather than lifted pure functions.
 
-`map` is currently overloaded: beat-wise (combinational `op`, generates logic) and per-lifecycle
-(`op` is a whole pipeline, generates *nothing* — a module already is a standing process). Different
-hardware meanings, same name for now; see Open questions.
+`map` used to be overloaded, covering both the beat-wise case (combinational `op`, generates logic) and
+the per-lifecycle case (`op` is a whole pipeline, generates *nothing* — a module already is a standing
+process). **Resolved:** the per-lifecycle sense is now `oneach`, a type-level operator that emits no
+hardware, and `map` keeps only the beat-wise meaning. `md5_application` below uses `oneach`.
 
 ## The pipeline
 
@@ -188,7 +189,7 @@ hardware meanings, same name for now; see Open questions.
 function md5_application()@ready_valid
     i: infinite(stream(axi_beat)) => o: infinite(stream(axi_beat))
 {
-    i => map(md5_packet) => o;
+    i => oneach(md5_packet) => o;
 }
 
 function md5_packet()@ready_valid i: stream(axi_beat) => o: stream(axi_beat)
@@ -394,7 +395,7 @@ unquantified.)
 
 See `type-system.md` §10 for the full list. The ones this sketch touches directly:
 
-- **`map` is overloaded** — beat-wise (generates logic) vs. per-lifecycle (generates nothing).
+- ~~**`map` is overloaded**~~ — resolved; the per-lifecycle sense is `oneach`. See `type-system.md` §6.
 - **Rate relationships between two ports have no syntax.** Doesn't block MD5 (`regroup`'s ratio is
   static, and there are no two-stream joins), but blocks joins, `zip`, and dynamic `regroup`.
 - **`enable` is not `reset`**, and after this change they sit on the same registers.

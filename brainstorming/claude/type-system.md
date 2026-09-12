@@ -5,6 +5,13 @@
 This is the "why" behind `md5-lifecycle-sketch.md` (the worked example) and `applications.md` (the
 roadmap). Read this one first.
 
+> **Layer-2 session (2026-09).** A working session took layer 2 on its own, with layer 3 deliberately
+> set aside. It settled: the `interface`/`datatype` keyword split; **views** (§3); one base interface
+> per datatype; cross-phase access forbidden in favour of `scan` state (§4); the spatial-vs-temporal
+> alternation distinction (§4); the top-level type and the external-boundary rule (§4); `map`/`oneach`
+> (§6); and the line between what belongs in the language and what belongs in the stdlib (§6). Those
+> sections carry the detail.
+
 > **Syntax warning.** `brainstorming/archive/interfaces.md` and several `gapl-example/wip/*.gapl` files
 > use `<T>` generics and a `parameter` keyword that **do not match the actual grammar**. Real syntax, per
 > `antlr/src/main/antlr/CST.g4`: generic parameters are ordinary parameters —
@@ -154,9 +161,104 @@ The one change is subtractive: `valid` and `last` leave the interface. Compare
 `netfpga/src/md5/processor.gapl`'s `netfpga_packet_body`, which carries both and passes them through by
 hand at lines 30–32. `last` becomes derived by layer 2, `valid`/`ready` by layer 3.
 
+### Views
+
+A **view** is a named reinterpretation of an interface's bits — a second set of names bound to bit
+ranges of an existing value, not a new value.
+
+```text
+interface axi_beat { data: wire[256]; keep: boolean[32]; }
+
+view eth_hdr  of axi_beat { dst: data[0:47]; src: data[48:95]; ethertype: data[96:111]; }
+view ipv4_hdr of axi_beat { version: data[0:3]; ihl: data[4:7]; /* ... */ }
+```
+
+**Views cost nothing.** `data[0:47]` is the same 48 wires under another name — the IR already models
+this as `WireVector.Projection` rather than a copy, and in Verilog it is a slice of the same net. No
+mux, no register, no LUT.
+
+**Why they exist.** The original sum-type sketch proposed "a tag plus one field per case, no overlay,"
+with overlaying onto a shared wire budget deferred as "a pure optimization for later" the compiler
+would perform. That is in real tension with goal 7 — deferring the actual wire layout to an invisible
+compiler pass is exactly what GAPL should not do. Views make the overlay something the user writes.
+The "tagged union over a shared wire budget" in §4 stops being derived and becomes authored.
+
+Their justification is **interop, legibility, and storage — not combinational area.** Cost hierarchy
+for this design, worth internalizing before arguing about layout:
+
+| tier | what | cost |
+|---|---|---|
+| 1 | wire naming, slicing, views, statically-known lifecycle extent | free — nothing emitted, or it constant-folds |
+| 2 | a data-dependent layer-2 FSM | small, bounded — sized by *phase count*, not data width; order of tens of FFs |
+| 3 | anything **stored** (buffers, skid buffers, a beat held across a stage) | real, proportional to width |
+| 4 | the datapath (MD5's 64 rounds, AES's 10, the CMS sketch) | dominant |
+
+Overlay-vs-duplicate is immaterial at tier 1 and decisive at tier 3: a parsed 5-tuple *held* while the
+body streams past really does cost N× the flip-flops if each variant gets its own fields.
+
+### Rules for views
+
+- **Views produce no ports.** A view is slicing applied to a base-interface value inside a body, not a
+  port type of its own.
+- **Structural, not bit-flat.** A view is defined over the base's named fields and their slices, never
+  over its flattened bit string — otherwise you can write a view cutting incoherently across `data` and
+  `keep`, which is never meaningful.
+- **Partial views are legal, and the obligation is asymmetric.** *Reading* through a view is a
+  **projection** — name the bits you care about, no obligation for the rest. *Writing* through a view is
+  a **construction** — you must produce a complete value of the base, so unnamed bits are an obligation
+  you have not discharged. Partial view + output is an error unless the view declares a fill.
+- **Unnamed bits are don't-care**, not zero. Zero-filling silently asserts a value someone may come to
+  depend on. `left_pad` in the stdlib is the existing idiom for an explicit fill
+  (`literal(padding, 0) => o[original:original + padding - 1]`).
+- **No implicit widening** from a view-typed lifecycle to its base. This is what makes don't-care
+  *safe* rather than merely honest: no type grants access to the unnamed bits, so nothing can read
+  them. An explicit widen is where a fill gets declared.
+- **External (hardware) interfaces may not use views.** Their datatype is over a plain GAPL interface.
+  This is what removes the correctness concern entirely — undriven bits can never reach a real bus,
+  where "nobody reads them" would be false. A boundary keyword marks these; see §4.
+
+**Undriven wires are a hard error today, at bit granularity** — `NodeBuilder.validateWiresConnected`
+(`analyzer/.../netlistir/builder/NodeBuilder.kt:121-147`) reports `UndrivenOutputPort` if *any single
+wire* of an output group lacks a driver. So "the unused bits will just be optimized away" is not the
+current behaviour; the compile fails before codegen. The rules above are what keep that check intact.
+
+**Scope.** Views describe **static** header layouts, which covers the near-term applications. The
+dynamic case — fields at runtime-computed offsets — is a stdlib `parse` over a stream, deliberately
+deferred; see §6.
+
 ---
 
 ## 4. Layer 2 — temporal (new)
+
+### The keyword, and what a datatype is anchored to
+
+`brainstorming/examples/md5-fsm.md` already established the keyword split, with each layer defined over
+the one below and all three sharing the shape of the existing `aliasInterfaceDefinition` in `CST.g4`
+(`Interface Id parameterDefinitionList? expression`), so this is a small grammar delta:
+
+```text
+interface partial_byte_array(size: integer) { data: byte[size]; valid: boolean[size]; }   // layer 1
+datatype  byte_array_stream(size: integer)  stream(partial_byte_array(size));             // layer 2
+```
+
+> **`md5-fsm.md` is stale on two points** (confirmed with its author): it types the NetFPGA top level as
+> a bare `stream` rather than `infinite(stream(...))`, and it introduces `protocol` as a *definition
+> form* for layer 3, which is superseded by the function annotation + call-site coercion in §5. The
+> `interface`/`datatype` keywords from it stand. That file lives outside this directory and has not
+> been edited.
+
+**A datatype is anchored to exactly one base interface, and its constructs range over views of that
+base.** Hard rule. The compact statement:
+
+> The base interface pins the wire budget, the views are the alphabet, and the datatype is the regex
+> over that alphabet.
+
+This is what keeps the wire budget explicit: on a 256-bit AXI beat, every phase is physically one
+`axi_beat`, and the datatype describes only how the meaning of those same 256 bits changes over time.
+The apparent awkwardness of a narrow phase inside a wide base argues *for* the rule — anything crossing
+a physical channel has uniform width anyway, so the cost is identical either way and the rule merely
+makes you write it down. It also gives `regroup` a clean type: a function between two datatypes with
+*different* bases, i.e. crossing base interfaces requires an explicit gearbox.
 
 A **regular expression over beat types**:
 
@@ -237,6 +339,19 @@ The lifecycle language has concatenation, bounded repetition, and Kleene star. *
 can describe decoders (fixed structure, possibly variable length) but not parsers (structure chosen by
 content). P4's parser model — `select(etherType)` transitioning to IPv4 vs. IPv6 — is not expressible.
 
+**Two kinds of alternation, and only one of them is `choice`.** Keeping these apart matters because
+their costs differ by orders of magnitude:
+
+| | selector and selected content | mechanism | cost |
+|---|---|---|---|
+| **spatial** | in the *same* beat (ethertype at bytes 12–13 decides how bytes 14+ of beat 0 read) | comparator + mux, everything on the wires at once | combinational, cheap |
+| **temporal** (`choice`) | continuation differs in *beat count* after this phase | real FSM state | small but real |
+
+Spatial alternation is the **sum type** — the thing this design started from, before views arrived —
+and it needs to come back in, because the straddling problem forces it: protocol headers do not align
+to beat boundaries, so a beat routinely contains a selector and the field it selects. It is the cheap
+one. `choice` is the expensive one, and it is what the rest of this section is about.
+
 This unifies with something already wanted: `brainstorming/archive/protocols.md:193` asks for "a format
 where the length of the packet is computed based on a parsed value." Data-dependent *length* and
 data-dependent *branching* are both instances of one feature:
@@ -260,6 +375,76 @@ which is the real structure of packet processing anyway.
 
 Implementation is not novel: a lifecycle type is a regex over beats, and Brzozowski derivatives give a
 textbook regex→DFA construction.
+
+### The access surface: a phase's view is live only during that phase
+
+**Cross-phase field access is forbidden. Anything you need later is `scan` state.** The L4 load
+balancer does not reach back for `i.eth.dst` while the body streams; it runs a `scan` whose accumulator
+is a `five_tuple`, filled during the header phases and read thereafter.
+
+Two reasons, and the second is the real one:
+
+1. The storage appears **in the signature**, as the declared state type. A `scan` over `five_tuple`
+   says "104 flip-flops" in the source rather than in a compiler report. Reporting an implied cost was
+   considered and rejected — a cost that matters has to be visible where the code is written, which is
+   the same reasoning §7 used to reject LSP inlay hints for island boundaries.
+2. §2 says a layer-2 description is schedule-neutral only if its transitions are **causal and local** —
+   next state a function of the current beat and current state. That is exactly what `scan`'s `step`
+   receives. So forbidding cross-phase access is not an arbitrary restriction; **it is §2's causality
+   criterion made syntactic.** Cross-phase field access would permit descriptions that violate it,
+   which is precisely why it would then need cost-reporting to stay honest.
+
+A useful consequence for the alternation work: since a selector can only reference what is already in
+scan state, and scan state can only contain what was extracted from consumed beats, **causality holds
+by construction** rather than needing scoping rules to enforce it.
+
+### Position is unambiguous, because a channel can delimit only one variable extent
+
+A `packet = seq { h1: single(V1); h2: single(V2); hb: single(V3); body: stream(V4) }` carries exactly
+one `last` — the body's — and because `body` is the final phase, the body's `last` *is* the packet's
+end. The three `single` phases are statically sized, so tracking them is a 2-bit counter: §2's
+"static extent → the FSM evaporates" row.
+
+This generalizes: **at most one variable-extent level is delimitable per channel**, because the bus
+carries one `tlast`. A datatype with two variable-extent phases (`seq { a: stream(X); b: stream(Y) }`)
+is not physically expressible on a single AXI-Stream at all — there is no delimiter to mark where `a`
+ends. So the rule falls out of the boundary rule below rather than needing to be imposed.
+
+### The top-level type, and what "external" constrains
+
+**A NetFPGA pipeline stage's top level is `infinite(stream(axi_beat))`**, not a bare `stream` and
+certainly not raw. The deciding argument was configuration scope, per the bounded-vs-unbounded decision
+above: `ss() needle: single(string), haystack: stream(char)` and
+`ss() needle: single(string), haystacks: infinite(stream(char))` describe genuinely different
+applications — one needle per haystack versus one needle for the life of the design — and only the
+explicit form can say which.
+
+An earlier instinct that "top-level interfaces must be raw" was mis-scoped. It is not the lifecycle that
+must be raw; it is the **base interface at an external boundary**:
+
+> At an external boundary, the base interface must be exactly the physical wire budget, and the
+> lifecycle's **delimiters** must map onto signals the external protocol already carries.
+
+For AXI-Stream: base = `tdata`/`tkeep`, `stream`'s `last` ↔ `tlast`, and (when layer 3 returns)
+`@ready_valid` ↔ `tvalid`/`tready`. Every part of the layer-2 description corresponds to a wire that
+already exists, so the type is **pure description** — zero synthesized hardware at the boundary, which
+is the L1 "describe & check" ambition landing where it should. Structure *above* the delimiters
+(`seq`, `choice`, views) is free there, because it is reconstructed internally by counting beats —
+"the state is the tag, no in-band bits needed." What you cannot declare is a lifecycle whose delimiters
+the bus does not provide.
+
+A **keyword marks these boundaries**. It is needed anyway: the contract already exists implicitly, since
+`gapl_wrapper.v` instantiates `packet_body_processor` by name with a hand-written port list. The same
+marker should serve the foreign-IP escape hatch §6 requires — a port connecting to something GAPL did
+not generate — rather than inventing a second mechanism, and it also gives `Flattener` and the Verilog
+emitter a single thing to key off for "this module's port list is load-bearing."
+
+### A general principle, now decided three times
+
+**GAPL requires explicit conversions at layer boundaries.** No implicit widening (view → base), no
+implicit lifting between lifecycle levels (§6), and mandatory call-site coercion once layer 3 returns
+(§5). Bare-means-`single` is not an exception: it is notation for how a written type is *read*, not a
+silent conversion of a value at a connection.
 
 ---
 
@@ -434,9 +619,14 @@ scan_with_tail(T, U, S: interface,
 - **`map` requires a combinational `op`.** Non-zero latency enters only through hard macros (BRAM, DSP,
   vendor IP), which are latency-declaring channel functions, not lifted pure functions. This means v1
   needs no latency analysis — just "does `op` contain registers."
-- **`map` is currently overloaded**: beat-wise (combinational `op`, generates logic) and per-lifecycle
-  (`op` is a whole pipeline, generates *nothing* — a module already is a standing process). Deliberately
-  deferred; needs distinct names eventually.
+- **`map` was overloaded; the per-lifecycle sense is now `oneach`.** Beat-wise `map` takes a
+  combinational `op` and generates logic. Per-lifecycle `oneach` takes a whole pipeline and generates
+  *nothing* — a module already is a standing process. The overload was never *ambiguous* (it resolves by
+  kind: `op`'s argument is an interface in one case, a datatype in the other), but the reader could not
+  tell from the source whether a given `map` instantiated a datapath or nothing at all, which is goal 7.
+  Making the per-lifecycle case implicit was considered and rejected — no implicit lifting. Note
+  `oneach` is a **type-level** operator rather than a combinator: it emits no hardware, so it does not
+  belong in the same list as `map`/`scan`/`fold`/`regroup`.
 
 ### Graduated access to layers 2 and 3
 
@@ -454,6 +644,65 @@ The tier a function occupies should be legible from its signature.
 - **Tier 4** — raw `valid`/`ready`/`fire`. For writing primitives (skid buffers, arbiters) and foreign IP
   wrappers. `axis_arbiter`, `duplicate`, `stream_case` in `brainstorming/archive/examples/checksum_gadl.txt`
   are all Tier 4 — and would become *stdlib*, not application code.
+
+### The language/stdlib line
+
+> **Lifecycle structure belongs in the language. Field extraction belongs in the stdlib.**
+
+Layer 2's job is temporal agreement and delimiters — `stream`/`seq`/`choice`, `last`, phase — because
+that is what producer and consumer must agree on and what nothing else can check. Offsets, straddling,
+shifting, and accumulation move out.
+
+This resolves a real tension (efficient-and-visible hardware versus ordinary software-engineering
+reuse) along a line the design had already drawn once: §6 restricts `register` to the stdlib rather than
+removing it, and requires "an explicitly marked escape hatch for stdlib primitives and foreign IP." A
+stdlib function's cost is visible **because you can read its source**. So the line goal 7 draws is not
+*compiler generates hardware vs. does not* — it is **hardware you can read the source of vs. hardware
+conjured from a type.**
+
+**The evidence this works is already in the repo**, hand-written:
+
+- `netfpga/.../hdl/util/axis/axis_parser.v` extracts a field between static `START_INDEX`/`END_INDEX`
+  *of the whole packet*: it tracks `bits_read`/`bits_written`, masks each beat to the contributing
+  sub-range, shifts it into position, ORs it into an accumulator, and raises `parsed_value_ready` when
+  complete. It handles straddling internally and **never aligns the datapath**. It is a prober — it does
+  not drive `tready`.
+- `netfpga/.../hdl/util/axis/axis_trim_front.v` is the alignment half, statically parameterized by
+  `BYTES_TRIMMED`.
+
+Together they are the extract-into-registers model — the same shape as P4's extract-into-PHV.
+
+**What GAPL needs to write `axis_parser` as a stdlib function**, against what exists today:
+
+| needs | status |
+|---|---|
+| static parameter arithmetic (`END - START + 1`, comparisons) | exists — MD5 already does `(5 * iteration + 1) % 16` and static `if` chains |
+| cross-beat state (`bits_read`, `bits_written`, accumulator) | `register` today, `scan` later |
+| dynamic shift by a runtime amount | stdlib has `single_shift_left/right`, `constant_shift_left/right`; a barrel shift is the classic log-depth composition, buildable with existing static recursion |
+| mask over a computed range | comparisons + `replicate` |
+| a "field complete" flag | `valid(T)`, already in the stdlib |
+
+So it appears to need **no new language primitives** — only the barrel-shifter composition is worth
+prototyping before believing. And because `START`/`END` are static while `bits_read` advances by a fixed
+stride, the field starts in a statically known beat at a statically known offset, so most of those
+"dynamic" shifts are constant-foldable *per instantiation* — something GAPL's static parameters can do
+and the hand-written Verilog leaves to the synthesis tool. (`axis_parser.v:78` says as much: "Let's just
+do the lazy method. There's a faster way to do this that we can implement if this doesn't meet timing.")
+
+### Where parsing actually gets expensive
+
+| | mechanism | cost |
+|---|---|---|
+| branching on a parsed value | comparator + FSM state | cheap |
+| extent bounded by a length field | down-counter + zero compare | cheap |
+| **reading at a runtime-computed offset** | **alignment / barrel shifter** | **the expensive one** |
+
+Almost all of general parsing is affordable provided "read inside a variably-offset region" stays out —
+and P4 arrived at exactly that restriction independently, by making `varbit` opaque (see §9). Two ideas
+worth taking when the dynamic case is tackled: **length-derived `last`** (a bounded sub-lifecycle whose
+extent comes from a parsed value rather than an in-band flag — Kaitai's substream, a down-counter in
+hardware), and **opaque variable regions** (carriable and re-emittable, readable only after explicit
+normalization). Both deferred; neither blocks the static-header applications.
 
 ---
 
@@ -528,6 +777,26 @@ tree during the 2026-09 merge of this document — locations below are current a
   `RECURSIVE`; `RECURSIVE` is the common mode and inlines only *self*-recursive calls, leaving other
   module-invocation calls un-inlined — so there is no single flat netlist to analyze, matching the
   claim in substance.
+- **Undriven wires are a hard error, at bit granularity.** `NodeBuilder.validateWiresConnected`
+  (`analyzer/.../netlistir/builder/NodeBuilder.kt:121-147`) walks every input wire of every
+  `OutputNode`/`BodyNode` and reports `BuilderDiagnosticKind.UndrivenOutputPort` if *any single wire* in
+  a group lacks a connection. There is no "it'll be optimized away" path — the compile fails before
+  codegen. The check runs per-module during netlist construction, so it has no whole-program liveness
+  information (contrast the combinational-loop check, which is whole-program and runs after all modules
+  build).
+- **There is a hand-written `axis_*` utility library** at
+  `netfpga/packet-processor/projects/reference_switch/hw/hdl/util/axis/` — roughly fourteen modules
+  including `axis_parser`, `axis_trim_front`, `axis_data_width_converter`, `axis_queue`,
+  `axis_hold_metadata`, `axis_3_to_1_arbiter`, `axis_mutual_exclusion`. This is, in effect, the
+  hand-written version of the stdlib this design implies, and it is the right baseline to compare
+  against. `axis_parser`/`axis_trim_front` are dissected in §6.
+- **Realignment is expensive to hand-write even for a fixed offset.**
+  `netfpga/packet-processor/lib/hw/contrib/cores/vlan_remover_v1_00/hdl/vlan_remover.v` is 415 lines: a
+  seven-state FSM (one state commented "Realigning packets"), a 4-deep input FIFO, and a 512-bit
+  holding register concatenating the previous beat with the current one to slice a 256-bit window out
+  (`ns_tdata = {32'd0, fifo_axis_tdata, tdata[223:0]}`) — all for a **hardcoded 4-byte** shift. There is
+  a matching `vlan_adder`. That window structure is the same one hardware packet parsers use generally
+  (§9).
 
 ---
 
@@ -551,6 +820,47 @@ Confidence marked. Unverified items were recalled, not checked.
 - *ShakeFlow* — Han, Jang, Kang, ASPLOS 2023. Typed valid-ready channels + combinators. Already in
   `brainstorming/archive/examples/checksum_shakeflow.txt`.
 - *Interface Automata* — de Alfaro & Henzinger, 2001. Component type as protocol state machine.
+
+**Packet parsing specifically** (surveyed in the 2026-09 layer-2 session; sources checked, not recalled)
+- *Design Principles for Packet Parsers* — Gibb, Varghese, Horowitz, McKeown, ANCS 2013 (best paper).
+  Hardware parsers **consume the packet in fixed-size chunks per cycle**, and fields straddling a chunk
+  boundary are handled by multiplexing over a window spanning the previous and current chunk, with
+  alignment circuitry to extract a field regardless of its position in that window. Ships a parser
+  generator emitting synthesizable Verilog. *Architecture confirmed from the paper; the quantified area
+  numbers were not extracted and are worth reading first-hand.*
+- **P4.** `varbit`'s width is inferred as `(8 * length) - sum_of_fixed_fields`, at most one per header,
+  and the length must be known **before** extraction, from earlier fixed-width fields. The restriction
+  list is the informative part: you may emit a varbit unchanged in the deparser, `setInvalid()` it, copy
+  a whole header of identical type, or assign from another varbit of matching max width — you may
+  **not** use it as a table key, do arithmetic, compare, do bitwise ops, or extract/modify any of its
+  bits. So P4's answer to dependent offsets is *let the region exist but make it opaque*, because
+  reading bit *k* at a runtime offset needs a dynamic mux. Header **stacks** handle regularly-formatted
+  repetition (VLAN, SRv6) as "1 to N instances of identically-sized portions," N statically bounded —
+  independent confirmation of the DAG-only + bounded-repetition call above. Deparsing is explicit
+  (`packet.emit(hdr)`, conditional on a per-header **validity bit** — literally `valid(T)`), which is
+  how P4 avoids output alignment: emit the valid headers in order, then the residual payload.
+  *A wart to avoid:* because varbit is so restricted, P4 users define two header types, one with varbit
+  for parsing and one without for construction.
+- **Kaitai Struct.** Declarative binary formats. **Substreams** are the idea worth stealing: `size` on a
+  type reference creates a bounded sub-stream the inner type physically cannot read past, and
+  `size-eos` inside means "end of *my* allotment" — so the inner type is written once and reused
+  bounded or not. Also `switch-on`/`cases` (spatial choice on a parsed value), `if` (conditional
+  presence), three `repeat` forms, and `params`/`args`. Its explicit negative is `instances` with
+  `pos:` — random access, lazy, and documented as *incompatible with forward-only parsing*. That is the
+  line streaming hardware cannot cross.
+
+**Note on P4's model vs. GAPL's.** P4 is target-dependent: on fixed-function ASICs the compiler
+*configures* an existing programmable parser (allocating parser states, packing the PHV) and **fails to
+compile** if the program exceeds the budget; on FPGA targets it compiles to HDL. GAPL is unambiguously
+in the generation camp. The consequence is that P4's restrictions are a mix of two kinds and only one
+transfers: *cost-driven* ones do (varbit opacity, bounded repetition, length-known-before-extraction —
+which is just §2's causal-and-local condition restated), while *budget-driven* ones do not (max parser
+state count, PHV width, one-varbit-per-header). The deeper structural difference: **P4 hides beats,
+GAPL exposes them.** A P4 parser is an imperative state machine the programmer writes (`state` blocks,
+`transition select`), and chunking is a target detail the compiler handles; a GAPL `datatype` is a
+declarative format description from which the FSM is derived. Kaitai is the stylistic cousin, P4 the
+domain cousin — and P4 therefore offers no precedent for deriving an FSM from a format, which is why
+the pointer above is to Brzozowski rather than to P4.
 
 **Scheduling as a design space**
 - *Combining Dynamic & Static Scheduling in High-Level Synthesis* — Cheng, Josipović, Constantinides,
@@ -586,17 +896,26 @@ same wires each cycle rather than as alternation.
 Ordered roughly by how much they block.
 
 1. **Alternation in the lifecycle language** (§4). Unlocks a whole application class — parsers,
-   classifiers with real keys, anything protocol-dependent. Now ranked above (2), since it also closes
-   `brainstorming/archive/protocols.md`'s data-dependent-length request. Fastest partial path: **sum
-   types + `match`**, which works under *today's* GAPL with `register` and `if_else`, and is a strict
-   prefix of the full work. Implementation hint: represent a variant as a record with a tag plus one
-   field per case; overlay onto shared wires later as an optimization. Reuses existing `WireVector`
-   flattening.
+   classifiers with real keys, anything protocol-dependent. Still ranked first, but **narrowed** by the
+   2026-09 session: `choice` is confirmed **DAG-only**; causality is now automatic rather than something
+   scoping rules must enforce, since a selector can only read `scan` state and `scan` state can only
+   hold what earlier beats produced. What remains is (a) where **spatial** alternation lives — the
+   same-beat, combinational, sum-type case that the straddling problem forces (§4) — and (b) whether
+   there is a lookahead limit. The overlay hint that used to sit here is superseded: variants share a
+   wire budget through **views** (§3), authored rather than optimized into place.
 2. **Rate relationships between two ports have no syntax.** Blocks two-stream joins, `zip`, and any
    `regroup` whose ratio is not statically known. A generated join silently asserts 1:1, and violation
-   manifests as deadlock rather than a type error.
-3. **`map` is overloaded** — beat-wise vs. per-lifecycle, one generating logic and one generating
-   nothing. Deliberately deferred; needs distinct names.
+   manifests as deadlock rather than a type error. **Classification (2026-09):** the *enforcement* is
+   layer 3 (the join, the handshake), but the *specification* is layer 2, since a rate relationship is
+   stated purely in beat counts and is stall-invariant. Pushing the whole concern to layer 3 would
+   repeat the mistake of leaving `last` in the interface. Deferrable in practice, because rate
+   relationships hold between concurrent *ports of a signature*, not between phases of a datatype —
+   orthogonal to the datatype grammar, so nothing decided so far precludes adding it. The gap is also
+   narrower than it reads: static single-in/single-out ratios already work, expressed in the beat types
+   (`regroup(32, 64)` is `stream(beat(32)) => stream(beat(64))`); what is missing is ratios not
+   statically known, and relationships between two separate input ports.
+3. ~~**`map` is overloaded**~~ — **resolved (2026-09):** the per-lifecycle sense is now `oneach`, a
+   type-level operator that emits nothing; `map` keeps the beat-wise, logic-generating meaning. See §6.
 4. **Direction reversal / control plane.** Runtime-configurable rule tables need a host write path
    (AXI4-Lite: address, write-enable, request/response). Information flow reverses by phase, which the
    unidirectional lifecycle language cannot express. This is the deferred session-types case. An
@@ -629,6 +948,15 @@ Ordered roughly by how much they block.
     `CombinationalLoopDetector`'s old flattening approach and already fixed. Whether layer-2/3 work
     reintroduces a compile-time concern worth tracking is genuinely open, but the specific evidence
     cited for it was wrong.
+14. **Field-access syntax.** The *mechanism* is settled — current-phase access only, via the phase's
+    view; cross-phase carry via `scan` state; lifecycle position reaching pure functions as data through
+    wrapper records (§4, §6). The concrete surface syntax is not written down.
+15. **The dynamic-offset path**, deliberately deferred as a package: a stdlib `parse(START, END)` over a
+    stream (§6), **length-derived `last`** (a bounded sub-lifecycle whose extent comes from a parsed
+    value — Kaitai's substream, a down-counter in hardware), and **opaque variable regions** (P4's
+    varbit discipline). None of it blocks the static-header applications; all of it is needed for a
+    general parser. Note this is the same machinery as dynamic `regroup` in (2), so deferring one
+    largely defers the other.
 
 ---
 
