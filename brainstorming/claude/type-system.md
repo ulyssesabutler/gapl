@@ -373,8 +373,79 @@ loops give unbounded, data-dependent extent and undecidable buffer sizing — th
 CSDF → boolean dataflow. **Recommend DAG-only, with `stream(T)` for the genuinely unbounded tail**,
 which is the real structure of packet processing anyway.
 
-Implementation is not novel: a lifecycle type is a regex over beats, and Brzozowski derivatives give a
-textbook regex→DFA construction.
+**On the automata theory** — an earlier draft of this document claimed "implementation is not novel: a
+lifecycle type is a regex over beats, and Brzozowski derivatives give a textbook regex→DFA
+construction." That is too glib, and it points at the wrong problem:
+
+- Classical Brzozowski assumes a finite alphabet of concrete symbols. Ours is 2²⁵⁶ possible beats with
+  transitions guarded by *predicates*, which is **symbolic finite automata** — transitions labelled by
+  predicates from a decidable Boolean algebra, where the derivative construction does generalize
+  (Veanes et al., §9). Established, but a meaningfully larger body of work than "textbook." Predicates
+  that also read `scan` state push further still, toward extended/register automata.
+- **More importantly, none of it is needed for codegen.** Deriving the FSM from a datatype is plain
+  structural recursion: a `seq` is a counter, a `choice` is a branch, a `stream` runs until `last`. The
+  automata machinery is only needed to decide **structural type equivalence** — whether a producer's
+  datatype and a consumer's describe the same beat language — and only if datatype compatibility is
+  structural rather than nominal. That question is still open (§10 item 1).
+
+### Decisions for `choice` and spatial alternation
+
+Settled in the 2026-09 session.
+
+**Spatial alternation is a language construct, not a stdlib function.** It emits only a mux over wires
+already present, and `if_else` could nearly express it today — but what you want from it is the
+*guarantee* that you cannot read `ipv4.src` off something that resolved to IPv6, and a stdlib function
+cannot provide a compile-time property. This sharpens the language/stdlib line from §6:
+
+> Anything whose value is a **circuit** may live in the stdlib. Anything whose value is a **static
+> guarantee** has to be in the language.
+
+**Selector provenance falls out of the access rule.** Since a phase's view is live only during that
+phase, `choice(hdr.ethertype)` is legal only while still in `hdr` — which is exactly the moment the
+transition out of it is computed. So:
+
+| selector reads | legality | cost |
+|---|---|---|
+| the phase being transitioned out of | legal | a comparator on the path to the FSM transition — §2's "late-arriving control" |
+| anything earlier | not reachable as a view; must be in `scan` state | registered, free |
+
+The two are syntactically distinct, so the cost is visible in the source without needing a report.
+
+**Every `choice` declares an `else`, and don't-care is the sugared form.** Requiring it turns an
+implicit assumption into a written assertion; sugaring it keeps the efficient option available. Two
+constraints:
+
+- **Don't-care means "synthesis may route this to any existing branch," not "undefined state."** For a
+  temporal `choice` the FSM lands somewhere physically, and an undefined state may never reach `last` —
+  which desynchronizes every subsequent lifecycle on that channel, permanently. Same reasoning §5 used
+  for `zip`: deadlock is debuggable, desync is not. Routing to an arbitrary existing branch costs
+  nothing and keeps the lifecycle terminating.
+- **`simengine` asserts on the don't-care case.** This is the lesson of Verilog's
+  `full_case`/`parallel_case`, whose bad reputation came not from the idea but from simulation and
+  synthesis disagreeing about unlisted cases. Synthesize to nothing, assert in simulation — the same
+  move §5 makes for `zip`, "where it is free."
+
+Spatial alternation may leave its no-match case as genuine don't-care: undefined bits, bounded damage.
+
+**A selector is an `expression`, not a `circuitExpression`.** `CST.g4:68-82` already gives arithmetic,
+comparison, logical operators and accessors — enough for `ethertype == 0x0800` or
+`version == 4 && ihl > 5` — with zero grammar delta and combinational-by-construction for free. Letting
+a full circuit expression into a datatype definition would embed the connection sublanguage inside type
+definitions. Anything more complex is computed into `scan` state by an ordinary function first and
+branched on there, which is already the idiom for cross-phase data.
+
+Selectors must additionally be **register-free**. Note this has an independent justification from
+`map`'s superficially similar rule: a selector sits in the FSM's state → next-state → state loop, so a
+registered selector would mean branching on state from a *previous cycle* — different semantics, not
+merely different timing. For the same reason, **selector logic is not retimeable** (the loop-invariant
+argument from `md5-lifecycle-sketch.md` finding 3), so deep selector logic lowers the clock rather than
+being pipelined away. Allowed, but worth keeping shallow.
+
+**Branches need not reconverge.** `seq { pre; choice { ... } }` is legal and is the common packet-
+processing shape; each branch then independently reaches `last`. Reconvergent branches are equally
+fine — the post-choice phase has one type on all paths, since it is one `seq` phase.
+
+**Nesting is allowed.** Ethernet → IPv4 → TCP/UDP is two levels. DAG-only bans cycles, not depth.
 
 ### The access surface: a phase's view is live only during that phase
 
@@ -616,9 +687,13 @@ scan_with_tail(T, U, S: interface,
 - **Every function parameter is pure `@dataflow`.** Lifecycle position reaches them as *data*, via the
   stdlib's existing `last(T)` and `valid(U)` record interfaces, never as control. That is the whole
   ergonomic bet.
-- **`map` requires a combinational `op`.** Non-zero latency enters only through hard macros (BRAM, DSP,
-  vendor IP), which are latency-declaring channel functions, not lifted pure functions. This means v1
-  needs no latency analysis — just "does `op` contain registers."
+- **`map` requires a combinational `op`** — **as a v1 simplification, not a permanent rule.** Non-zero
+  latency enters only through hard macros (BRAM, DSP, vendor IP), which are latency-declaring channel
+  functions, not lifted pure functions. The point is that v1 needs no latency analysis — just "does `op`
+  contain registers." Once layer 3 exists, a multi-cycle `op` is expressible, because the handshake
+  stalls for it; the restriction should be expected to lift. (Contrast the register-free rule on
+  `choice` selectors in §4, which looks similar but has an independent justification that does *not*
+  expire.)
 - **`map` was overloaded; the per-lifecycle sense is now `oneach`.** Beat-wise `map` takes a
   combinational `op` and generates logic. Per-lifecycle `oneach` takes a whole pipeline and generates
   *nothing* — a module already is a standing process. The overload was never *ambiguous* (it resolves by
@@ -895,14 +970,20 @@ same wires each cycle rather than as alternation.
 
 Ordered roughly by how much they block.
 
-1. **Alternation in the lifecycle language** (§4). Unlocks a whole application class — parsers,
-   classifiers with real keys, anything protocol-dependent. Still ranked first, but **narrowed** by the
-   2026-09 session: `choice` is confirmed **DAG-only**; causality is now automatic rather than something
-   scoping rules must enforce, since a selector can only read `scan` state and `scan` state can only
-   hold what earlier beats produced. What remains is (a) where **spatial** alternation lives — the
-   same-beat, combinational, sum-type case that the straddling problem forces (§4) — and (b) whether
-   there is a lookahead limit. The overlay hint that used to sit here is superseded: variants share a
-   wire budget through **views** (§3), authored rather than optimized into place.
+1. **Alternation in the lifecycle language** (§4) — **semantics now decided; syntax and one typing rule
+   remain.** The 2026-09 session settled DAG-only, spatial-vs-temporal, spatial alternation as a
+   language construct, selector provenance and cost, the mandatory `else` with don't-care sugar,
+   selectors as register-free `expression`s, non-reconvergent branches, and nesting. See §4. What is
+   left:
+   - **Surface syntax**, for `view`, `datatype`, `choice`, `else`, and the boundary keyword — folded
+     into the grammar work that has to happen before implementation regardless.
+   - **Datatype compatibility: nominal or structural?** When do a producer's datatype and a consumer's
+     count as the same type? This is the actual checking rule behind "producer and consumer agree on
+     what the data is at each point in time," and it has never been stated. It also decides whether the
+     symbolic-automata machinery in §4 is needed at all: nominal compatibility needs none of it,
+     structural compatibility needs all of it.
+   The overlay hint that used to sit here is superseded: variants share a wire budget through **views**
+   (§3), authored rather than optimized into place.
 2. **Rate relationships between two ports have no syntax.** Blocks two-stream joins, `zip`, and any
    `regroup` whose ratio is not statically known. A generated join silently asserts 1:1, and violation
    manifests as deadlock rather than a type error. **Classification (2026-09):** the *enforcement* is
