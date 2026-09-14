@@ -263,11 +263,13 @@ makes you write it down. It also gives `regroup` a clean type: a function betwee
 A **regular expression over beat types**:
 
 ```text
+null               // zero beats
 single(T)          // exactly one beat — the default when a bare interface appears
 stream(T)          // one or more beats, bounded, carries a derived `last`
 infinite(T)        // unbounded, no `last`
 repeat(T, n)       // exactly n beats, n a static parameter
 seq { a: D; b: E } // concatenation; phases may have DIFFERENT beat interfaces
+choice(sel) { ... }// alternation — see below
 ```
 
 ### Decisions
@@ -446,6 +448,44 @@ processing shape; each branch then independently reaches `last`. Reconvergent br
 fine — the post-choice phase has one type on all paths, since it is one `seq` phase.
 
 **Nesting is allowed.** Ethernet → IPv4 → TCP/UDP is two levels. DAG-only bans cycles, not depth.
+
+### `null`, and what happens when `last` arrives early
+
+Both settled after the header-parser sketch, which found them together (see
+`header-parser-sketch.md` findings 3 and 4). They are two halves of one question: **what does it mean
+for a lifecycle to end before the `seq` structure is exhausted?**
+
+**`null` is a zero-beat lifecycle.** It exists because `stream(T)` is one-or-more, and a body of zero
+beats is not an edge case — a minimum-size Ethernet frame is 64 bytes, exactly two beats, and the
+headers account for 54 of them, so the body is empty. `null` composes two ways: as a `choice` branch
+(`choice(...) { ... => stream(T); ... => null; }`) and as the way to declare a trailing phase absent.
+
+> *Naming:* GAPL already uses `null` in function IO for "no ports"
+> (`function md5_initial_state() null => o: md5_state`). Reusing the keyword for "no beats" is the same
+> intuition in a different position — deliberate, not an accidental collision.
+
+The alternative considered was a stream whose length is declared before its first beat, which would
+also admit zero. That is the **length-derived `last`** already filed as §10 item 15 (Kaitai's substream:
+a down-counter rather than a flag). It does not help here — a packet body's extent comes from `tlast`,
+not from a declared count — so `null` is the answer for this case and the counted form stays deferred.
+
+**`last` returns the FSM to its initial state, regardless of phase.** A frame shorter than the datatype
+permits — a runt, from a collision or a hostile sender — ends during `h0` when the type said at least
+two beats would arrive. Without a rule, the FSM can still be mid-`seq` when the next packet starts, so
+it reads that packet's first beat as its own second, and every subsequent packet is misparsed:
+permanent desynchronization, the same catastrophic class as an undefined `choice` branch.
+
+Worth separating two responses, because only one is obligatory:
+
+- **Error detection** — "this packet was malformed." Optional and application-specific; drop, count, or
+  ignore as the design prefers.
+- **Resynchronization** — "the FSM is ready for the next packet." **Not optional**, and not really error
+  handling. It costs nothing (reset on `last`) and is required whether or not anyone cares about the
+  malformed packet.
+
+Today's NetFPGA setup is accidentally immune, since `axis_mutual_exclusion` full-resets the kernel
+between packets — but removing that serialization is the largest throughput win available
+(`md5-lifecycle-sketch.md` finding 5), and this rule is a precondition for removing it.
 
 ### The access surface: a phase's view is live only during that phase
 
