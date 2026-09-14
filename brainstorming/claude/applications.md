@@ -331,6 +331,13 @@ The split/recombine architecture above is the right shape for this, since holdin
 stream is what permits filling it in late. The buffering cost then reduces to "how large is the body I
 must hold" — zero for reducing transforms, the whole packet for 1:1 ones.
 
+> **Decision (2026-09): transmit a zero UDP checksum and ignore the problem.** Legal under RFC 768 for
+> UDP over IPv4, which is the traffic these applications target. This is what keeps AES-CTR and other
+> 1:1 transforms deployable without store-and-forward, so it removes checksums as a driver for the
+> memory primitive (which is still needed for applications 8 and 9, and for realistic sketch sizes).
+> **The escape closes** for UDP over IPv6, where the checksum is mandatory, and for TCP, which has no
+> zero-means-absent encoding at all — so revisit if either enters scope.
+
 **Flatly out of reach**, regardless of the gaps above: TCP flow reassembly, anything needing
 out-of-order buffering, anything needing large dynamic memory allocation. ClickNP's IPSec gateway is
 borderline — the crypto is fine (application 3), but the SA lookup table needs real memory. Its pFabric
