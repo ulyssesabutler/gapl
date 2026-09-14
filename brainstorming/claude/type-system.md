@@ -913,6 +913,64 @@ tree during the 2026-09 merge of this document — locations below are current a
   a matching `vlan_adder`. That window structure is the same one hardware packet parsers use generally
   (§9).
 
+### The hand-written FSM corpus
+
+Surveyed in the 2026-09 session across `gapl_wrapper.v`, `util/**` and `packet_processor/**` — every
+finite state machine the author wrote by hand. This is the most direct evidence available of what the
+language needs to absorb, because **these modules are in Verilog precisely because GAPL could not
+express them.** Sixteen state machines (8 with named states, 8 implicit — counters or flags driving
+distinct phases), plus the three that MD5 and AES-CTR would add.
+
+| FSM kind | instances | covered by | status |
+|---|---|---|---|
+| **Position** within a lifecycle | `packet_packer` (eth→ip→udp→body), `packet_processor` (header vs body), `axis_mask_back`, `axis_trim_front`, `variable_width_queue`'s first-beat flag | `seq` + compiler-derived phase/`first`/`last` | designed |
+| **Accumulation** across a lifecycle | `axis_parser` (field assembly), MD5's byte count, AES-CTR's counter | `scan` state, auto-reset on `last` | designed |
+| **Conditional trailing emission** | `axis_pad_output`, MD5's extra padding block | `scan_with_tail`'s `tail: S => valid(U)` | designed |
+| **Per-lifecycle reset by serialization** | `axis_mutual_exclusion`, `packet_parser`'s nine-parser reset | `scan`/`fold` reset on `last` — *deletes* these | designed |
+| **Flow control / stall** | `processor_controller`, `fallthrough_variable_width_queue` | layer 3 `@ready_valid` | deferred |
+| **Value held alongside a stream** | `axis_hold_metadata`, `axis_user_tracker` (two FSMs) | — | **gap** |
+| **Multi-stream merge / interleave** | `axis_3_to_1_arbiter`, `axis_transmission_combiner` | — | **gap** |
+| **Rate adaptation** | `axis_pad_output` | partial — needs the output lifecycle's length declared | **gap** |
+
+Rows 1 and 2 are both `scan`-shaped but differ in **who writes the state**: position is derived by the
+compiler from the lifecycle type and costs the user nothing to declare; accumulation is user-declared,
+with the accumulator's width visible in the signature. That is the derived-predicate/`scan`-state line
+from §4, confirmed against real code.
+
+**Tally:** of nineteen FSMs, roughly ten are covered by what is designed, two or three need layer 3, and
+**six are the rate-relationship gap** — which §10 item 2 had filed as orthogonal and safely deferrable.
+Six hand-written modules say otherwise. Two further findings worth keeping:
+
+- **Not one iteration FSM exists in the corpus.** No "which round am I on" counter anywhere, and neither
+  MD5 padding nor AES-CTR chaining introduces one. Time-multiplexing is a real future want (§10 item
+  10) but it is not what the hand-written FSMs are doing.
+- **MD5 and AES-CTR add no new FSM *kinds*** — both land in rows 2 and 3. But *deployed*, both hit the
+  gap rows: running MD5 for real means holding parsed header fields alongside the body stream while the
+  kernel works, which is exactly what `axis_hold_metadata`/`axis_user_tracker` were built for.
+
+### The wrapper is a list of missing features
+
+A second way to read the same corpus. `gapl_wrapper` layers the generated kernel in adapters, and each
+one exists because the kernel lacks a capability:
+
+| layer | exists because the kernel... | goes away when... |
+|---|---|---|
+| padder (`axis_pad_output`) | can't emit a variable number of output beats | the output lifecycle's length is declared |
+| mutex (`axis_mutual_exclusion`) | has no per-lifecycle state reset | `scan`/`fold` reset on `last` |
+| controller (`processor_controller`) | has no `ready`, only a global `enable` | layer 3 lands (§5 already names this one) |
+| byte reversal (`reverse_bytes`) | uses a different byte convention than the bus | never — a genuine adapter, belongs in the stdlib |
+
+A useful test for whether a future layer is an adapter or a workaround: *would it still exist if the
+kernel were hand-written Verilog?* For these four: yes, no, yes-if-non-elastic, yes.
+
+**The padder's real origin** (from the author, 2026-09): an earlier version used `packet_parser` and
+`packet_packer` to decompose and rebuild packets, but that workflow could not be debugged and was
+abandoned — which is why both modules are now dead code. The replacement assumes the header is **always
+two beats**, achieved by padding the front of the body, and leaves the original header untouched. That
+forces the packet length to stay constant, hence padding the output back up to the input's beat count,
+and it forces the checksum to be omitted. So the padder is downstream of an abandoned architecture, not
+a considered design choice, and the author wants to back out of it.
+
 ---
 
 ## 9. Literature map
@@ -1029,12 +1087,26 @@ Ordered roughly by how much they block.
    manifests as deadlock rather than a type error. **Classification (2026-09):** the *enforcement* is
    layer 3 (the join, the handshake), but the *specification* is layer 2, since a rate relationship is
    stated purely in beat counts and is stall-invariant. Pushing the whole concern to layer 3 would
-   repeat the mistake of leaving `last` in the interface. Deferrable in practice, because rate
-   relationships hold between concurrent *ports of a signature*, not between phases of a datatype —
-   orthogonal to the datatype grammar, so nothing decided so far precludes adding it. The gap is also
-   narrower than it reads: static single-in/single-out ratios already work, expressed in the beat types
+   repeat the mistake of leaving `last` in the interface. The gap is narrower than it reads in one
+   respect: static single-in/single-out ratios already work, expressed in the beat types
    (`regroup(32, 64)` is `stream(beat(32)) => stream(beat(64))`); what is missing is ratios not
-   statically known, and relationships between two separate input ports.
+   statically known, and relationships between two separate ports.
+
+   **Promoted to the top of this list by the FSM corpus survey (§8).** This was previously filed as
+   "orthogonal to the datatype grammar, safe to defer." It is not: **six of the nineteen surveyed FSMs
+   are this gap** — more than layer 3 accounts for — and it is the only category with no design answer
+   at all. Concretely it blocks: holding parsed header fields alongside a body stream (`axis_hold_metadata`,
+   `axis_user_tracker`), merging or interleaving multiple streams (`axis_3_to_1_arbiter`,
+   `axis_transmission_combiner`), and rate adaptation (`axis_pad_output`). Critically, it is on the path
+   for **both** named target applications: deploying MD5 means holding headers while the body is hashed,
+   and AES-CTR needs the keystream aligned with the plaintext once AES is pipelined.
+
+   The shape the author wants to write (2026-09): split a packet stream into a header stream and a body
+   stream, transform each independently, then concatenate and repack to remove the dead space between
+   them. That is a positional demux, a `seq`-style concatenation of two independently-produced streams,
+   and a gearbox — all three of which are this gap. It is also `packet_packer`'s architecture
+   generalized, and the packing is *statically* determined when the header sizes are constants, so it is
+   meaningfully easier than the dynamic-offset case in item 15.
 3. ~~**`map` is overloaded**~~ — **resolved (2026-09):** the per-lifecycle sense is now `oneach`, a
    type-level operator that emits nothing; `map` keeps the beat-wise, logic-generating meaning. See §6.
 4. **Direction reversal / control plane.** Runtime-configurable rule tables need a host write path
@@ -1078,6 +1150,12 @@ Ordered roughly by how much they block.
     varbit discipline). None of it blocks the static-header applications; all of it is needed for a
     general parser. Note this is the same machinery as dynamic `regroup` in (2), so deferring one
     largely defers the other.
+16. **`scan`/`fold` cannot seed the accumulator from data.** §6 types `init: null => A` — a constant.
+    AES-CTR's counter starts from a nonce or IV that arrives as data; the round-level fold in a
+    time-multiplexed core would need to seed from the incoming block; and any `scan` whose initial state
+    depends on a parsed header field needs it. Small, concrete, and it has now come up three times from
+    unrelated directions, which usually means the signature is wrong rather than the use cases being
+    exotic.
 
 ---
 

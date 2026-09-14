@@ -294,6 +294,25 @@ AES-128's 10 rounds likewise. Without a time-multiplexing combinator, fewer of t
 than the hand-written equivalents, and the gap widens with algorithm depth. Worth measuring early on one
 Tier 1 application to know the multiplier.
 
+**Header rewriting, and the architecture that unblocks it.** The current NetFPGA wrapper assumes the
+header is always two beats and leaves it untouched (padding the front of the body to make it so), which
+forces the packet length to stay constant and the checksum to be omitted — see `type-system.md` §8. The
+shape intended to replace it: **split the stream into a header stream and a body stream, transform each
+independently, then concatenate and repack** to remove the dead space between the header's end and the
+body's start. That is `packet_packer`'s architecture generalized, and it is blocked on the
+rate-relationship gap (`type-system.md` §10 item 2) — a positional demux, a concatenation of two
+independently-produced streams, and a gearbox are all instances of it. Worth noting the repacking is
+*statically* determined whenever the header sizes are constants, so it is much easier than the general
+dynamic-offset case.
+
+**Checksums are not the obstacle they look like.** Two cases, both cheap. For a *modified field*, the
+internet checksum is incrementally updatable — RFC 1624's `HC' = ~(~HC + ~m + m')` needs a couple of
+one's-complement adds, not a re-sum of the header. For a *wholly new payload*, a one's-complement sum
+over a stream is an ordinary `scan` accumulator. The primitives already exist in the repo
+(`util/ones_complement_sum.v`, `util/ones_complement_addition.v`), currently sitting in the unreferenced
+pile; note the review found the sum builds an N−1 deep serial adder chain where a balanced tree costs
+the same area.
+
 **Flatly out of reach**, regardless of the gaps above: TCP flow reassembly, anything needing
 out-of-order buffering, anything needing large dynamic memory allocation. ClickNP's IPSec gateway is
 borderline — the crypto is fine (application 3), but the SA lookup table needs real memory. Its pFabric
