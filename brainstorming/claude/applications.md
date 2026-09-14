@@ -305,13 +305,31 @@ independently-produced streams, and a gearbox are all instances of it. Worth not
 *statically* determined whenever the header sizes are constants, so it is much easier than the general
 dynamic-offset case.
 
-**Checksums are not the obstacle they look like.** Two cases, both cheap. For a *modified field*, the
-internet checksum is incrementally updatable — RFC 1624's `HC' = ~(~HC + ~m + m')` needs a couple of
-one's-complement adds, not a re-sum of the header. For a *wholly new payload*, a one's-complement sum
-over a stream is an ordinary `scan` accumulator. The primitives already exist in the repo
-(`util/ones_complement_sum.v`, `util/ones_complement_addition.v`), currently sitting in the unreferenced
-pile; note the review found the sum builds an N−1 deep serial adder chain where a balanced tree costs
-the same area.
+**Checksums: computing the sum is easy, placing the field is not.** A one's-complement sum over a
+stream is an ordinary `scan` accumulator, and the primitives already exist in the repo
+(`util/ones_complement_sum.v`, `util/ones_complement_addition.v`, currently unreferenced — note the
+review found the sum builds an N−1 deep serial adder chain where a balanced tree costs the same area).
+The real difficulty is that a checksum over the whole message lives in a field at the *front* of it.
+Split by which checksum:
+
+- **IPv4 header checksum** — covers only the 20-byte header, so everything it needs is in the first two
+  beats. No buffering. A modified field can also be patched incrementally: RFC 1624's
+  `HC' = ~(~HC + ~m + m')` is two one's-complement adds, no re-sum.
+- **UDP/TCP checksum** — covers a pseudo-header plus the entire payload, with the field at the front.
+  Three cases:
+  - *UDP over IPv4:* legally optional. RFC 768 defines a transmitted zero as "not computed," and
+    receivers must accept it. Mandatory for UDP over IPv6, so this escape closes on a dual-stack design.
+  - *Payload-reducing transforms (MD5):* no buffering needed. The output payload is a 128-bit digest
+    you are holding before emission anyway, so it is checksummed then. The large input is never stored.
+  - *1:1 transforms (AES-CTR):* genuinely requires store-and-forward, and therefore the memory
+    primitive (application 8). Streaming both the plaintext and ciphertext sums with a `scan` and
+    patching incrementally does **not** escape it — the header still cannot leave until the body's sum
+    is known, so something has to hold the body. This is not an FPGA or GAPL limitation; it is why
+    store-and-forward switches and NIC checksum offload exist.
+
+The split/recombine architecture above is the right shape for this, since holding the header as its own
+stream is what permits filling it in late. The buffering cost then reduces to "how large is the body I
+must hold" — zero for reducing transforms, the whole packet for 1:1 ones.
 
 **Flatly out of reach**, regardless of the gaps above: TCP flow reassembly, anything needing
 out-of-order buffering, anything needing large dynamic memory allocation. ClickNP's IPSec gateway is
