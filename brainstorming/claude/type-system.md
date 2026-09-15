@@ -260,6 +260,50 @@ a physical channel has uniform width anyway, so the cost is identical either way
 makes you write it down. It also gives `regroup` a clean type: a function between two datatypes with
 *different* bases, i.e. crossing base interfaces requires an explicit gearbox.
 
+### Compatibility is nominal
+
+**Decision (2026-09): two datatypes are compatible iff they are the same declared type. Aliases are
+transparent; separate declarations with identical structure are distinct.** The same applies to views.
+
+No new syntax is needed — GAPL already has the transparent half (`interface data_metabyte(size):
+data_byte(size, 8)` is an alias, not a new type), and distinctness is simply the default. A `distinct`
+or newtype keyword would only be required if *structural* compatibility were the default.
+
+Note this is deliberately **inconsistent with layer 1 as it stands**, where the only connection-level
+check in the entire analyzer is `BuilderDiagnosticKind.WireCountMismatch` — bit width. Two interfaces
+with no relationship whatsoever connect silently if they flatten to the same wire count, so a 48-bit MAC
+address happily drives a 48-bit checksum port. That looseness is an artifact of what was easy to
+implement, not a design position, and it is precisely the failure "producer and consumer agree on what
+the data is" exists to fix. Layer 2 is where the discipline arrives; it should not inherit layer 1's
+permissiveness.
+
+The arguments for structural, recorded because they are real: a protocol type *is* a serialization
+scheme (§1), so two identical schemes arguably are the same thing; external formats are defined by
+standards bodies rather than by your naming, so two independent descriptions of Ethernet describe the
+same Ethernet; and imported or generated definitions (from a Kaitai spec, a P4 program) would
+interoperate without adapters. What decided against them:
+
+- **Structural gives agreement about layout; nominal additionally gives agreement about meaning.** The
+  layout errors are the rarer and less damaging class.
+- **The forgotten-annotation asymmetry.** Under structural-by-default, failing to mark a type distinct
+  yields an *unsafe* program (a raw packet silently satisfies a port expecting a validated one); under
+  nominal-by-default, failing to alias yields a *verbose* one. This design has twice rejected defaults
+  whose forgotten case fails silently — `@valid` in §5, inlay hints in §7.
+- **Diagnostics.** "These names differ" is a tractable error message. "These two regex languages differ,
+  at some position, for some reason" is not, and §10 item 9 already budgets one hard diagnostic for
+  this compiler.
+- **Cost.** Structural equivalence over lifecycle types means deciding language equality for
+  regexes-with-predicates. Nominal needs none of it — see below.
+
+The nominal choice does **not** restrict generic combinators: `map(L: lifecycle, T, U, op)` needs
+parametric polymorphism and unification, not structural equivalence, and parametric polymorphism works
+perfectly well in nominal systems.
+
+**A distinct-type mechanism is still worth having eventually** — declaring a type that shares a layout
+but not an identity lets you encode properties the bits don't carry ("this frame's checksum has been
+verified"), so that the only way to obtain one is to call the function that establishes the property.
+Under nominal-by-default that falls out for free rather than needing a keyword.
+
 A **regular expression over beat types**:
 
 ```text
@@ -388,7 +432,12 @@ construction." That is too glib, and it points at the wrong problem:
   structural recursion: a `seq` is a counter, a `choice` is a branch, a `stream` runs until `last`. The
   automata machinery is only needed to decide **structural type equivalence** — whether a producer's
   datatype and a consumer's describe the same beat language — and only if datatype compatibility is
-  structural rather than nominal. That question is still open (§10 item 1).
+  structural rather than nominal.
+
+**It is nominal, so none of this is needed** (see "Compatibility is nominal" above). Codegen is
+structural recursion over the datatype; compatibility is name equality. The symbolic-automata work
+drops off the list entirely. It would return only if structural compatibility, or subtyping over
+lifecycle types, were ever wanted.
 
 ### Decisions for `choice` and spatial alternation
 
@@ -1125,11 +1174,11 @@ Ordered roughly by how much they block.
    left:
    - **Surface syntax**, for `view`, `datatype`, `choice`, `else`, and the boundary keyword — folded
      into the grammar work that has to happen before implementation regardless.
-   - **Datatype compatibility: nominal or structural?** When do a producer's datatype and a consumer's
-     count as the same type? This is the actual checking rule behind "producer and consumer agree on
-     what the data is at each point in time," and it has never been stated. It also decides whether the
-     symbolic-automata machinery in §4 is needed at all: nominal compatibility needs none of it,
-     structural compatibility needs all of it.
+   - ~~**Datatype compatibility: nominal or structural?**~~ **Resolved (2026-09): nominal.** Aliases
+     transparent, separate declarations distinct, no new syntax required since distinctness is the
+     default and GAPL already has aliases. Deliberately stricter than layer 1, whose width-only checking
+     is the problem being solved rather than a convention to preserve. See "Compatibility is nominal" in
+     §4 — and note this also removes the symbolic-automata work from the project entirely.
    The overlay hint that used to sit here is superseded: variants share a wire budget through **views**
    (§3), authored rather than optimized into place.
 2. **Rate relationships between two ports have no syntax.** Blocks two-stream joins, `zip`, and any
