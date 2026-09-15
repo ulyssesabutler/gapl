@@ -778,24 +778,36 @@ scan_with_tail(T, U, S: interface,
 - **`step` should be Mealy** (`T, S => U, S`), not `T, A => A`. The regex processor's state is an NFA-
   shaped struct but its output is one match bit (`netfpga/src/regex/processor.gapl:177`); CMS is the
   degenerate case where output *is* state.
-- **A combinator's output protocol is determined by the *extent* of its input, not by whether it
-  changes the rate.** Rate-preserving preserves the protocol. For rate-*reducing* combinators, an
-  earlier draft claimed they "force at least `@valid`-like intermittency, hence `@ready_valid`" — too
-  strong, corrected 2026-09. The fold family spans a spectrum:
+- **A combinator's protocol is determined by whether any of its ports has temporal extent.** An earlier
+  draft claimed rate-*reducing* combinators "force at least `@valid`-like intermittency, hence
+  `@ready_valid`" — the conclusion is usually right but the reason was wrong, corrected 2026-09.
 
-  | form | extent | timing | protocol |
-  |---|---|---|---|
-  | `combinational_vector_fold` | `T[n]`, spatial — all values present at once | zero cycles, a combinational tree | none needed |
-  | `fold` over `repeat(T, n)` | static, exactly n beats | emits every n cycles, statically known | **`@dataflow`** |
-  | `fold` over `stream(T)` | data-dependent, ends at `last` | intermittent and unpredictable | `@ready_valid` |
+  **`@dataflow` requires every port to be `single`** (bare interfaces being implicitly `single`, §4).
+  The interlock with layer 2 is then exact:
 
-  A statically-known one-in-n output pattern needs no handshake, only a schedule both ends agree on,
-  which is what `@dataflow` *is*. This lines up exactly with §2's three-regimes table, where a static
-  extent means the FSM evaporates at compile time.
+  - `@dataflow` ⟹ no temporal extent ⟹ no layer-2 state to protect ⟹ `fire` is trivial.
+  - extent ⟹ a layer-2 FSM exists ⟹ its state must not advance on a non-beat cycle ⟹ `fire` is
+    required ⟹ a handshake is required.
 
-  Consequently the stdlib's existing `combinational_vector_fold` is not a separate oddity — it is the
-  spatial end of one family whose temporal end is `fold` over a stream. That is Aetherling's space-time
-  types (§9), already cited there as prior art for the gearbox problem and applicable here too.
+  Which is also why §5 rejects `@valid`: multi-beat-with-no-handshake is exactly the excluded case, and
+  it survives only in the hand-written wrapper, where the kernel takes `enable` and no `ready`.
+
+  **The implication runs one way only.** Extent forces `@ready_valid`; an all-`single` signature does
+  *not* force `@dataflow`, since a single-beat function containing a buffer may legitimately not be
+  ready — §5's own `function g()@ready_valid i1: wire, i2: wire => o: wire` is the example. So this is a
+  legality constraint on `@dataflow`, not a derivation of the protocol.
+
+  **Consequently the fold family is two functions with a space/time conversion between them**, not a
+  spectrum of protocols. The `@dataflow` fold is the *vector* fold — `fold() i: single(T),
+  v: single(U[s]) => o: single(T)`, everything present at once, which is the stdlib's existing
+  `combinational_vector_fold`. Anything with temporal extent, `repeat(T, n)` included, is
+  `@ready_valid`. You reach the first from the second by converting time into space, which is a
+  `regroup`-shaped operation — Aetherling's space-time types (§9), here as a conversion step rather
+  than a third protocol.
+
+  This also keeps §5's islands argument intact: a `@dataflow` function cannot contain a stream `fold` or
+  `regroup`, because those require extent on a port and a `@dataflow` function has none. It may contain
+  a vector fold, which preserves the rate trivially.
 - **A combinator's function parameter may not stall — in v1.** Lifecycle position reaches such
   functions as *data*, via the stdlib's existing `last(T)` and `valid(U)` record interfaces, never as
   control. That is the ergonomic bet, and the non-stalling requirement is what lets a combinator promise
