@@ -669,9 +669,17 @@ function g()@ready_valid i1: wire, i2: wire => o: wire {
   `add()@dataflow` in a datapath or `add()@ready_valid` at a boundary. This is layer-3 swappability
   realized syntactically.
 
-Mixed protocols across ports are fine and common: `@ready_valid` + `@dataflow`, e.g. a configuration
-value alongside a stream. Per-port overrides are **deliberately not supported yet** — until a compelling
-case appears, require both ports `@ready_valid`.
+**Per-port protocol overrides are rejected, not merely deferred** (clarified 2026-09; an earlier draft
+of this section said both that "mixed protocols across ports are fine and common" and that overrides
+were "not supported yet," which contradicted itself).
+
+The motivating case was a configuration value alongside a stream — seemingly a port that wants
+`@dataflow` while its neighbour wants `@ready_valid`. Supporting that introduced problems of its own,
+and the case turns out to be served by **lifecycle choice instead of protocol choice**: a configuration
+value that persists for the life of the application is a `single` over an `infinite` lifetime, which §4
+already lowers to a sticky latch — it participates in the join until it first arrives, then latches and
+drops out. So a function carries one protocol, and the situation that appeared to need two is expressed
+in layer 2.
 
 ### Assigning protocols (2026-09)
 
@@ -1369,6 +1377,27 @@ Ordered roughly by how much they block.
    forwarding logic.
 6. **`enable` is not `reset`.** After this change they sit on the same registers. A stalled cycle is not
    a lifecycle boundary; cross-wiring them is a subtle bug.
+
+   **Nothing here is decided** — each mechanism is designed *separately* (§5 makes `enable` a port
+   applied at serialization; §4/§6 make `scan`/`fold` state reset per lifecycle), and how they compose
+   on one flip-flop is open. Three difficulties, expanded 2026-09:
+
+   - **Ordering.** "Reset on `last`" is imprecise. If the reset lands on the cycle the last beat fires,
+     that beat's contribution is wiped before `fold` can emit it. It has to take effect at the *first
+     beat of the next lifecycle* instead.
+   - **Three mechanisms, not two.** Hardware `reset_n` overrides everything and must *not* be
+     enable-gated; lifecycle reset *must* be enable-gated, since a `last` presented during a stall has
+     not fired and must not reset anything; `enable` holds. `if (enable) state <= (lifecycle_reset ?
+     init : next)` handles the latter two and says nothing about the first.
+   - **They live at different levels of the compiler.** §5 deliberately keeps `enable` out of the
+     netlist IR so `Retimer`, `CombinationalLoopDetector` and the graph converters keep working — but it
+     also says `valid`/`ready`/`last` *do* become real netlist wires before the transformer pipeline.
+     Lifecycle reset derives from `last`, so it is modelled; `enable` is not. The IR therefore sees only
+     part of each register's update rule. Worse, lifecycle reset applies to `scan`/`fold` accumulators
+     but **not** to ordinary pipeline registers, so retiming moving a register across that boundary
+     would change semantics — and retiming currently assumes the registers it shuffles are
+     interchangeable. This is a *second*, distinct reason accumulators are special to retiming; the
+     first is `md5-lifecycle-sketch.md` finding 3, where the fold loop cannot be pipelined at all.
 7. **Enable fanout.** A function-sized island puts its whole register set on one net. Fine at MD5's
    scale, a placement problem later.
 8. **One stall domain per island.** A function with two outputs consumed at genuinely different rates
@@ -1381,7 +1410,10 @@ Ordered roughly by how much they block.
     spatially; this is where resource sharing gets recovered.
 11. **The `@ready_valid` → `@valid`/`@dataflow` downgrade pass** (§5). Without it, the first end-to-end
     comparison against hand-written Verilog will look bad for a non-fundamental reason.
-12. **Per-port protocol overrides.** Deliberately deferred until a compelling case appears.
+12. ~~**Per-port protocol overrides.**~~ **Rejected (2026-09), not deferred.** The motivating case — a
+    configuration value beside a stream — is served by lifecycle choice rather than protocol choice: a
+    `single` over an `infinite` lifetime, lowered to §4's sticky latch. A function carries one protocol.
+    See §5.
 13. **Compile time.** Flagged during the 2026-09 merge as unconfirmed: the original claim was that
     `ModuleBuilder.kt` carries an open `TODO` noting an unexplained ~72s compile time on
     `verilator-test/tests/aes/test.gapl`. That TODO does not exist. What `ModuleBuilder.kt:102-114`
