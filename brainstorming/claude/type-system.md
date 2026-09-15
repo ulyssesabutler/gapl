@@ -8,9 +8,17 @@ roadmap). Read this one first.
 > **Layer-2 session (2026-09).** A working session took layer 2 on its own, with layer 3 deliberately
 > set aside. It settled: the `interface`/`datatype` keyword split; **views** (§3); one base interface
 > per datatype; cross-phase access forbidden in favour of `scan` state (§4); the spatial-vs-temporal
-> alternation distinction (§4); the top-level type and the external-boundary rule (§4); `map`/`oneach`
-> (§6); and the line between what belongs in the language and what belongs in the stdlib (§6). Those
-> sections carry the detail.
+> alternation distinction (§4); the top-level type and the external-boundary rule (§4); nominal
+> compatibility (§4); `map`/`oneach`, scan state scoping and seeding, and rate contracts (§6); and the
+> line between what belongs in the language and what belongs in the stdlib (§6). Those sections carry
+> the detail.
+>
+> **Layer 3 was un-parked at the end of that session**, on the grounds that six things had queued
+> behind it: intermittent outputs from rate-reducing combinators, the v1 non-stalling restriction on
+> combinator parameters, `map`'s combinational-`op` restriction, enforcement of the rate contracts,
+> three of the nineteen surveyed FSMs (§8), and removing `processor_controller` from the wrapper. Note
+> the *largest* single win — the roughly 5× from packet-level pipelining — is **not** among them: it
+> comes from deleting `axis_mutual_exclusion`, which needs only per-lifecycle `scan` reset from layer 2.
 
 > **Syntax warning.** `brainstorming/archive/interfaces.md` and several `gapl-example/wip/*.gapl` files
 > use `<T>` generics and a `parameter` keyword that **do not match the actual grammar**. Real syntax, per
@@ -770,9 +778,24 @@ scan_with_tail(T, U, S: interface,
 - **`step` should be Mealy** (`T, S => U, S`), not `T, A => A`. The regex processor's state is an NFA-
   shaped struct but its output is one match bit (`netfpga/src/regex/processor.gapl:177`); CMS is the
   degenerate case where output *is* state.
-- **A combinator's output protocol is determined by whether it changes the rate**, so there is no 3×N
-  table. Rate-preserving preserves the protocol; rate-reducing forces at least `@valid`-like
-  intermittency, hence `@ready_valid`.
+- **A combinator's output protocol is determined by the *extent* of its input, not by whether it
+  changes the rate.** Rate-preserving preserves the protocol. For rate-*reducing* combinators, an
+  earlier draft claimed they "force at least `@valid`-like intermittency, hence `@ready_valid`" — too
+  strong, corrected 2026-09. The fold family spans a spectrum:
+
+  | form | extent | timing | protocol |
+  |---|---|---|---|
+  | `combinational_vector_fold` | `T[n]`, spatial — all values present at once | zero cycles, a combinational tree | none needed |
+  | `fold` over `repeat(T, n)` | static, exactly n beats | emits every n cycles, statically known | **`@dataflow`** |
+  | `fold` over `stream(T)` | data-dependent, ends at `last` | intermittent and unpredictable | `@ready_valid` |
+
+  A statically-known one-in-n output pattern needs no handshake, only a schedule both ends agree on,
+  which is what `@dataflow` *is*. This lines up exactly with §2's three-regimes table, where a static
+  extent means the FSM evaporates at compile time.
+
+  Consequently the stdlib's existing `combinational_vector_fold` is not a separate oddity — it is the
+  spatial end of one family whose temporal end is `fold` over a stream. That is Aetherling's space-time
+  types (§9), already cited there as prior art for the gearbox problem and applicable here too.
 - **A combinator's function parameter may not stall — in v1.** Lifecycle position reaches such
   functions as *data*, via the stdlib's existing `last(T)` and `valid(U)` record interfaces, never as
   control. That is the ergonomic bet, and the non-stalling requirement is what lets a combinator promise
