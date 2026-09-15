@@ -810,6 +810,18 @@ scan_with_tail(T, U, S: interface,
 `last`; scan over `infinite(T)` never resets. That much falls out, and it handles MD5's per-packet
 padding count directly.
 
+**The initial state arrives as a `single` port, for both bounded and infinite scans** (decided
+2026-09, replacing §6's `init: null => S`, which could only seed from a constant — see §10 item 16).
+One mechanism, with the scope following from the lifecycle the scan is applied to: a seed on a scan
+over `stream(T)` arrives once per bounded lifecycle, while a seed on a scan over `infinite(T)` is a
+`single` over the infinite lifetime and therefore lowers to the sticky latch described in §4. That
+covers AES-CTR's nonce, a seed parsed from a header field, and the inner scan of the CMS structure
+below, which is seeded from the outer scan's state.
+
+Note the seed port is itself an instance of the value-alongside-a-stream relationship deferred in §10
+item 2, so it needs an entry in the rate contract table and a `simengine` assertion rather than a type
+rule.
+
 **Per-beat updates with cross-lifecycle persistence compose from two features decided separately**, so
 no flattening operation is needed. CMS is the motivating case — the sketch must survive across packets
 while updating on every beat, meaning its state scope and its step scope are different levels. The
