@@ -90,6 +90,7 @@ only its interface types?** If yes, the semantics are right. If no, the types ar
 4. **Temporal compatibility is checked, not assumed.** Today only connection *shape* is checked.
 5. **Flow control specified once, not per module.**
 6. **Protocols are user-definable**, not a fixed builtin menu. (Standing item in `future-work.md`.)
+   **Deferred 2026-09** — the set is closed at `@dataflow` and `@ready_valid` for now; see §5.
 7. **No silent hardware.** Whatever the compiler generates from a type should be predictable and its
    cost reportable. This is a *constraint on* goal 5, and the goal most in tension with the rest.
 
@@ -672,11 +673,43 @@ Mixed protocols across ports are fine and common: `@ready_valid` + `@dataflow`, 
 value alongside a stream. Per-port overrides are **deliberately not supported yet** — until a compelling
 case appears, require both ports `@ready_valid`.
 
+### Assigning protocols (2026-09)
+
+**Every function carries a protocol.** There is no unannotated state.
+
+**Every existing GAPL function is already `@dataflow`**, and this is not a coincidence to be checked
+case by case — existing code uses bare interfaces throughout, bare interfaces are implicitly `single`
+(§4), and `@dataflow` requires exactly that every port be `single` (§6). So **layer 3 is purely
+additive: no existing program changes meaning.** That is worth protecting as the design proceeds.
+
+**`oneach` is transparent.** It emits no hardware of its own, and it inherits the protocol of the
+function it wraps — which has temporal extent and is therefore `@ready_valid`.
+
+**The protocol set is closed: `@dataflow` and `@ready_valid`, hardcoded.** This **defers goal 6** from
+§1 ("protocols are user-definable, not a fixed builtin menu"), which is also a standing item in
+`brainstorming/future-work.md` as "how to allow the user to define arbitrary handshakes." Recorded as a
+deliberate deferral rather than left to silently contradict the goal list.
+
+When it is picked up, §2 supplies the framing and makes the problem much smaller than it sounds:
+"everything else in layer 3 — valid/ready, credits, static schedules — exists only to compute `fire`."
+A user-defined protocol is therefore a user-defined way to compute `fire`, not an open-ended handshake
+description language.
+
 ### Islands
 
 A coercion site is an **island**: a region that freezes as a unit. The boundary is a function boundary,
 which matters because the out-coercion needs uniform latency across all paths — and
 `MinimalRegisterSolver`'s `VirtualIONode` constraint already gives exactly that per module.
+
+**So creating an island means writing a `@dataflow` function and promoting it inside a `@ready_valid`
+one** (confirmed 2026-09). There is no separate island-declaration mechanism; function boundaries are
+the only boundaries.
+
+**Do not conflate this with the external-boundary marker** from §4. That one marks a port connecting to
+something GAPL did not generate — it bars views, pins the base interface to the physical wire budget,
+and doubles as the foreign-IP escape hatch §6 requires. An island marks a *protocol transition*, which
+is an internal concern. The two coincide at the top-level module, which is both, but they answer
+different questions and merging them would be confusing later.
 
 - **In-coercion** (`@ready_valid → @dataflow`) is the **join**: `fire = (∧ valid_i) && ready_out`,
   `ready_i = fire`. Its arity is the coerced function's input port count — visible in the signature.
@@ -1313,6 +1346,15 @@ Ordered roughly by how much they block.
    no data-dependent lengths, no solver, just a way to say "these two ports advance together." That
    would not express `merge` or the parser's key, but it would make the generated join's silent 1:1
    assumption checkable, which is the actual bug class.
+
+   **The compiler-generated join is less exposed than it first appears.** A join at a coercion site
+   synchronizes the coerced function's input ports, and for everything currently legal that assertion is
+   already safe: all-`single` signatures satisfy 1:1 trivially, `single` + `stream` is handled by §4's
+   sticky latch, and two bounded `stream` inputs are *already a type error* under §4's invocation-boundary
+   rule. What remains is two `infinite` ports, which is a deliberate authoring choice like writing `zip`
+   and gets the same treatment. The residual concern is therefore diagnostic rather than safety — a
+   failure points at a generated join instead of at user code — which is item 9 below, not a separate
+   problem.
 3. ~~**`map` is overloaded**~~ — **resolved (2026-09):** the per-lifecycle sense is now `oneach`, a
    type-level operator that emits nothing; `map` keeps the beat-wise, logic-generating meaning. See §6.
 4. **Direction reversal / control plane.** Runtime-configurable rule tables need a host write path
