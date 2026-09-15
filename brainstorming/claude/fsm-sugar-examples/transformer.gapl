@@ -1,0 +1,9 @@
+interface w8 wire[8]
+
+function transformer_test() a: w8, b: w8, c: boolean => o: w8 {
+    declare conds: [
+        0: c, a
+    ] out conditional(w8)[1];
+
+    conds, b => priority(w8, 1) => o;
+}

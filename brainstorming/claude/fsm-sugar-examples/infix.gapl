@@ -1,0 +1,5 @@
+interface w8 wire[8]
+
+function infix_test() a: w8, b: w8 => o: boolean {
+    a == b => o;
+}

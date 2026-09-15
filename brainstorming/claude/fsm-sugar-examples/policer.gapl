@@ -1,0 +1,78 @@
+/* Token bucket policer, written in TODAY'S GAPL with no new features.
+ * Follows the pseudocode in brainstorming/claude/applications.md #6.
+ */
+
+interface tokens wire[24]
+interface byte_count wire[6]
+
+interface nf_beat {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function popcount32() i: boolean[32] => o: byte_count {
+    i   => vector_map(boolean, byte_count, 32, boolean_to_int(6))
+        => combinational_vector_reduce(byte_count, 32, add(6))
+        => o;
+}
+
+function token_bucket(
+    rate: integer,
+    cap: integer,
+    shift: integer,
+) i: nf_beat => o: nf_beat, mark: boolean {
+
+    declare tokens_reg:       register(tokens);
+    declare held_conform_reg: register(boolean);
+    declare in_packet_reg:    register(boolean);
+
+    literal(24, 0)    => declare zero_tokens: tokens;
+    literal(24, rate) => declare rate_v: tokens;
+    literal(24, cap)  => declare cap_v: tokens;
+
+    // first_beat = valid && !in_packet
+    in_packet_reg => not() => declare not_in_packet: boolean;
+    i.valid, not_in_packet => and() => declare first_beat: boolean;
+
+    // conform = first_beat ? (tokens > 0) : held_conform
+    zero_tokens, tokens_reg => less_than(24) => declare has_tokens: boolean;
+    first_beat, has_tokens, held_conform_reg => if_else(boolean) => declare conform: boolean;
+
+    // bytes = last ? popcount(keep) : 32
+    i.keep => popcount32() => declare keep_count: byte_count;
+    literal(6, 32) => declare full_beat: byte_count;
+    i.last, keep_count, full_beat => if_else(byte_count) => declare bytes: byte_count;
+
+    // debit = (valid && conform) ? (bytes << shift) : 0
+    bytes   => left_pad(6, 18)
+            => constant_shift_left(24, shift)
+            => declare debit_amount: tokens;
+    i.valid, conform => and() => declare debiting: boolean;
+    debiting, debit_amount, zero_tokens => if_else(tokens) => declare debit: tokens;
+
+    // tokens' = min(tokens + rate, cap) - debit
+    tokens_reg, rate_v => add(24) => declare refilled: tokens;
+    cap_v, refilled => less_than(24) => declare over_cap: boolean;
+    over_cap, cap_v, refilled => if_else(tokens) => declare capped: tokens;
+    capped, debit => subtract(24) => tokens_reg;
+
+    // held_conform' = valid ? conform : held_conform
+    i.valid, conform, held_conform_reg => if_else(boolean) => held_conform_reg;
+
+    // in_packet' = valid ? !last : in_packet
+    i.last => not() => declare not_last: boolean;
+    i.valid, not_last, in_packet_reg => if_else(boolean) => in_packet_reg;
+
+    conform => not() => mark;
+
+    i.data  => o.data;
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+function policer_top() i: nf_beat => o: nf_beat, mark: boolean {
+    i => token_bucket(5, 1000000, 3) => o, mark;
+}

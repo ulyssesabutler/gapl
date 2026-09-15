@@ -1,0 +1,63 @@
+/* axis_mutual_exclusion.v's FSM, written in TODAY'S GAPL.
+ * Three NAMED states; ready/valid omitted since GAPL has no handshake.
+ */
+
+interface sel2 wire[2]
+
+interface beat {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function zero_beat() null => o: beat {
+    literal(256, 0) => o.data;
+    literal(32, 0)  => o.keep;
+    literal_bit(0)  => o.valid;
+    literal_bit(0)  => o.last;
+}
+
+function mutual_exclusion() ingress_in: beat, egress_in: beat
+    => ingress_out: beat, egress_out: beat, module_reset: boolean
+{
+    declare state: register(sel2);
+
+    literal(2, 0) => declare st_ingressing: sel2;
+    literal(2, 1) => declare st_egressing:  sel2;
+    literal(2, 2) => declare st_resetting:  sel2;
+
+    state, st_ingressing => equals(2) => declare is_ingressing: boolean;
+    state, st_egressing  => equals(2) => declare is_egressing:  boolean;
+    state, st_resetting  => equals(2) => declare is_resetting:  boolean;
+
+    zero_beat() => declare blank: beat;
+
+    // ingress_out = is_ingressing ? ingress_in : 0
+    is_ingressing, ingress_in, blank => if_else(beat) => declare ingress_sel: beat;
+    ingress_sel => ingress_out;
+
+    // egress_out = (ingressing || egressing) ? egress_in : 0
+    is_ingressing, is_egressing => or() => declare pass_egress: boolean;
+    pass_egress, egress_in, blank => if_else(beat) => declare egress_sel: beat;
+    egress_sel => egress_out;
+
+    is_resetting => module_reset;
+
+    // --- next state: a priority chain, default = hold
+    ingress_sel.valid, ingress_sel.last => and() => declare ingress_done: boolean;
+    egress_sel.valid,  egress_sel.last  => and() => declare egress_done:  boolean;
+
+    declare conds: conditional(sel2)[3];
+
+    egress_done  => conds[0].condition;
+    st_resetting => conds[0].value;
+
+    ingress_done  => conds[1].condition;
+    st_egressing  => conds[1].value;
+
+    is_resetting  => conds[2].condition;
+    st_ingressing => conds[2].value;
+
+    conds, state => priority(sel2, 3) => state;
+}

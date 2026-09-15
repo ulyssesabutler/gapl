@@ -1,0 +1,39 @@
+/* The next-state core of axis_3_to_1_arbiter.v, written in TODAY'S GAPL.
+ * Flow control is omitted (GAPL has no ready/valid), so this is only the
+ * round-robin selection FSM plus the tag-driven input select.
+ */
+
+interface sel2 wire[2]
+
+interface beat {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function arbiter3() i0: beat, i1: beat, i2: beat => o: beat {
+    declare cur: register(sel2);
+
+    // --- tag-driven select: one mux fed by one vector of cases
+    declare options: beat[3];
+    i0 => options[0];
+    i1 => options[1];
+    i2 => options[2];
+    cur, options => mux(beat, 3, 2) => declare chosen: beat;
+
+    // --- next state: (valid && last) ? (cur == 2 ? 0 : cur + 1) : cur
+    chosen.valid, chosen.last => and() => declare advance: boolean;
+
+    literal(2, 0) => declare zero: sel2;
+    literal(2, 1) => declare one: sel2;
+    literal(2, 2) => declare two: sel2;
+
+    cur, two => equals(2) => declare at_end: boolean;
+    cur, one => add(2)    => declare incremented: sel2;
+
+    at_end, zero, incremented => if_else(sel2) => declare wrapped: sel2;
+    advance, wrapped, cur     => if_else(sel2) => cur;
+
+    chosen => o;
+}
