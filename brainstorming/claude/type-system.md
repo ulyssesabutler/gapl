@@ -743,6 +743,56 @@ scan_with_tail(T, U, S: interface,
   `oneach` is a **type-level** operator rather than a combinator: it emits no hardware, so it does not
   belong in the same list as `map`/`scan`/`fold`/`regroup`.
 
+### Rate contracts — stated precisely, checked at runtime, not typed
+
+**Decision (2026-09): rate relationships between ports get no type-level syntax for now.** Length
+variables (`stream(T)[n]`, with `[m + n]`, `[max(m, n)]` and so on) were designed and rejected for the
+moment — not on principle, but because `choice` makes data-dependent lengths the *common* case for
+parsers rather than an edge case, so the system would meet its hardest problem immediately and in the
+place it is most needed.
+
+This extends a call §5 already made for `zip`: "no static check, no hardware error handling — but
+implement it to deadlock, not desynchronize... Put the actual assertion in `simengine`, where it is
+free." The reason it is acceptable here and was *not* acceptable for `@valid` is the failure mode:
+`@valid` fails as silently dropped data, whereas a rate violation deadlocks, which §5 explicitly calls
+debuggable.
+
+Two conditions attach to the deferral, and they are what keep it reversible:
+
+1. **Every rate requirement carries a `simengine` assertion.** Free, and it converts a documented
+   obligation into one that fails loudly in test rather than silently on hardware.
+2. **Every rate requirement is written as a spec, not as guidance.** Stated precisely enough to *become*
+   a typing rule later, so adding types is mechanical rather than a redesign. Vague prose ("the streams
+   should be the same length") would make this decision irreversible; a formula does not.
+
+Writing `|x|` for the beat count of port `x` within one lifecycle:
+
+| mechanism | rate contract | notes |
+|---|---|---|
+| `join` (generated, arity *n*) | `\|i₀\| = \|i₁\| = … = \|iₙ₋₁\| = \|o\|` | the contract currently asserted **silently**; this is the live bug class |
+| `zip` | `\|a\| = \|b\| = \|o\|` | same as join, materialized as data |
+| `align` | `\|o\| = max(\|a\|, \|b\|)` | no constraint on inputs — total by construction |
+| `merge` (append / round-robin / eager) | `\|o\| = Σ \|iₖ\|` | one mechanism, the policy only decides ordering |
+| `select` | `\|o\| = \|i_sel\|`; `\|iₖ\|` unconsumed for `k ≠ sel` | picks one input, does not drain the others |
+| `map` / `scan` | `\|o\| = \|i\|` | rate-preserving |
+| `fold` | `\|o\| = 1` | rate-reducing |
+| `scan_with_tail` | `\|o\| = \|i\|` or `\|i\| + 1` | data-dependent; MD5 padding |
+| `regroup(in_b, out_b)` | `\|o\| = ceil(\|i\| × in_b / out_b)` | static ratio only |
+
+**The combining mechanisms, and their duals.** These are five distinct operations, not variants of one:
+`join` and `zip` combine *within* a beat (length preserved); `merge` combines *across* beats (lengths
+summed) with append, round-robin and eager-by-arrival as policies on one mechanism — note
+`axis_3_to_1_arbiter` is already `merge` with the append policy hardcoded 3-way; `select` consumes only
+the winner; `align` is the total variant of `zip`. Each has a dual on the fork side — join↔fork,
+merge↔positional split, select↔route-by-value — so building the family symmetrically hands you the
+split side for free, which is what the header/body split architecture in `applications.md` needs.
+
+**The failure this leaves open**, recorded so it is not a surprise: a `parse` function emitting
+`o: stream(beat)` alongside `key: single(five_tuple)` will have a join generated against it that
+asserts 1:1, stall after the first beat waiting for a second key, and deadlock — with every fact needed
+to catch it statically already present. Until the assertion exists in `simengine`, that surfaces only on
+hardware.
+
 ### Graduated access to layers 2 and 3
 
 The tier a function occupies should be legible from its signature.
@@ -1107,6 +1157,19 @@ Ordered roughly by how much they block.
    and a gearbox — all three of which are this gap. It is also `packet_packer`'s architecture
    generalized, and the packing is *statically* determined when the header sizes are constants, so it is
    meaningfully easier than the dynamic-offset case in item 15.
+
+   **Resolved for now, deliberately, without types (2026-09).** Length variables were designed and set
+   aside: `choice` makes data-dependent lengths the common case for parsers, so the system would meet
+   its hardest problem immediately. Instead each combinator's rate contract is **stated as a formula**
+   and **asserted in `simengine`** — see §6, which carries the contracts. This is the same call §5 made
+   for `zip`, and it is acceptable here only because rate violations deadlock rather than silently
+   dropping data. The two conditions are what keep it reversible: precise specs become typing rules
+   mechanically, vague prose would not.
+
+   **If it proves insufficient, the cheapest next step is 1:1 only** — no arithmetic, no sums or maxes,
+   no data-dependent lengths, no solver, just a way to say "these two ports advance together." That
+   would not express `merge` or the parser's key, but it would make the generated join's silent 1:1
+   assumption checkable, which is the actual bug class.
 3. ~~**`map` is overloaded**~~ — **resolved (2026-09):** the per-lifecycle sense is now `oneach`, a
    type-level operator that emits nothing; `map` keeps the beat-wise, logic-generating meaning. See §6.
 4. **Direction reversal / control plane.** Runtime-configurable rule tables need a host write path
