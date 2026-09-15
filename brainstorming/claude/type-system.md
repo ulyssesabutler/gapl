@@ -773,9 +773,21 @@ scan_with_tail(T, U, S: interface,
 - **A combinator's output protocol is determined by whether it changes the rate**, so there is no 3×N
   table. Rate-preserving preserves the protocol; rate-reducing forces at least `@valid`-like
   intermittency, hence `@ready_valid`.
-- **Every function parameter is pure `@dataflow`.** Lifecycle position reaches them as *data*, via the
-  stdlib's existing `last(T)` and `valid(U)` record interfaces, never as control. That is the whole
-  ergonomic bet.
+- **A combinator's function parameter may not stall — in v1.** Lifecycle position reaches such
+  functions as *data*, via the stdlib's existing `last(T)` and `valid(U)` record interfaces, never as
+  control. That is the ergonomic bet, and the non-stalling requirement is what lets a combinator promise
+  a rate contract at all: if `scan`'s `step` could stall, `|o| = |i|` stops holding.
+
+  **Corrected (2026-09).** An earlier draft of this document stated the rule as "every function
+  parameter is pure `@dataflow`," which bundled two claims and justified only one. *Must not stall* is
+  justified as above. *Must be beat-level rather than lifecycle-level* is not justified anywhere, and it
+  is already false of this design — `oneach(f)` takes `f: stream(T) => stream(U)`, a whole pipeline.
+  Nothing requires a combinator's function parameter to be beat-level.
+
+  Moreover the surviving half is the same v1 simplification as "`map` requires a combinational `op`":
+  non-stalling is only needed to keep a combinator usable in a `@dataflow` context, since under
+  `@ready_valid` a stalling step merely propagates backpressure and slows the combinator down. **The two
+  restrictions should lift together when layer 3 lands.**
 - **`map` requires a combinational `op`** — **as a v1 simplification, not a permanent rule.** Non-zero
   latency enters only through hard macros (BRAM, DSP, vendor IP), which are latency-declaring channel
   functions, not lifted pure functions. The point is that v1 needs no latency analysis — just "does `op`
@@ -791,6 +803,35 @@ scan_with_tail(T, U, S: interface,
   Making the per-lifecycle case implicit was considered and rejected — no implicit lifting. Note
   `oneach` is a **type-level** operator rather than a combinator: it emits no hardware, so it does not
   belong in the same list as `map`/`scan`/`fold`/`regroup`.
+
+### State scoping, and scanning an infinite lifecycle
+
+**A scan's state is scoped to the lifecycle it is applied to.** Scan over `stream(T)` resets at that
+`last`; scan over `infinite(T)` never resets. That much falls out, and it handles MD5's per-packet
+padding count directly.
+
+**Per-beat updates with cross-lifecycle persistence compose from two features decided separately**, so
+no flattening operation is needed. CMS is the motivating case — the sketch must survive across packets
+while updating on every beat, meaning its state scope and its step scope are different levels. The
+structure:
+
+```text
+function cms_netfpga() i: infinite(packet) => o: infinite(packet) {
+    // outer scan over the infinite lifecycle: state is the sketch,
+    //   and its step consumes a whole `packet`
+    // inner scan over that packet's beats: seeded from the incoming sketch,
+    //   returning the updated one
+}
+```
+
+The outer step takes a whole `packet`, which is legal once the function-parameter rule above is
+corrected. The inner scan is seeded from the outer scan's state, which is exactly the data-seeded init
+in §10 item 16. Between them the case is covered.
+
+**A scan over an infinite lifecycle should not share a name with a scan over a bounded one.** They
+differ in whether state resets — a semantic difference invisible at the call site, which is precisely
+the failure that split `map` from `oneach`. Same reasoning, same remedy. (Note `fold` over an infinite
+lifecycle is already a type error per §4, since it never reaches `last` and so never emits.)
 
 ### Rate contracts — stated precisely, checked at runtime, not typed
 
@@ -981,7 +1022,13 @@ tree during the 2026-09 merge of this document — locations below are current a
   no type checking beyond a null-check.
 - **The stdlib already has `valid(T)`, `last(T)`, `conditional(T)`, and `pair(T, U)`** as record
   interfaces (`StandardLibrary.kt:34-58`) — hand-rolled versions of things this design needs.
-- **`register` usage in application code** is: cross-lifecycle state (`netfpga/src/cms/processor.gapl:29`),
+- **Nothing in GAPL currently has cross-packet state**, because `axis_mutual_exclusion` drives
+  `module_reset` into the kernel between packets (`processor_controller` only gates `enable`). So
+  CMS's `register(sketch4(16))` is *written* as a persistent sketch but is wiped every packet — it
+  accumulates within one packet only. The code wants cross-lifecycle state; the deployment cannot
+  provide it. This is a known consequence of the serialization, not a bug report, and it is one more
+  thing that per-lifecycle `scan` reset would fix by making the intended scope sayable.
+- **`register` usage in application code** is: intended-cross-lifecycle state (`netfpga/src/cms/processor.gapl:29`),
   per-lifecycle feedback (`netfpga/src/regex/processor.gapl:169`,
   `verilator-test/tests/email-with-opt/test.gapl:248`, `gapl-example/src/count-min.gapl:128`), and
   **hand-matched control delay** (`cms/processor.gapl:53-55` delays `valid`/`keep`/`last` by one to
