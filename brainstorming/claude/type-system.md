@@ -452,6 +452,14 @@ lifecycle types, were ever wanted.
 
 Settled in the 2026-09 session.
 
+**The `select` lives in the datatype definition, not in the function body** (confirmed 2026-09). The
+header parser sketch writes it that way —
+`h1: single(select(h0.eth.ethertype) { 0x0800 => beat1_v4; ... })` — and the alternative of matching
+inside a function body was raised only because the datatype form appears to read an earlier phase's
+field. That objection is resolved above: the compiler registers the *resolved branch index*, one bit
+for a two-way select rather than the selector's full width. Putting it in the datatype is also what
+makes the guarantee available to consumers, which is the point of the next decision.
+
 **Spatial alternation is a language construct, not a stdlib function.** It emits only a mux over wires
 already present, and `if_else` could nearly express it today — but what you want from it is the
 *guarantee* that you cannot read `ipv4.src` off something that resolved to IPv6, and a stdlib function
@@ -740,6 +748,15 @@ summaries.
 - `enable` becomes a port on every generated module, threaded down the hierarchy, applied at
   **serialization**: every `always @(posedge clk)` becomes `if (enable)`. The netlist IR never models
   it, so `Retimer`, `CombinationalLoopDetector`, and the graph converters keep working unchanged.
+
+  > **Two corrections (2026-09), both verified against the code — see §8.** First, this is **already
+  > implemented**: the serializer emits `if (reset) r <= 0; else if (enable) r <= next; else r <= r;` for
+  > every register, and both signals are already threaded, which is how `gapl_wrapper.v` passes
+  > `.enable` into the kernel today. Second, "keep working unchanged" holds **only while all registers
+  > are interchangeable.** Retiming does not move registers — it deletes them, collapses them into
+  > integer edge weights, and re-synthesizes anonymous shared shift registers whose bits aggregate
+  > across unrelated sources. Per-lifecycle reset would make accumulators distinguishable from pipeline
+  > registers, and nothing survives retiming to carry that distinction. See §10 item 6.
 - `valid`/`ready`/`last` **do** become real netlist wires, materialized **before** the transformer
   pipeline, so the `VirtualIONode` lag constraint keeps them aligned with the data they qualify.
 - Inside a stall island, retime with **plain registers plus one global enable**, not elastic buffers. A
@@ -920,6 +937,23 @@ in §10 item 16. Between them the case is covered.
 differ in whether state resets — a semantic difference invisible at the call site, which is precisely
 the failure that split `map` from `oneach`. Same reasoning, same remedy. (Note `fold` over an infinite
 lifecycle is already a type error per §4, since it never reaches `last` and so never emits.)
+
+**Name not finally picked.** Candidates: **`accumulate`** (plainest; reads as ongoing with no endpoint,
+though it slightly suggests addition) or **`standing_scan`** (reuses vocabulary the doc already has —
+§4 calls an all-infinite top-level module "a standing process"). The short name should stay with the
+bounded case, which is the common one; the marked name belongs on the rarer standing behaviour.
+`oneach` needs no rename: it sits on a different axis, being a lifting operator rather than a
+computation, so a differently-shaped name is appropriate. The resulting scheme is `map` stateless,
+`scan` stateful per-lifecycle, `accumulate` stateful standing, `fold` reducing per-lifecycle, `oneach`
+lifting.
+
+**`scan`'s step takes `last(T)` and `fold`'s does not, and that asymmetry is deliberate** (settled
+2026-09; it had looked like an oversight). `scan` emits an output *per beat*, so per-beat position is
+part of its contract — MD5's padding step relies on exactly this, taking `b: last(md5_beat)` and using
+`b.last` to mark the beat that receives the `0x80`. `fold` emits *once*, at an endpoint the combinator
+already handles, so its step has no use for position. The apparent counterexamples — CRC32's final
+inversion, a one's-complement checksum's carry fold — are "do something different at the end," and read
+better as a post-fold operation (`fold(...) => final_xor()`) than as a branch inside the step.
 
 ### Rate contracts — stated precisely, checked at runtime, not typed
 
@@ -1139,6 +1173,38 @@ tree during the 2026-09 merge of this document — locations below are current a
   `axis_hold_metadata`, `axis_3_to_1_arbiter`, `axis_mutual_exclusion`. This is, in effect, the
   hand-written version of the stdlib this design implies, and it is the right baseline to compare
   against. `axis_parser`/`axis_trim_front` are dissected in §6.
+- **Retiming erases registers rather than moving them** — established 2026-09, and it refutes a claim
+  §5 makes about lowering. `NetlistLeisersonCircuitConverter.fromModule` filters every register node out
+  of the graph (`:118`), collapsing register chains into integer edge weights; `toModule` copies every
+  body node *except* registers (`:340`); and `addSharedWeightedConnections` mints fresh anonymous ones,
+  emitting one shift register per driving wire as deep as its most-delayed consumer and tapping each
+  consumer at its own depth. Consequences:
+  - **No register identity survives.** "Which source register did this come from" is ill-posed in the
+    IR's own terms — source registers are not objects in the graph, only integers on edges. Emitted
+    registers aggregate bits from *unrelated* sources that happen to share a driving node, under
+    machine-generated names, and retiming may place one where no source register was.
+  - **Nothing can be pinned.** `MinimalRegisterSolver` constrains only edge weights, clock period,
+    `VirtualIONode` zero-lag, caller-supplied equality constraints, and an anchor. No register-specific
+    casing exists in any solver, nor in `Retimer`.
+  - So **any per-register attribute is destroyed by retiming** unless it rides on the edge weights *and*
+    the shared-shift-register merge refuses to combine bits with differing attributes. Neither exists.
+    §5's "the netlist IR never models [enable], so `Retimer`, `CombinationalLoopDetector`, and the graph
+    converters keep working unchanged" holds only while all registers are interchangeable, which
+    per-lifecycle reset would end.
+- **`enable` and `reset` already exist and are already threaded to every register.**
+  `PredefinedFunctionNodeCreator.kt` emits, per register, `always @(posedge clock)` with
+  `if (reset) r <= 0; else if (enable) r <= next; else r <= r;`. So §5's lowering plan for `enable` —
+  "a port on every generated module… every `always @(posedge clk)` becomes `if (enable)`" — is **already
+  implemented**, which is why `gapl_wrapper.v` can pass `.enable` into the kernel today. What does not
+  exist is a per-register *choice* of reset value for ordinary registers; the literal zero is hardcoded.
+- **There is precedent for a register carrying extra state, and evidence it has never survived
+  retiming.** `PredefinedFunction.kt` defines two variants: `RegisterFunction` (a bare one-cycle delay)
+  and `IntegerRegisterFunction`, which carries a `default` emitted as its reset value. But
+  `IntegerRegisterFunction` is excluded from the retiming graph (via `isRegister`, which covers both)
+  while *not* excluded from `toModule`'s copy (which tests `!is RegisterFunction` only) — so such a node
+  would be copied into the retimed module with nothing reconnecting it, its connections having been
+  erased into weights. Currently unreachable, since no `.gapl` file in the repo instantiates
+  `integer_register`, but it should be fixed on its own account.
 - **Realignment is expensive to hand-write even for a fixed offset.**
   `netfpga/packet-processor/lib/hw/contrib/cores/vlan_remover_v1_00/hdl/vlan_remover.v` is 415 lines: a
   seven-state FSM (one state commented "Realigning packets"), a 4-deep input FIFO, and a 512-bit
@@ -1430,6 +1496,12 @@ Ordered roughly by how much they block.
     varbit discipline). None of it blocks the static-header applications; all of it is needed for a
     general parser. Note this is the same machinery as dynamic `regroup` in (2), so deferring one
     largely defers the other.
+
+    **Scheduling clarified (2026-09).** `header-parser-sketch.md` finding 5 says the stdlib `parse` is
+    needed for *static* headers too, because protocol fields straddle beat boundaries — which appeared
+    to contradict this item's deferral. The two were disagreeing about *when*, not *whether*: `parse`
+    is deferred relative to the language changes, and required before the header-parser application is
+    attempted. The rest of item 15 — length-derived `last`, opaque variable regions — stays deferred.
 16. **`scan`/`fold` cannot seed the accumulator from data.** §6 types `init: null => A` — a constant.
     AES-CTR's counter starts from a nonce or IV that arrives as data; the round-level fold in a
     time-multiplexed core would need to seed from the incoming block; and any `scan` whose initial state
