@@ -194,10 +194,34 @@ conditionals, default => priority(T, 3) => declare output: T;
 In a more idiomatic language, defining similar logic might look like
 
 ```
-when (state) {
+output = when (state) {
    condition0 => value0;
    condition1 => value1;
    condition2 => value2;
+}
+```
+
+GAPLs syntax also makes it difficult to set multiple values at once.
+Logic that requires setting, for example, three values on each branch would normally require the above machinery to be duplicated for value.
+A more efficient syntax might look something like
+
+```
+when (state) {
+   condition0 => {
+       output0 = value00;
+       output1 = value01;
+       output2 = value02;
+   }
+   condition1 => {
+       output0 = value10;
+       output1 = value11;
+       output2 = value12;
+   }
+   condition2 => {
+       output0 = value20;
+       output1 = value21;
+       output2 = value22;
+   }
 }
 ```
 
