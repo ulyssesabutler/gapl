@@ -826,10 +826,37 @@ summaries.
   > registers, and nothing survives retiming to carry that distinction. See §10 item 6.
 - `valid`/`ready`/`last` **do** become real netlist wires, materialized **before** the transformer
   pipeline, so the `VirtualIONode` lag constraint keeps them aligned with the data they qualify.
-- Inside a stall island, retime with **plain registers plus one global enable**, not elastic buffers. A
-  full-throughput elastic buffer costs roughly 2× the flip-flops plus control, and buys nothing when
-  everything freezes together. Elastic buffers are for cutting the **backward `ready` path**, which is
-  combinational, has no registers, and is therefore invisible to retiming.
+- Inside a stall island, retime with **plain registers plus one island-wide enable**, not elastic
+  buffers. A full-throughput elastic buffer costs roughly 2× the flip-flops plus control, and buys
+  nothing when everything freezes together. Elastic buffers are for cutting the **backward `ready`
+  path**, which is combinational, has no registers, and is therefore invisible to retiming.
+
+  > *Wording clarified 2026-09: "island-wide," not "global."* There are two different enables and
+  > conflating them causes confusion. The **wrapper's** enable (`processor_controller`) is one signal
+  > for the entire kernel, hand-written, and is the thing this design deletes — it is why
+  > `axis_mutual_exclusion` has to serialize packets around the kernel. The **island** enable is
+  > compiler-generated per `@dataflow` function. Same mechanism, radically different granularity; the
+  > second is what replaces the first.
+
+- **Elastic buffers as the *general* retiming primitive: considered and deferred (2026-09).** The
+  proposal was for retiming to insert FIFOs rather than plain registers everywhere, so backpressure
+  propagates correctly with no enable at all. Deferred for three reasons:
+  - **The elastic graph is coarse — islands are its nodes.** All the deep combinational paths (MD5's 64
+    rounds, AES's 10, the hash functions) live *inside* islands, where plain registers are correct. What
+    remains between them is shallow: a phase counter, a comparator, a join computing
+    `fire = (∧ valid_i) && ready_out`. Few edges, so few buffers. Contrast fine-grained elastic HLS,
+    where every operation is a node — which is why buffer placement is MILP-hard there (Josipović et
+    al., §9) and a much smaller problem here.
+  - **It would not fix the timing problem we actually have.** `md5-lifecycle-sketch.md` finding 3 is the
+    `fold` recurrence, where register count around a cycle is invariant so nothing can pipeline it.
+    Elastic buffers do not change that invariant. C-slow retiming is the fix there, not buffering.
+  - **Deferring costs nothing to reverse**, because the decision that *would* be expensive to retrofit —
+    `ready` being modelled in the netlist IR — is being taken anyway, for independent reasons.
+
+  **Revisit trigger**, stated narrowly on purpose: *a path in the elastic layer between islands that
+  fails timing and cannot be fixed by restructuring the islands.* A failing path inside an island is
+  ordinary retiming's job; the backward `ready` path is already handled by boundary buffers above; a
+  recurrence is C-slow's.
 
 This is what `processor_controller` in `gapl_wrapper.v` does today, hand-written once at the top level.
 
