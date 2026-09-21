@@ -98,6 +98,13 @@ datatype packet seq {                             // NEW
 Note what `select` is doing here: it chooses an **interpretation of beat 1**, not a continuation with a
 different beat count. Both branches are exactly one beat. See finding 1.
 
+> **Superseded (2026-09).** Datatypes have no `choice` constructor and no selectors — alternation is
+> value-level, done with sum types and `match` inside the parser function. See "Alternation is
+> value-level" in `type-system.md` §4. The `packet` datatype above would instead declare a fixed
+> `seq` shape, with the IPv4/IPv6 distinction carried as a tagged *value* in the parser's output. The
+> sketch is left as written because findings 1–6 below were derived from it and remain valid; finding 1
+> in particular is what motivated the change.
+
 ## The pipeline
 
 ```text

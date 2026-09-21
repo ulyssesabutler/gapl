@@ -322,8 +322,12 @@ stream(T)          // one or more beats, bounded, carries a derived `last`
 infinite(T)        // unbounded, no `last`
 repeat(T, n)       // exactly n beats, n a static parameter
 seq { a: D; b: E } // concatenation; phases may have DIFFERENT beat interfaces
-choice(sel) { ... }// alternation — see below
 ```
+
+> **There is no `choice` constructor, and no selectors anywhere in a datatype** (decided 2026-09).
+> Alternation is a **value-level** concern, handled inside parser functions. See "Alternation is
+> value-level" at the end of this section — and note that much of the `choice` material below is
+> retained as a record of an explored-and-set-aside direction, not as live design.
 
 ### Decisions
 
@@ -553,6 +557,33 @@ Today's NetFPGA setup is accidentally immune, since `axis_mutual_exclusion` full
 between packets — but removing that serialization is the largest throughput win available
 (`md5-lifecycle-sketch.md` finding 5), and this rule is a precondition for removing it.
 
+### Alternation is value-level
+
+**Decided 2026-09, superseding the `choice` material above.** Datatypes have no `choice` constructor
+and no selectors. Alternation happens as ordinary **sum types plus `match`**, inside the parser function
+that converts a raw stream into a layer-2 one.
+
+The reasoning: the architecture already routes every packet through a parser
+(`infinite(stream(axi_beat))` → `infinite(packet)`), so the selector logic has a natural home there.
+Putting it in the datatype as well duplicates it in the harder place.
+
+This is `applications.md`'s appendix option A, adopted permanently rather than as a stepping stone —
+"type-safe parsed output, untyped lifecycle... maybe 80% of the safety benefit for well under half the
+work." Nothing on the near path loses anything by it: `header-parser-sketch.md` found that the
+fixed-protocol parser **never needs temporal `choice`**, since IPv4 and IPv6 fixed headers both complete
+within two beats, so no branch changes the beat count. A *general* parser does need branching, but it
+also needs the deferred dynamic-offset package (§10 item 15), so the two arrive together or not at all.
+
+Three consequences:
+
+- **Lost:** the type system no longer knows that beat structure varied. That is the accepted trade.
+- **Relocated, not discarded:** the reasoning recorded above about exhaustiveness, the mandatory `else`,
+  don't-care semantics, and what a selector may reference all transfers to value-level `match`. It is
+  the same set of questions one level down.
+- **Needs re-spelling:** `null`'s role. Optional trailing phases were partly framed as
+  `choice { stream(T); null }`; without `choice` that wants a direct way to mark a trailing phase as
+  possibly absent.
+
 ### The access surface: a phase's view is live only during that phase
 
 **Cross-phase field access is forbidden. Anything you need later is `scan` state.** The L4 load
@@ -629,16 +660,52 @@ silent conversion of a value at a connection.
 
 Two protocols only.
 
-| | producer may stall | consumer may stall |
-|---|---|---|
-| `@dataflow` | no | no |
-| `@ready_valid` | yes | yes |
+| | producer may stall | consumer may stall | may join |
+|---|---|---|---|
+| `@dataflow` | no | no | n/a — no extent |
+| `@valid` | yes | no | **no** |
+| `@ready_valid` | yes | yes | yes |
 
-These are cells of a 2×2 defined by **who may stall**. The fourth cell (consumer-only) is degenerate: a
+Cells of a 2×2 defined by **who may stall**. The remaining cell (consumer-only) is degenerate: a
 producer that can never stall means data is always available, so the consumer gates its own state and
 uses `@dataflow`.
 
-### Why `@valid` was dropped
+**Three protocols, and they correspond exactly to §2's three regimes** — which is the strongest
+argument that this is the right number:
+
+| §2 regime | protocol |
+|---|---|
+| static extent, no backpressure — "the FSM evaporates at compile time" | `@dataflow` |
+| data-dependent extent, no backpressure — "real FSM register, no handshake" | `@valid` |
+| data-dependent extent, backpressure — "FSM + handshake + buffers" | `@ready_valid` |
+
+With only two protocols, one regime had no name.
+
+### `@valid` — dropped, then readmitted with a rule
+
+**Readmitted 2026-09, under one restriction: a `@valid` function may fork but may not join.** To fork
+*and* join you create an island, exactly as with `@dataflow`. The original rejection (preserved below,
+because its analysis is what the restriction is answering) held that "every one of its correctness
+properties is an unchecked obligation." The restriction changes the status of three of the four:
+
+| obligation from the original rejection | under fork-but-no-join |
+|---|---|
+| equal-latency forks | **evaporates** — branches need alignment only because they eventually meet; forbid joining and latency skew stops mattering |
+| at most one stream input | **becomes a rule**, not an obligation |
+| nothing downstream ever stalls | **becomes checkable** — mandatory call-site coercion already catches wiring a `@valid` producer to a stalling consumer |
+| init before stream | **survives** — a `@valid` consumer cannot wait for a configuration value |
+
+The one residual is narrow enough to rule out directly: forbid configuration ports on `@valid`
+functions, or require them `@ready_valid`. Note the difference in kind from what was rejected — the
+original argument was *expose it and trust the user*; this is *expose it with the dangerous
+compositions forbidden*.
+
+**Two consequences.** `@valid` is what the NetFPGA pipeline actually speaks, so this is the protocol
+that lets `processor_controller` disappear without forcing full `@ready_valid` into the kernel. And it
+may substitute for §10 item 11, the downgrade pass, which exists specifically to recover `@valid`-like
+efficiency from `@ready_valid` automatically — less urgent once you can simply write it.
+
+### The original rejection, preserved
 
 `@valid` (producer-only stalling) is the natural third cell and is what the NetFPGA pipeline actually
 speaks. It is excluded from the surface language because **every one of its correctness properties is an
@@ -1094,7 +1161,7 @@ Recorded so they are not re-derived.
 | Higher-order wrapper for the `@dataflow → @ready_valid` coercion | Arity problem (one variant per shape), forces restructuring into a function purely to mark a boundary, and still does not expose the buffering knob. Replaced by call-site coercion. |
 | Inferring islands by transitive `@dataflow` connectivity + LSP inlay hints for visibility | Developers do not read warnings; a cost with throughput consequences must be visible in the source. Replaced by mandatory call-site coercion. |
 | `lazy_join` / `eager_join` as separate primitives | Lazy/eager is a *fork* distinction. "Eager join" is `join ∘ fifo-per-input`. |
-| `@valid` as a surface protocol | Every safety property is an unchecked obligation; failure mode is silent data loss. |
+| ~~`@valid` as a surface protocol~~ | **Reversed 2026-09.** Rejected because every safety property was an unchecked obligation with silent data loss as the failure mode — but restricting it to *fork, never join* turns three of the four obligations into rules or checkable conditions. See §5. |
 | Padding produces `seq { message; footer }` | Wrong for MD5 — padding starts mid-beat, output blocks are homogeneous, only the *count* is data-dependent. |
 | "GAPL's retiming lacks a constraint keeping `valid` aligned with data" | **False.** `MinimalRegisterSolver.kt:308-321` forces `r(sink) − r(source) = 0` on every edge touching a `VirtualIONode`, and `NetlistLeisersonCircuitConverter.kt:127-149` attaches one super-input and one super-output node. All IO shares a lag, so every input→output path shifts by the same delta. What survives is a `ready`-related concern: retimed registers have no enable, so in-flight beats need a stall enable or skid buffers. |
 | Coroutine/generator-style FSM transformation | GAPL bodies are dataflow graphs, not statement sequences; suspension points need a program-counter model. Largest erosion of "the user decides the structure." |
@@ -1373,8 +1440,11 @@ Ordered roughly by how much they block.
    language construct, selector provenance and cost, the mandatory `else` with don't-care sugar,
    selectors as register-free `expression`s, non-reconvergent branches, and nesting. See §4. What is
    left:
-   - **Surface syntax**, for `view`, `datatype`, `choice`, `else`, and the boundary keyword — folded
-     into the grammar work that has to happen before implementation regardless.
+   **Substantially dissolved (2026-09): there is no `choice` constructor.** Alternation is value-level
+   — sum types plus `match`, inside parser functions — so this item is no longer a lifecycle-language
+   feature at all. See "Alternation is value-level" in §4. What remains of it:
+   - **Surface syntax**, for `view`, `datatype`, and the boundary keyword — folded into the grammar
+     work that has to happen before implementation regardless.
    - ~~**Datatype compatibility: nominal or structural?**~~ **Resolved (2026-09): nominal.** Aliases
      transparent, separate declarations distinct, no new syntax required since distinctness is the
      default and GAPL already has aliases. Deliberately stricter than layer 1, whose width-only checking
@@ -1476,6 +1546,10 @@ Ordered roughly by how much they block.
     spatially; this is where resource sharing gets recovered.
 11. **The `@ready_valid` → `@valid`/`@dataflow` downgrade pass** (§5). Without it, the first end-to-end
     comparison against hand-written Verilog will look bad for a non-fundamental reason.
+    **Downgraded in urgency (2026-09):** `@valid` is now a surface protocol, so its efficiency can be
+    written directly rather than recovered automatically. The pass remains desirable — the compiler
+    proving the unsafe thing safe still beats the user asserting it — but it is no longer the only route
+    to that performance.
 12. ~~**Per-port protocol overrides.**~~ **Rejected (2026-09), not deferred.** The motivating case — a
     configuration value beside a stream — is served by lifecycle choice rather than protocol choice: a
     `single` over an `infinite` lifetime, lowered to §4's sticky latch. A function carries one protocol.
