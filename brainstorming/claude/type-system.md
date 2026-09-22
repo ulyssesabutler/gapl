@@ -322,12 +322,14 @@ stream(T)          // one or more beats, bounded, carries a derived `last`
 infinite(T)        // unbounded, no `last`
 repeat(T, n)       // exactly n beats, n a static parameter
 seq { a: D; b: E } // concatenation; phases may have DIFFERENT beat interfaces
+choice { a: D; b: E } // alternation — NO embedded selector; the producer chooses
 ```
 
-> **There is no `choice` constructor, and no selectors anywhere in a datatype** (decided 2026-09).
-> Alternation is a **value-level** concern, handled inside parser functions. See "Alternation is
-> value-level" at the end of this section — and note that much of the `choice` material below is
-> retained as a record of an explored-and-set-aside direction, not as live design.
+> **`choice` carries no selector** (decided 2026-09). A datatype never contains an expression. The
+> *producing* function decides which branch its output takes, and publishes that decision as a tag on
+> the channel; consumers are bound by it. See "Alternation: the producer chooses" at the end of this
+> section — and note that the `choice` material immediately below, which assumed an *embedded* selector
+> (`choice(h0.eth.ethertype) { ... }`), is superseded by it.
 
 ### Decisions
 
@@ -557,32 +559,54 @@ Today's NetFPGA setup is accidentally immune, since `axis_mutual_exclusion` full
 between packets — but removing that serialization is the largest throughput win available
 (`md5-lifecycle-sketch.md` finding 5), and this rule is a precondition for removing it.
 
-### Alternation is value-level
+### Alternation: the producer chooses
 
-**Decided 2026-09, superseding the `choice` material above.** Datatypes have no `choice` constructor
-and no selectors. Alternation happens as ordinary **sum types plus `match`**, inside the parser function
-that converts a raw stream into a layer-2 one.
+**Decided 2026-09, superseding the embedded-selector `choice` material above.** `choice` survives as a
+constructor but carries **no selector**:
 
-The reasoning: the architecture already routes every packet through a parser
-(`infinite(stream(axi_beat))` → `infinite(packet)`), so the selector logic has a natural home there.
-Putting it in the datatype as well duplicates it in the harder place.
+```text
+datatype ip_payload choice { v4: stream(ipv4_beat); v6: stream(ipv6_beat) }
+```
 
-This is `applications.md`'s appendix option A, adopted permanently rather than as a stepping stone —
-"type-safe parsed output, untyped lifecycle... maybe 80% of the safety benefit for well under half the
-work." Nothing on the near path loses anything by it: `header-parser-sketch.md` found that the
-fixed-protocol parser **never needs temporal `choice`**, since IPv4 and IPv6 fixed headers both complete
-within two beats, so no branch changes the beat count. A *general* parser does need branching, but it
-also needs the deferred dynamic-offset package (§10 item 15), so the two arrive together or not at all.
+The *producing* function decides which branch its output takes, using ordinary value-level logic in its
+own body, and publishes that decision as a **tag on the channel** — one more control wire alongside
+`valid`, `last`, `ready` and `phase`, costing log₂(branches) bits. Consumers are then bound by it: they
+must match on the tag before reading branch-specific fields, and exhaustiveness is checkable.
 
-Three consequences:
+The virtue is that it puts three different things in three appropriate places:
 
-- **Lost:** the type system no longer knows that beat structure varied. That is the accepted trade.
-- **Relocated, not discarded:** the reasoning recorded above about exhaustiveness, the mandatory `else`,
-  don't-care semantics, and what a selector may reference all transfers to value-level `match`. It is
-  the same set of questions one level down.
-- **Needs re-spelling:** `null`'s role. Optional trailing phases were partly framed as
-  `choice { stream(T); null }`; without `choice` that wants a direct way to mark a trailing phase as
-  possibly absent.
+| what | where |
+|---|---|
+| selector *logic* | in the producing function, as ordinary value-level code |
+| choice *structure* | in the datatype, with no expression in it |
+| choice *outcome* | on the channel, as a tag |
+
+**This eliminates two clusters of questions that an embedded selector forced**, because the producer
+always picks a branch the type declares:
+
+- **The mandatory `else` and its don't-care semantics.** Those existed because a selector *expression*
+  might match nothing. There is no unmatched case here.
+- **Selector provenance** — the whole four-cell analysis of same-beat versus earlier-beat selectors, and
+  the "late-arriving control puts data on the critical path to `fire`" cost. With no expression there is
+  no provenance question; the producer decides however it likes internally, and by the time the tag
+  reaches the channel it is a registered value.
+
+**What it costs:** the phase FSM is not purely a counter. It gains a registered branch tag selecting
+which per-branch transition table applies — so it is sized by phase count × branch count rather than
+phase count alone. Still tens of bits, still no deep logic.
+
+**DAG-only still applies**, for the same reason as before: loops in the choice graph give unbounded,
+data-dependent extent and undecidable buffer sizing.
+
+**And it resolves the `null` question.** An optional trailing phase is just
+`choice { present: stream(T); absent: null }`, with the producer picking — which it can, since it knows
+whether `last` already arrived. No separate mechanism needed.
+
+*History:* an intermediate position — no `choice` at all, alternation purely as value-level sum types
+and `match` inside parser functions — was recorded and then superseded by this one. It would have given
+up the type system's knowledge that beat structure varied ("type-safe parsed output, untyped
+lifecycle," `applications.md` option A). The producer-chooses model keeps that knowledge while still
+keeping expressions out of datatype definitions, which was the original motivation.
 
 ### The access surface: a phase's view is live only during that phase
 
@@ -1467,9 +1491,10 @@ Ordered roughly by how much they block.
    language construct, selector provenance and cost, the mandatory `else` with don't-care sugar,
    selectors as register-free `expression`s, non-reconvergent branches, and nesting. See §4. What is
    left:
-   **Substantially dissolved (2026-09): there is no `choice` constructor.** Alternation is value-level
-   — sum types plus `match`, inside parser functions — so this item is no longer a lifecycle-language
-   feature at all. See "Alternation is value-level" in §4. What remains of it:
+   **Reshaped (2026-09): `choice` exists, but carries no selector — the producer chooses.** See
+   "Alternation: the producer chooses" in §4. That settles the semantics and eliminates the mandatory
+   `else` and the selector-provenance analysis entirely, since a producer can only pick a branch the
+   type declares. It also resolves `null`'s optional-trailing-phase spelling. What remains of this item:
    - **Surface syntax**, for `view`, `datatype`, and the boundary keyword — folded into the grammar
      work that has to happen before implementation regardless.
    - ~~**Datatype compatibility: nominal or structural?**~~ **Resolved (2026-09): nominal.** Aliases

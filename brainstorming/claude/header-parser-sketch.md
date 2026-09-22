@@ -98,12 +98,13 @@ datatype packet seq {                             // NEW
 Note what `select` is doing here: it chooses an **interpretation of beat 1**, not a continuation with a
 different beat count. Both branches are exactly one beat. See finding 1.
 
-> **Superseded (2026-09).** Datatypes have no `choice` constructor and no selectors — alternation is
-> value-level, done with sum types and `match` inside the parser function. See "Alternation is
-> value-level" in `type-system.md` §4. The `packet` datatype above would instead declare a fixed
-> `seq` shape, with the IPv4/IPv6 distinction carried as a tagged *value* in the parser's output. The
-> sketch is left as written because findings 1–6 below were derived from it and remain valid; finding 1
-> in particular is what motivated the change.
+> **Superseded (2026-09).** A datatype never contains an expression, so `select(h0.eth.ethertype)`
+> above is not how this is written. `choice` exists but carries **no selector**: the *producing*
+> function decides which branch its output takes and publishes that as a tag on the channel, and
+> consumers are bound by it. See "Alternation: the producer chooses" in `type-system.md` §4. So the
+> IPv4/IPv6 distinction here would be declared as `choice { v4: …; v6: … }`, with the parser's own body
+> doing the ethertype comparison. The sketch is left as written because findings 1–6 below were derived
+> from it and remain valid — finding 1 in particular is what set this whole line of reasoning going.
 
 ## The pipeline
 
