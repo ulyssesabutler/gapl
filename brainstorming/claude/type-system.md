@@ -330,6 +330,9 @@ choice { a: D; b: E } // alternation — NO embedded selector; the producer choo
 > the channel; consumers are bound by it. See "Alternation: the producer chooses" at the end of this
 > section — and note that the `choice` material immediately below, which assumed an *embedded* selector
 > (`choice(h0.eth.ethertype) { ... }`), is superseded by it.
+>
+> **How any of this is realised in hardware** — what the compiler actually builds from a datatype, and
+> which control wires are transmitted rather than derived — is in §5's **"Realization"** subsection.
 
 ### Decisions
 
@@ -850,6 +853,14 @@ summaries.
   > registers, and nothing survives retiming to carry that distinction. See §10 item 6.
 - `valid`/`ready`/`last` **do** become real netlist wires, materialized **before** the transformer
   pipeline, so the `VirtualIONode` lag constraint keeps them aligned with the data they qualify.
+
+  > **The stated reason is retired (2026-09); the conclusion is weaker than it looks.** Retiming happens
+  > *inside* islands, islands are `@dataflow` and therefore have no `valid`/`last` at all, and the
+  > out-coercion **synthesises** `valid_out = delay(fire, latency)` from the island's known latency. So
+  > nothing travels through retimed logic needing alignment, and "materialize early to stay aligned" is
+  > not a requirement. The hand-written precedent is `cms/processor.gapl:53-55`, which delays
+  > `valid`/`keep`/`last` by one to match its latency — delay-at-boundary, not carry-through. What
+  > replaces this is in "Realization" below.
 - Inside a stall island, retime with **plain registers plus one island-wide enable**, not elastic
   buffers. A full-throughput elastic buffer costs roughly 2× the flip-flops plus control, and buys
   nothing when everything freezes together. Elastic buffers are for cutting the **backward `ready`
@@ -883,6 +894,80 @@ summaries.
   recurrence is C-slow's.
 
 This is what `processor_controller` in `gapl_wrapper.v` does today, hand-written once at the top level.
+
+### Realization: what actually gets built
+
+Worked out 2026-09. This covers both layers, since "what the compiler emits from a datatype" spans
+them; §4 points here.
+
+**No new IR — two annotations on the existing one.** A whole function carries one protocol (per-port
+overrides are rejected), and a call to a differently-protocol'd function gets a coercion island whose
+ports speak the caller's protocol. So *within* one function every channel has the same handshake
+structure, and its presence needn't be represented per channel. Mark **protocol per function** and
+**datatype per channel** on today's `Module`/`MutableModule`, and every control wire is derivable:
+
+| control wire | derived from |
+|---|---|
+| `valid` | protocol — `@valid`, `@ready_valid` |
+| `ready` | protocol — `@ready_valid` only |
+| `last` | datatype — one per bounded level |
+| `phase` | datatype — `seq` |
+| branch tag | datatype — `choice` |
+| `enable` | coercion structure — where the islands are |
+
+So the high level never models wires; it models the things wires are derivable from. A parallel
+representation is unnecessary, and this matches a pattern the codebase already uses for coarse views
+(`HierarchicalLeisersonCircuitGraph`, `CombinationalLoopDetector`'s port-reachability summaries).
+
+**Transmitted vs derived.** The useful split among those signals is not by name but by *who holds the
+information*:
+
+- **Derived** — computable by the consumer from a counter against the static structure: `phase`, a
+  `repeat`'s iteration index, and `last` *when the extent is static*.
+- **Transmitted** — the consumer cannot compute it: `last` when the extent is **data-dependent** (a
+  `stream`), and a `choice`'s branch tag.
+
+The criterion is §2's static-versus-data-dependent extent axis again. A `stream`'s `last` must arrive on
+a wire for the same reason a `stream`'s FSM cannot evaporate at compile time.
+
+**The lifecycle FSM is a stdlib GAPL function**, not compiler-synthesised nodes. Everything it needs —
+a register for the phase, one for the branch tag, comparators, an increment, muxes — is expressible in
+GAPL, and it is parameterised by *static* properties of the datatype (phase count, which phase is the
+trailing stream, branch count). Lowering a datatype becomes *instantiating* it. That keeps it on §6's
+stdlib line (hardware whose source you can read), makes it testable as ordinary GAPL through `sim-test`,
+and needs no new synthesis machinery in `NodeBuilder`. The `fire` gating and the lifecycle reset are
+both **muxes on the register's input**, so the register stays ordinary and its only special property is
+*don't retime me* — and because the FSM is a function, that pinning is expressible per-module rather
+than per-register.
+
+Note a stateful function is still `@dataflow`: the rule is that every *port* is `single`, which says
+nothing about registers inside.
+
+**`fire` is §2's layer-2/layer-3 interface, not a channel wire.** It is one AND gate computed locally at
+each consumer — `fire = valid` under `@valid`, `fire = valid && ready` under `@ready_valid`. Feeding the
+FSM `fire` is what makes the same stdlib function work under both protocols with nothing parameterising
+the difference, which is §2's swappability claim made concrete.
+
+**The coercion plumbing is three pieces, and one is already built.**
+
+| piece | how |
+|---|---|
+| the join — `fire = (∧ valid_i) && ready_out`, `ready_i = fire` | stdlib function, parameterised by arity |
+| the out-coercion delay — `valid_out = delay(fire, latency)` | stdlib function, parameterised by depth |
+| `enable` threading | **already exists** — see §8; every generated module has the port and every register is already gated |
+
+**Ordering: FSM early, coercion delay late.** The lifecycle FSM derives from the datatype and is fully
+known at netlist-build time. The out-coercion's delay depth is the island's *latency*, which **retiming
+determines** — an island may be combinational before retiming and *k* stages after. So the coercion
+plumbing is a **post-retiming pass**. This is precisely why §5 cares about the `VirtualIONode`
+constraint: forcing all of a module's outputs to share one lag is what makes "the island's latency" a
+single well-defined number rather than a per-path one.
+
+**Open from this work:** how `phase` and the branch tag reach consumers (§10 item 14); whether they
+cross module boundaries or are re-derived per module (`Flattener` runs `RECURSIVE`, so boundaries
+survive — carrying means wider channels, re-deriving means duplicated counters); how a lifecycle
+register is tagged with its scope so nested lifecycles reset the right things; and two small checks —
+whether a static `clog2` exists or needs writing by static recursion, and `if_else`'s actual signature.
 
 ### Fork and join
 
