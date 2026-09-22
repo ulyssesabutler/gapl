@@ -1651,9 +1651,49 @@ Ordered roughly by how much they block.
 6. **`enable` is not `reset`.** After this change they sit on the same registers. A stalled cycle is not
    a lifecycle boundary; cross-wiring them is a subtle bug.
 
-   **Nothing here is decided** — each mechanism is designed *separately* (§5 makes `enable` a port
-   applied at serialization; §4/§6 make `scan`/`fold` state reset per lifecycle), and how they compose
-   on one flip-flop is open. Three difficulties, expanded 2026-09:
+   **Deferred until after the typing work (2026-09), and cheaply so.** An unretimed island is
+   *combinational* — retiming is what inserts pipeline registers, and `register` is stdlib-restricted so
+   user datapath carries none of its own. So before retiming an island has latency 0 and the
+   out-coercion's `valid_out = delay(fire, latency)` collapses to `valid_out = fire`. The post-retiming
+   ordering constraint in §5's "Realization" only bites once retiming is in play. Existing designs are
+   untouched: today's MD5 retimed configurations contain no lifecycle state. What is deferred is
+   retiming *new*, lifecycle-using designs.
+
+   > **What keeps the deferral cheap, and must not be casually reversed:** module-level retiming
+   > exclusion is only available because the lifecycle FSM is a **stdlib function** — a `ChildGraphNode`
+   > the hierarchical converter can decline to descend into. Synthesise the FSM inline into its parent
+   > instead and that route closes, leaving only the harder lag-constraint approach.
+
+   **Much of the rest is addressed; two things are not.** Each mechanism is designed *separately* (§5
+   makes `enable` a port applied at serialization; §4/§6 make `scan`/`fold` state reset per lifecycle).
+   Of the three difficulties below, the *ordering* one dissolves — using the lifecycle FSM's own `first`
+   output to select `init` is correct whether a combinator reads its result combinationally or from a
+   register, and costs nothing since the FSM computes `first` anyway. The *three mechanisms* difficulty
+   also largely dissolves: hardware `reset_n` is already handled and already not enable-gated, `fire`
+   gating is the existing module-level `enable` port, and lifecycle reset is an init-select mux. What
+   remains is the retiming interaction, and a check on whether `enable` can be driven per-instance
+   rather than only threaded down uniformly.
+
+   **Verified 2026-09, and it corrects an assumption:** `IntegerRegisterFunction` is **not** excluded
+   from retiming and is not a precedent to follow. `isRegister` (`PredefinedFunction.kt:243-244`) covers
+   both variants, so `isRegisterNode` treats it identically to a plain register — erased into edge
+   weights at `NetlistLeisersonCircuitConverter.kt:55/63/119`. Retiming then redistributes those weights
+   and mints plain `RegisterFunction`s at `:202`, so the `default` is **silently lost**; and the
+   original node is *also* copied into the rebuilt module, because `toModule`'s filter at `:340` tests
+   `!is RegisterFunction` specifically — leaving a dangling node whose connections were already erased.
+   Unexercised only because nothing in the repo instantiates `integer_register`. **Worth fixing on its
+   own account**, independently of this design.
+
+   Note the obvious repair does not work either: making `isRegister` false would move such a node into
+   the *non*-register branch, where it is scored as combinational — so the clock-period constraint would
+   try to fit a path that really does contain a clock edge, and a feedback loop through a lifecycle
+   register would present as a zero-weight cycle, which `LeisersonCircuitGraph`'s constructor rejects
+   outright. What is needed is a third category the model cannot currently express: a node contributing
+   register delay whose weight is *pinned*. Two routes — constrain the lag difference across it
+   (`r(sink) == r(source)`, expressible through `MinimalRegisterSolver`'s existing
+   `additionalEqualityConstraints`), or exclude at module granularity per the note above.
+
+   The three original difficulties, for the record:
 
    - **Ordering.** "Reset on `last`" is imprecise. If the reset lands on the cycle the last beat fires,
      that beat's contribution is wiped before `fold` can emit it. It has to take effect at the *first
