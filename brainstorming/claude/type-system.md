@@ -930,6 +930,23 @@ information*:
 The criterion is §2's static-versus-data-dependent extent axis again. A `stream`'s `last` must arrive on
 a wire for the same reason a `stream`'s FSM cannot evaporate at compile time.
 
+**Which settles what crosses module boundaries (decided 2026-09):**
+
+> **A channel carries exactly what the consumer cannot derive, and nothing else.**
+
+So the crossing set is `{valid, ready, last, branch tag}` — the transmitted signals, which cross by
+definition since the producer holds information the consumer lacks. **`phase` is re-derived locally**,
+per module, by counting `fire`s against the static structure and resetting on `fire && last`. Note a
+`choice` makes the phase structure differ per branch, so deriving `phase` needs the branch tag — which
+is transmitted anyway, so the dependency is already satisfied.
+
+The alternative — transmitting `phase` — is not free: it would have to stay aligned with its data
+exactly as `valid` and `last` do, widening the delay lines those already require by log₂(phases) bits
+per stage. Re-deriving costs a counter but *no* delay line, since it is computed at each stage from
+signals already aligned there. Both are small, and smaller still because the elastic layer is coarse —
+"per module" means per island boundary, not per gate. The single-source-of-truth objection to deriving
+in N places dissolves too, since the derivation lives in one stdlib function instantiated N times.
+
 **The lifecycle FSM is a stdlib GAPL function**, not compiler-synthesised nodes. Everything it needs —
 a register for the phase, one for the branch tag, comparators, an increment, muxes — is expressible in
 GAPL, and it is parameterised by *static* properties of the datatype (phase count, which phase is the
@@ -963,11 +980,10 @@ plumbing is a **post-retiming pass**. This is precisely why §5 cares about the 
 constraint: forcing all of a module's outputs to share one lag is what makes "the island's latency" a
 single well-defined number rather than a per-path one.
 
-**Open from this work:** how `phase` and the branch tag reach consumers (§10 item 14); whether they
-cross module boundaries or are re-derived per module (`Flattener` runs `RECURSIVE`, so boundaries
-survive — carrying means wider channels, re-deriving means duplicated counters); how a lifecycle
-register is tagged with its scope so nested lifecycles reset the right things; and two small checks —
-whether a static `clog2` exists or needs writing by static recursion, and `if_else`'s actual signature.
+**Open from this work:** how `phase` and the branch tag are *surfaced* to a consumer's body (§10 item
+14 — really a grammar question); how a lifecycle register is tagged with its scope so nested lifecycles
+reset the right things; and two small checks — whether a static `clog2` exists or needs writing by
+static recursion, and `if_else`'s actual signature.
 
 ### Fork and join
 
