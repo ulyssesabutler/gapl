@@ -293,7 +293,16 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_processor.v"
 # already found and fixed once for the hw build (brainstorming/netfpga-partial-synthesis.md, Phase
 # 1). create_ip itself is still guarded (it errors if already present), but reset_target/
 # generate_target always rerun to pick up whatever packageCoreGaplKernel most recently produced.
-read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/GAPLprocessor.v"
+#
+# The kernel itself is every *.v installGaplVerilog put in hw/hdl/kernel/ (see installedKernelDir in
+# netfpga/build.gradle.kts), not one fixed file name.
+set kernel_sources [lsort [glob -nocomplain "$::env(NF_DESIGN_DIR)/hw/hdl/kernel/*.v"]]
+if {[llength $kernel_sources] == 0} {
+    error "No kernel Verilog found in $::env(NF_DESIGN_DIR)/hw/hdl/kernel/ - run installGaplVerilog"
+}
+foreach kernel_source $kernel_sources {
+    read_verilog $kernel_source
+}
 if {[get_ips -quiet gapl_kernel_ip] eq ""} {
     create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
 }

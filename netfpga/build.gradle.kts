@@ -110,7 +110,7 @@ val delayModelFile = File(delayModelPath)
 fun ensureUnder(parent: File, child: File): Boolean =
     child.canonicalPath.startsWith(parent.canonicalPath + File.separator)
 
-val gaplTargetFile = File(gaplSrcRoot, "processor.gapl").also {
+val gaplTargetFile = File(gaplSrcRoot, "gapl-processor.gapl").also {
     if (!it.exists()) throw GradleException("Missing .gapl file under src/$programName (looked at ${it.absolutePath})")
 }
 
@@ -118,6 +118,14 @@ val gaplTargetFile = File(gaplSrcRoot, "processor.gapl").also {
 val gaplVerilogOut = layout.buildDirectory.dir("verilog")
 
 fun targetVerilogName(gaplFile: File) = "GAPL" + gaplFile.nameWithoutExtension + ".v"
+
+// The selected application's kernel Verilog is installed into its own dedicated directory rather
+// than loose in hw/hdl/, so every consumer (packageCoreGaplKernel, makeSynthShell's input exclusion,
+// reference_switch_sim.tcl, gapl_kernel.tcl) can treat "whatever is in kernel/" as the kernel,
+// without hardcoding a file name. That keeps them working unchanged for a kernel made of several
+// files (e.g. HLS output), and lets installGaplVerilog be a Sync that clears out a previously
+// selected application's files instead of leaving them behind.
+val installedKernelDir = file("$nfDesignDir/hw/hdl/kernel")
 
 // Build/install location of the compiler binary
 val compilerPath = project(":compiler")
@@ -129,7 +137,7 @@ val compileProps = Properties().apply {
     compilePropsFile.inputStream().use { load(it) }
 }
 
-// Test vectors (testInputs, testExpectedOutputs) exercise processor.gapl itself, which is
+// Test vectors (testInputs, testExpectedOutputs) exercise the application's kernel itself, which is
 // shared by every variation of an application, so they live one level up from the variation
 // directory. Retiming/flattening are meant to be semantics-preserving, so the same vectors
 // must hold regardless of which variation is selected.
@@ -240,8 +248,8 @@ tasks.register("generateGaplVerilog") {
     // compiler flag added below (retime, flatten, retimingClockPeriod, retimingSolver,
     // retimingMaintainsTiming), and it resolves to a *different* physical file whenever the
     // variation is switched. Without it declared here, this task's only tracked input was
-    // gaplTargetFile (processor.gapl itself), so switching -PprogramVariationName without
-    // touching processor.gapl left Gradle believing a stale previous variation's already-built
+    // gaplTargetFile (gapl-processor.gapl itself), so switching -PprogramVariationName without
+    // touching gapl-processor.gapl left Gradle believing a stale previous variation's already-built
     // build/verilog/*.v was still UP-TO-DATE - silently shipping the wrong compiled design.
     inputs.files(gaplTargetFile)
     inputs.file(compilePropsFile)
@@ -309,25 +317,22 @@ tasks.register("generateGaplVerilog") {
     }
 }
 
-tasks.register<Copy>("installGaplVerilog") {
+// A Sync, not a Copy: installedKernelDir holds nothing but the selected kernel, so anything else
+// in it is a previously selected application's leftover and must go (see installedKernelDir).
+tasks.register<Sync>("installGaplVerilog") {
     group = "netfpga"
-    description = "Install generated Verilog for specified .gapl files (and wrapper.v) into \$NF_DESIGN_DIR/hw/hdl"
+    description = "Install the selected application's generated kernel Verilog into \$NF_DESIGN_DIR/hw/hdl/kernel"
     dependsOn("generateGaplVerilog")
 
-    val outDirProvider = gaplVerilogOut
+    from(gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) })
+    into(installedKernelDir)
 
-    from(provider {
-        outDirProvider.get().asFile.resolve(targetVerilogName(gaplTargetFile))
-    })
-    into(provider { file("$nfDesignDir/hw/hdl") })
-
-    // Incremental wiring
-    inputs.files(
-        outDirProvider.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) },
-    )
-    outputs.files(
-        file("$nfDesignDir/hw/hdl/${targetVerilogName(gaplTargetFile)}"),
-    )
+    // Before installedKernelDir existed, the kernel was installed loose as hw/hdl/GAPLprocessor.v.
+    // Nothing reads that path any more, but remove it so an old checkout's copy can't be mistaken
+    // for the current kernel.
+    doFirst {
+        file("$nfDesignDir/hw/hdl/GAPLprocessor.v").delete()
+    }
 }
 
 // GAPL: solves clk_wiz_ip's MMCM multiply/divide/jitter/phase-error configuration for
@@ -634,9 +639,9 @@ tasks.register("makeIPs") {
 //
 // Packaged like every other core, but with Vivado's synthesis checkpoint left enabled (see
 // create_project.tcl and lib/hw/contrib/cores/gapl_kernel_v1_0_0/gapl_kernel.tcl for why). This
-// task's inputs are the freshly-installed GAPLprocessor.v (varies per application/variation) and
-// the static gapl_wrapper.v, so it - and therefore the expensive synthesis checkpoint it produces
-// - only reruns when the selected application actually changes.
+// task's inputs are the freshly-installed kernel Verilog in installedKernelDir (varies per
+// application/variation) and the static gapl_wrapper.v, so it - and therefore the expensive
+// synthesis checkpoint it produces - only reruns when the selected application actually changes.
 val gaplKernelCoreDir = file("$sumeFolder/lib/hw/contrib/cores/gapl_kernel_v1_0_0")
 
 tasks.register<Exec>("packageCoreGaplKernel") {
@@ -648,7 +653,6 @@ tasks.register<Exec>("packageCoreGaplKernel") {
     // graph above, needs that core's component.xml already registered in the IP catalog.
     mustRunAfter(netfpgaStdCoreBuildTasksBySuffix.getValue("FallthroughSmallFifo"))
 
-    val installedGaplProcessor = file("$nfDesignDir/hw/hdl/GAPLprocessor.v")
     val installedGaplWrapper = file("$nfDesignDir/hw/hdl/gapl_wrapper.v")
     // gapl_wrapper.v isn't actually a self-contained leaf - it internally instantiates these
     // static NetFPGA infra utility modules (found the hard way: an OOC synthesis run for this IP
@@ -664,11 +668,13 @@ tasks.register<Exec>("packageCoreGaplKernel") {
         "util/reverse_bytes.v",
     )
     val coreHdlDir = gaplKernelCoreDir.resolve("hdl")
+    // gapl_kernel.tcl reads every *.v in here as the kernel - see installedKernelDir.
+    val coreKernelDir = coreHdlDir.resolve("kernel")
 
     workingDir = gaplKernelCoreDir
     exportNetfpgaEnv()
 
-    inputs.file(installedGaplProcessor)
+    inputs.dir(installedKernelDir)
     inputs.file(installedGaplWrapper)
     inputs.files(staticUtilDeps.map { file("$nfDesignDir/hw/hdl/$it") })
     inputs.file(gaplKernelCoreDir.resolve("gapl_kernel.tcl"))
@@ -676,8 +682,12 @@ tasks.register<Exec>("packageCoreGaplKernel") {
     outputs.dir(gaplKernelCoreDir.resolve("xgui"))
 
     doFirst {
-        coreHdlDir.mkdirs()
-        installedGaplProcessor.copyTo(coreHdlDir.resolve("GAPLprocessor.v"), overwrite = true)
+        // Replaced wholesale, never merged into, for the same stale-previous-application reason
+        // installGaplVerilog is a Sync. The loose hdl/GAPLprocessor.v is the pre-kernel/ layout's
+        // copy.
+        coreKernelDir.deleteRecursively()
+        coreHdlDir.resolve("GAPLprocessor.v").delete()
+        installedKernelDir.copyRecursively(coreKernelDir)
         installedGaplWrapper.copyTo(coreHdlDir.resolve("gapl_wrapper.v"), overwrite = true)
         staticUtilDeps.forEach {
             file("$nfDesignDir/hw/hdl/$it").copyTo(coreHdlDir.resolve(File(it).name), overwrite = true)
@@ -702,7 +712,7 @@ tasks.register<Exec>("packageCoreGaplKernel") {
 // launch_runs synth_1's ~12 min of work when something in the static shell actually changed - a pure
 // GAPL application switch leaves every input below untouched, so Gradle skips this task entirely.
 //
-// Deliberately excludes GAPLprocessor.v from the hdl inputs (the one file that varies per
+// Deliberately excludes installedKernelDir from the hdl inputs (the one part that varies per
 // application) and depends on packageCoreGaplKernel for *ordering* only (dependsOn, not
 // inputs.file/inputs.dir) - not its component.xml content - since top-level shell synthesis only
 // needs the GAPL kernel IP's port interface (stable across applications) to exist in the IP catalog,
@@ -715,7 +725,7 @@ tasks.register<Exec>("makeSynthShell") {
     exportNetfpgaEnv()
     dependsOn("installGaplVerilog", "installConstraints", "installClkWizConfig", "makeInit", "makeIPs", "packageCoreGaplKernel")
 
-    inputs.files(fileTree(file("$nfDesignDir/hw/hdl")) { exclude("GAPLprocessor.v") })
+    inputs.files(fileTree(file("$nfDesignDir/hw/hdl")) { exclude("kernel/**", "GAPLprocessor.v") })
     inputs.dir(file("$nfDesignDir/hw/constraints"))
     inputs.dir(file("$nfDesignDir/hw/tcl"))
     inputs.file(file("$nfDesignDir/hw/tcl_generated/clk_wiz_config.tcl"))
@@ -853,7 +863,7 @@ tasks.register<Exec>("runSimulation") {
 
 tasks.register<Delete>("uninstallGaplVerilog") {
     group = "netfpga"
-    description = "Remove Verilog installed from -PgaplSources under \$NF_DESIGN_DIR/hw/hdl"
+    description = "Remove the installed kernel Verilog (\$NF_DESIGN_DIR/hw/hdl/kernel)"
 
     doFirst {
         val nfHdlDir = file("$nfDesignDir/hw/hdl")
@@ -862,9 +872,8 @@ tasks.register<Delete>("uninstallGaplVerilog") {
             return@doFirst
         }
 
-        val processorInstalled = nfHdlDir.resolve(targetVerilogName(gaplTargetFile))
-
-        listOf(processorInstalled).forEach { f ->
+        // GAPLprocessor.v: the pre-installedKernelDir layout's loose copy, see installGaplVerilog.
+        listOf(installedKernelDir, nfHdlDir.resolve("GAPLprocessor.v")).forEach { f ->
             if (f.exists()) {
                 println("[uninstallGaplVerilog] Deleting ${f.relativeToOrSelf(nfHdlDir)}")
                 delete(f)
@@ -972,7 +981,7 @@ tasks.register<Exec>("buildKernelTest") {
     // ccache keys its direct-mode fast path on the source file's path+size+mtime, not always its
     // content. Verilator always regenerates this design's *.cpp at the SAME fixed path
     // (verilatorKernelOutDir) regardless of which -PprogramName/-PprogramVariationName was
-    // selected, so switching applications (or just editing processor.gapl and rebuilding the same
+    // selected, so switching applications (or just editing gapl-processor.gapl and rebuilding the same
     // one) repeatedly overwrites that path with different content - if two such rebuilds land on
     // the same file size within the same mtime-resolution window (easy on a fast machine), ccache
     // can serve a stale/mismatched object for the new content instead of recompiling. Confirmed by
@@ -1062,7 +1071,7 @@ tasks.register<Exec>("runKernelTest") {
 // Verilog/Verilator (and the compiler entirely - it reads gaplTargetFile's source directly, not
 // gaplVerilogOut). Only -PprogramName matters here, not -PprogramVariationName: retime/flatten/
 // clockPeriodNs are all compiler-only settings a pre-compile semantic check has no use for, and
-// every variation of a given application shares the exact same processor.gapl source.
+// every variation of a given application shares the exact same gapl-processor.gapl source.
 val simKernelTestBinary = project(":netfpga:sim-kernel-test")
     .layout.buildDirectory.file("install/sim-kernel-test/bin/sim-kernel-test")
 

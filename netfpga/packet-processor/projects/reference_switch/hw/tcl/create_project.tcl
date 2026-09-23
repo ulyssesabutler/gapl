@@ -200,7 +200,7 @@ read_verilog "./hdl/packet_processor/packet_processor.v"
 # being read as raw RTL like everything else here. Deliberately NOT setting
 # generate_synth_checkpoint false for this one - every other create_ip call in this file disables
 # it, but here we want the opposite: Vivado synthesizes the kernel once and caches the checkpoint,
-# only re-synthesizing when GAPLprocessor.v (i.e. the selected application) actually changes,
+# only re-synthesizing when the installed kernel Verilog (hw/hdl/kernel/, i.e. the selected application) actually changes,
 # instead of paying full synthesis cost for the largest RTL in this design on every build.
 #
 # -module_name can't be `gapl_wrapper` (Vivado rejects it: "reserved", since that's already the

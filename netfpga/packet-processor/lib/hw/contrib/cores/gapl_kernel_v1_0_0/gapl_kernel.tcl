@@ -2,15 +2,15 @@
 #
 # Packages gapl_wrapper.v (static AXI-Stream boundary - see
 # projects/reference_switch/hw/hdl/gapl_wrapper.v) together with the currently-installed,
-# per-application GAPLprocessor.v as one Vivado IP-XACT core.
+# per-application kernel Verilog (hdl/kernel/) as one Vivado IP-XACT core.
 #
 # Unlike every other core in this tree, this one is meant to be instantiated with
 # generate_synth_checkpoint left enabled (see create_project.tcl's create_ip call for it) - Vivado
 # synthesizes it once and caches the checkpoint, reused on every top-level build where
-# GAPLprocessor.v hasn't changed.
+# the kernel hasn't changed.
 #
 # Measured (see gapl_kernel_ip_synth_1/runme.log): this synthesis step itself only takes ~2 minutes
-# - despite GAPLprocessor.v's large file size, it is NOT the dominant cost of a ~30-40 minute build.
+# - despite the kernel Verilog's large file size, it is NOT the dominant cost of a ~30-40 minute build.
 # The NetFPGA control_sub block design (PCIe hard IP, MicroBlaze, AXI crossbars, DMA - 30+ IP
 # sub-runs) dominates instead. Caching the kernel alone caps the achievable win at ~2 minutes; it
 # does not make switching applications meaningfully fast on its own. Caching control_sub (the
@@ -31,7 +31,17 @@ puts "Creating GAPL Kernel IP"
 
 update_ip_catalog
 
-read_verilog "./hdl/GAPLprocessor.v"
+# The kernel is whatever packageCoreGaplKernel copied into hdl/kernel/ (the installed kernel
+# directory, see installedKernelDir in netfpga/build.gradle.kts) - read all of it rather than
+# naming a file, so a kernel spread over several files needs no change here. Sorted only so
+# Vivado sees the same order every run.
+set kernel_sources [lsort [glob -nocomplain "./hdl/kernel/*.v"]]
+if {[llength $kernel_sources] == 0} {
+    error "No kernel Verilog found in ./hdl/kernel/ - run packageCoreGaplKernel through Gradle"
+}
+foreach kernel_source $kernel_sources {
+    read_verilog $kernel_source
+}
 read_verilog "./hdl/gapl_wrapper.v"
 # gapl_wrapper.v instantiates these static NetFPGA infra utility modules internally - this IP's
 # synthesis is its own isolated scope, so it needs its own copies (see build.gradle.kts's

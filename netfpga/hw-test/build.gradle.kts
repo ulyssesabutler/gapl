@@ -21,7 +21,7 @@ val generatorConfigFile = project.file("generator.properties")
 
 val programName = findProperty("programName")!! as String
 
-// Test vectors are per-application (shared by every variation of the app's processor.gapl),
+// Test vectors are per-application (shared by every variation of the app's kernel source),
 // not per-variation.
 val gaplSrcRoot = layout.projectDirectory.dir("../src/$programName").asFile
 

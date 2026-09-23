@@ -22,7 +22,7 @@ Without this, the build will likely fail.
 ## Editing GAPL code
 
 The GAPL code is located in the `src` directory.
-Specifically, you can edit the `src/packet_body_processor.gapl` file.
+Specifically, you can edit an application's `src/<app-name>/gapl-processor.gapl` file (see `ADDING_APPLICATIONS.md`).
 
 ## Compiling GAPL
 

@@ -327,7 +327,7 @@ class SimKernelTest : CliktCommand(name = "sim-kernel-test") {
             "to netfpga/kernel-test's Verilator harness - same -i/-o hex packet convention, one " +
             "packet per pair, so the same test.properties vectors work against either."
 
-    private val gaplFile: File by option("-f", "--file", help = "GAPL source file to compile (processor.gapl).")
+    private val gaplFile: File by option("-f", "--file", help = "GAPL source file to compile (gapl-processor.gapl).")
         .file(mustExist = true, canBeDir = false, mustBeReadable = true).required()
 
     private val inputs: List<String> by option(

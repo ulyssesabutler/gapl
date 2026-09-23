@@ -91,6 +91,8 @@ intellij-plugin/src/main/resources/server/
 **/*v*_*_*/**
 **/.metadata/**
 netfpga/packet-processor/projects/reference_switch/hw/create_ip/rom_data.txt
+# Installed per-application kernel Verilog (netfpga installGaplVerilog)
+netfpga/packet-processor/projects/reference_switch/hw/hdl/kernel/
 .Xil
 clockInfo.txt
 xsim.dir
