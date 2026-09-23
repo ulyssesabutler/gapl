@@ -78,10 +78,14 @@ much larger II and is out of scope for now.
 
 ## Open questions and things to check
 
-- **Tool choice.** The `read_nb` pattern works in all three tools, so this is about QoR and
-  convenience, not correctness. The plan is to default to Vitis HLS 2024.2 and invoke it as
-  `vitis-run --mode hls --tcl`, since 2024.2 warns that the `vitis_hls` executable is deprecated.
-  The scripts should stay runnable under 2020.1 as a same-version fallback.
+- **Tool choice: decided, Vitis HLS 2024.2.**
+  - It's invoked as `vitis-run --mode hls --tcl`, since 2024.2 warns that the `vitis_hls`
+    executable is deprecated.
+  - The NetFPGA build stays on Vivado 2020.1. That works because only raw RTL crosses over (see
+    Decisions).
+  - The pipeline-drain toy verified this at out-of-context synthesis. The MD5 kernel's
+    `runSimulation` and full build are the real end-to-end confirmation.
+  - The 2020.1 HLS tools remain the same-version fallback.
 - **Byte order at the boundary.**
   - GAPL sees each beat byte-reversed (`reverse_bytes` in `gapl_wrapper.v`). The HLS kernel
     won't.
