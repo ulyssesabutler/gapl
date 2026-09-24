@@ -64,9 +64,38 @@ much larger II and is out of scope for now.
     Vitis HLS 2024.2) is a **non-blocking `read_nb()` that carries its own valid bit**. It keeps
     II=1 and uses ~3x fewer flip-flops than `style=flp`.
   - All tools' RTL synthesizes cleanly in Vivado 2020.1 for xc7vx690t-3.
-- **Next: `netfpga/src/md5/hls-processor.cpp` plus a testbench.** C-sim and C/RTL cosim against
-  `netfpga/src/md5/test.properties`, using the `read_nb` pattern. The testbench should include a
-  drain check (send, then go idle) so a regression to the default pipeline style is caught.
+- **Done: single-block MD5 HLS kernel** (`netfpga/src/md5/hls-processor.{h,cpp}`), with shared
+  infrastructure in `netfpga/hls/`:
+  - `common/netfpga_axis.h`: the `nf_beat` type, plus the kernel contract (top
+    `packet_body_processor`, ports `i`/`o`, GAPL byte order, `read_nb` only).
+  - `common/test_properties.h`: a `test.properties` reader with `hexToBeats`-identical beat
+    splitting.
+  - `common/kernel_tb.cpp`: a generic C-sim/cosim testbench that checks every output beat's data,
+    keep and last.
+  - `common/drain_tb.v`: an RTL drain plus random-gaps/backpressure check.
+  - `run_hls.tcl`: a generic, environment-driven Vitis HLS script.
+  - `check_kernel.sh <app>`: runs all of the above, plus the drain testbench in Vivado 2020.1's
+    xsim.
+
+  Results:
+  - `netfpga/hls/check_kernel.sh md5` passes C-sim, C/RTL cosim and the drain check (203/203
+    beats).
+  - Mutation checks confirmed the tests catch faults. A corrupted expected digest fails C-sim. A
+    blocking `read()` kernel still passes C-sim but fails the drain check with 0/3 beats.
+  - HLS scheduled the 64 unrolled rounds as a 48-cycle, II=1 pipeline at 10 ns.
+- **First comparison (out-of-context `synth_design` only, not placed/routed).** Vivado 2020.1,
+  xc7vx690t-3, 10 ns clock. Latency is from `runKernelTest` for GAPL and csynth for HLS.
+
+  | md5 kernel | LUTs | FFs | WNS (ns) | Latency (cycles) |
+  |---|---|---|---|---|
+  | HLS (Vitis HLS 2024.2) | 8,686 | 8,407 | 5.945 | 48 |
+  | GAPL `min-register-count` | 7,749 | 9,210 | 4.250 | 55 |
+  | GAPL `per-port-min-register-count` | 7,749 | 9,210 | 4.250 | 55 |
+
+  The two GAPL variations synthesize to identical numbers. Both implementations meet 10 ns with
+  wide margins, which suggests both are pipelined deeper than 10 ns strictly needs. The HLS
+  kernel's figures include its two AXI-Stream register slices (in and out). These are rough
+  post-synthesis numbers, and the real comparison should come from the routed full design.
 - **Then: `hls_wrapper.v` and Gradle dispatch.**
   - `hls_wrapper.v`.
   - A `generateHlsVerilog` / `installHlsVerilog` pair feeding `packageCoreGaplKernel`.
