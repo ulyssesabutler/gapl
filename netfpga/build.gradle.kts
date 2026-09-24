@@ -110,9 +110,9 @@ val delayModelFile = File(delayModelPath)
 fun ensureUnder(parent: File, child: File): Boolean =
     child.canonicalPath.startsWith(parent.canonicalPath + File.separator)
 
-val gaplTargetFile = File(gaplSrcRoot, "gapl-processor.gapl").also {
-    if (!it.exists()) throw GradleException("Missing .gapl file under src/$programName (looked at ${it.absolutePath})")
-}
+// Existence is checked below, once the variation's kernel type is known - an HLS-only application
+// needn't have one.
+val gaplTargetFile = File(gaplSrcRoot, "gapl-processor.gapl")
 
 // Output directory for generated Verilog
 val gaplVerilogOut = layout.buildDirectory.dir("verilog")
@@ -185,6 +185,65 @@ val retimingMaintainsTiming = propBool("retimingMaintainsTiming", false)
 
 val flattenMode = propString("flatten", "recursive")!!
 
+// ---- Kernel type: GAPL or HLS ----
+//
+// Which implementation of the application a variation builds: `kernel=gapl` (the default)
+// compiles src/<app>/gapl-processor.gapl with the GAPL compiler, `kernel=hls` synthesizes
+// src/<app>/hls-processor.cpp with Vitis HLS. Both produce a module named packet_body_processor
+// for the same kernel slot (installedKernelDir -> the gapl_kernel IP), each inside its own static
+// wrapper (hw/hdl/gapl_wrapper.v or hw/hdl/hls_wrapper.v) with identical outer ports, so everything
+// from packageCoreGaplKernel on is shared. Both read the same test.properties. The retime/flatten
+// settings above only apply to GAPL variations; see brainstorming/claude/netfpga-hls-kernels.md for
+// the HLS side's design.
+val kernelType = propString("kernel", "gapl")!!.trim().lowercase().also {
+    if (it != "gapl" && it != "hls") {
+        throw GradleException("compile.properties kernel=$it: must be gapl or hls ($compilePropsFile)")
+    }
+}
+val isHlsKernel = kernelType == "hls"
+
+val hlsProcessorFile = File(gaplSrcRoot, "hls-processor.cpp")
+val kernelSourceFile = if (isHlsKernel) hlsProcessorFile else gaplTargetFile
+if (!kernelSourceFile.exists()) {
+    throw GradleException(
+        "Variation $programName/$programVariationName is kernel=$kernelType, but " +
+            "${kernelSourceFile.absolutePath} does not exist"
+    )
+}
+
+// For tasks that only make sense for one kernel type (the GAPL compiler/simengine/Verilator
+// harnesses, or the Vitis HLS ones), so selecting the wrong kind of variation fails with a pointer
+// to the right task instead of an unrelated error from deep inside it.
+fun Task.requireKernelType(required: String, alternative: String) {
+    doFirst {
+        if (kernelType != required) {
+            throw GradleException(
+                "$name only applies to kernel=$required variations, but $programName/" +
+                    "$programVariationName is kernel=$kernelType - use $alternative instead"
+            )
+        }
+    }
+}
+
+// Vitis HLS 2024.2, not the NetFPGA flow's own 2020.1: only HLS's raw generated Verilog crosses into
+// the Vivado 2020.1 build (never an HLS-packaged IP, which 2020.1 can't reliably import), and that
+// RTL has been verified to synthesize and simulate cleanly under 2020.1.
+val vitisHlsSettings = propOrEnv(
+    prop = "vitisHlsSettings",
+    env  = "VITIS_HLS_SETTINGS",
+    default = "/tools/Xilinx/Vitis_HLS/2024.2/settings64.sh"
+)
+// The HLS scheduler's target clock. Defaults to the variation's real clock (clockPeriodNs); Vitis
+// HLS already reserves 27% of the period as clock uncertainty on top of that.
+val hlsClockPeriodNs = propString("hlsClockPeriodNs", clockPeriodNs)!!
+val hlsDir = layout.projectDirectory.dir("hls").asFile
+val hlsWorkDir = layout.buildDirectory.dir("hls/$programName/$programVariationName")
+val hlsVerilogOut = hlsWorkDir.map { it.dir("proj/sol/syn/verilog") }
+val hlsKernelSources = listOf(
+    hlsProcessorFile,
+    File(gaplSrcRoot, "hls-processor.h"),
+)
+
 // Bash runner
 fun bash(cmd: String) = listOf("bash", "-lc", cmd)
 
@@ -234,6 +293,7 @@ tasks.register<Exec>("printEnv") {
 tasks.register("generateGaplVerilog") {
     group = "netfpga"
     description = "Compile specified *.gapl and copy wrapper.v (under src/$programName) to Verilog into build/verilog"
+    requireKernelType("gapl", "generateHlsVerilog")
 
     // The compiler distribution is a real input, not just an ordering dependency. `dependsOn` alone
     // guarantees installDist runs first but does not dirty this task when the compiler changes, so a
@@ -317,14 +377,76 @@ tasks.register("generateGaplVerilog") {
     }
 }
 
+// Vitis HLS csynth of src/<app>/hls-processor.cpp -> hlsVerilogOut (proj/sol/syn/verilog/*.v, the
+// kernel RTL), via the same netfpga/hls/run_hls.tcl that check_kernel.sh uses.
+tasks.register<Exec>("generateHlsVerilog") {
+    group = "netfpga"
+    description = "Synthesize the selected kernel=hls variation's hls-processor.cpp to Verilog with Vitis HLS"
+    requireKernelType("hls", "generateGaplVerilog")
+
+    inputs.files(hlsKernelSources)
+    inputs.dir(hlsDir.resolve("common"))
+    inputs.file(hlsDir.resolve("run_hls.tcl"))
+    inputs.property("hlsClockPeriodNs", hlsClockPeriodNs)
+    inputs.property("vitisHlsSettings", vitisHlsSettings)
+    outputs.dir(hlsVerilogOut)
+
+    doFirst { hlsWorkDir.get().asFile.mkdirs() }
+    workingDir(hlsWorkDir)
+    environment(
+        mapOf(
+            "HLS_APP_DIR" to gaplSrcRoot.absolutePath,
+            "HLS_WORK_DIR" to hlsWorkDir.get().asFile.absolutePath,
+            "HLS_CLOCK_NS" to hlsClockPeriodNs,
+            "HLS_STEPS" to "csynth",
+        )
+    )
+    // No `set -u`: Vitis HLS 2024.2's settings64.sh itself reads unset variables (PYTHONPATH).
+    commandLine(bash("""
+        set -eo pipefail
+        [ -f "$vitisHlsSettings" ] || { echo "Vitis HLS settings not found: $vitisHlsSettings" >&2; exit 2; }
+        source "$vitisHlsSettings"
+        vitis-run --mode hls --tcl "${hlsDir.resolve("run_hls.tcl").absolutePath}"
+    """.trimIndent()))
+}
+
+// The HLS counterpart of runKernelTest/runSimKernelTest: netfpga/hls/check_kernel.sh's C-sim and
+// C/RTL cosim against test.properties, then the RTL drain + backpressure check in Vivado 2020.1's
+// xsim. Separate work dir from generateHlsVerilog, so running tests never touches the build's RTL.
+tasks.register<Exec>("runHlsKernelTest") {
+    group = "verification"
+    description = "C-sim, C/RTL cosim and RTL drain check of the selected kernel=hls variation (no NetFPGA build)"
+    requireKernelType("hls", "runKernelTest or runSimKernelTest")
+
+    val testWorkDir = layout.buildDirectory.dir("hls-test/$programName/$programVariationName")
+    environment(
+        mapOf(
+            "HLS_CLOCK_NS" to hlsClockPeriodNs,
+            "VITIS_HLS_SETTINGS" to vitisHlsSettings,
+            "VIVADO_SETTINGS" to vivadoSettings,
+        )
+    )
+    commandLine(
+        hlsDir.resolve("check_kernel.sh").absolutePath,
+        programName ?: "",
+        testWorkDir.get().asFile.absolutePath,
+    )
+}
+
 // A Sync, not a Copy: installedKernelDir holds nothing but the selected kernel, so anything else
 // in it is a previously selected application's leftover and must go (see installedKernelDir).
+// Installs whichever kind of kernel the variation selects (the name predates HLS kernels).
 tasks.register<Sync>("installGaplVerilog") {
     group = "netfpga"
-    description = "Install the selected application's generated kernel Verilog into \$NF_DESIGN_DIR/hw/hdl/kernel"
-    dependsOn("generateGaplVerilog")
+    description = "Install the selected variation's kernel Verilog (GAPL or HLS) into \$NF_DESIGN_DIR/hw/hdl/kernel"
 
-    from(gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) })
+    if (isHlsKernel) {
+        dependsOn("generateHlsVerilog")
+        from(hlsVerilogOut) { include("*.v") }
+    } else {
+        dependsOn("generateGaplVerilog")
+        from(gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) })
+    }
     into(installedKernelDir)
 
     // Before installedKernelDir existed, the kernel was installed loose as hw/hdl/GAPLprocessor.v.
@@ -653,45 +775,52 @@ tasks.register<Exec>("packageCoreGaplKernel") {
     // graph above, needs that core's component.xml already registered in the IP catalog.
     mustRunAfter(netfpgaStdCoreBuildTasksBySuffix.getValue("FallthroughSmallFifo"))
 
-    val installedGaplWrapper = file("$nfDesignDir/hw/hdl/gapl_wrapper.v")
-    // gapl_wrapper.v isn't actually a self-contained leaf - it internally instantiates these
-    // static NetFPGA infra utility modules (found the hard way: an OOC synthesis run for this IP
-    // is an isolated compile scope containing only what's copied into this core's own hdl/, so
-    // without these, Vivado can't find them - "module 'axis_pad_output' not found"). They're
-    // static (not per-application), so no need to reinstall them each time, just keep in sync
-    // with what gapl_wrapper.v actually instantiates.
-    val staticUtilDeps = listOf(
-        "util/axis/axis_pad_output.v",
-        "util/axis/axis_mutual_exclusion.v",
-        "util/axis/axis_queue.v",
-        "util/processor_controller.v",
-        "util/reverse_bytes.v",
-    )
+    // The static wrapper around the kernel, per kernel type (both have identical outer ports - see
+    // hls_wrapper.v). Neither is a self-contained leaf: each internally instantiates static NetFPGA
+    // infra utility modules, listed alongside it (found the hard way: an OOC synthesis run for this
+    // IP is an isolated compile scope containing only what's copied into this core's own hdl/, so
+    // without these, Vivado can't find them - "module 'axis_pad_output' not found"). Keep each list
+    // in sync with what its wrapper actually instantiates.
+    val wrapperTop = if (isHlsKernel) "hls_wrapper" else "gapl_wrapper"
+    val wrapperSources = if (isHlsKernel) {
+        listOf(
+            "hls_wrapper.v",
+            "util/axis/axis_pad_output.v",
+            "util/axis/axis_mutual_exclusion.v",
+            "util/reverse_bytes.v",
+        )
+    } else {
+        listOf(
+            "gapl_wrapper.v",
+            "util/axis/axis_pad_output.v",
+            "util/axis/axis_mutual_exclusion.v",
+            "util/axis/axis_queue.v",
+            "util/processor_controller.v",
+            "util/reverse_bytes.v",
+        )
+    }.map { file("$nfDesignDir/hw/hdl/$it") }
     val coreHdlDir = gaplKernelCoreDir.resolve("hdl")
-    // gapl_kernel.tcl reads every *.v in here as the kernel - see installedKernelDir.
-    val coreKernelDir = coreHdlDir.resolve("kernel")
 
     workingDir = gaplKernelCoreDir
     exportNetfpgaEnv()
+    // gapl_kernel.tcl reads every *.v in hdl/ (the wrapper and its utilities) and hdl/kernel/ (the
+    // kernel - see installedKernelDir), with this as the IP's top module.
+    environment("KERNEL_WRAPPER_TOP", wrapperTop)
 
     inputs.dir(installedKernelDir)
-    inputs.file(installedGaplWrapper)
-    inputs.files(staticUtilDeps.map { file("$nfDesignDir/hw/hdl/$it") })
+    inputs.files(wrapperSources)
+    inputs.property("wrapperTop", wrapperTop)
     inputs.file(gaplKernelCoreDir.resolve("gapl_kernel.tcl"))
     outputs.file(gaplKernelCoreDir.resolve("component.xml"))
     outputs.dir(gaplKernelCoreDir.resolve("xgui"))
 
     doFirst {
-        // Replaced wholesale, never merged into, for the same stale-previous-application reason
-        // installGaplVerilog is a Sync. The loose hdl/GAPLprocessor.v is the pre-kernel/ layout's
-        // copy.
-        coreKernelDir.deleteRecursively()
-        coreHdlDir.resolve("GAPLprocessor.v").delete()
-        installedKernelDir.copyRecursively(coreKernelDir)
-        installedGaplWrapper.copyTo(coreHdlDir.resolve("gapl_wrapper.v"), overwrite = true)
-        staticUtilDeps.forEach {
-            file("$nfDesignDir/hw/hdl/$it").copyTo(coreHdlDir.resolve(File(it).name), overwrite = true)
-        }
+        // Rebuilt wholesale, never merged into: gapl_kernel.tcl reads everything in hdl/, so a
+        // previous build's files (the other kernel type's wrapper and utilities, or a previous
+        // application's kernel) must not survive - same reason installGaplVerilog is a Sync.
+        coreHdlDir.deleteRecursively()
+        installedKernelDir.copyRecursively(coreHdlDir.resolve("kernel"))
+        wrapperSources.forEach { it.copyTo(coreHdlDir.resolve(it.name)) }
     }
 
     commandLine(bash("""
@@ -969,7 +1098,10 @@ val verilatorKernelExe = verilatorKernelOutDir.map { it.asFile.resolve("kernel_t
 tasks.register<Exec>("buildKernelTest") {
     group = "verilator"
     description = "Build kernel-test Verilator executable from generated GAPL Verilog + C++ wrapper"
-    dependsOn("generateGaplVerilog")
+    requireKernelType("gapl", "runHlsKernelTest")
+    // Conditional only so an HLS variation hits the guard above (pointing at runHlsKernelTest)
+    // rather than generateGaplVerilog's own less relevant one.
+    if (!isHlsKernel) dependsOn("generateGaplVerilog")
 
     val vProcProvider = gaplVerilogOut.map { it.asFile.resolve(targetVerilogName(gaplTargetFile)) }
 
@@ -1079,6 +1211,7 @@ tasks.register<Exec>("runSimKernelTest") {
     group = "simengine"
     description = "Run kernel-test's packet vectors against packet_body_processor directly " +
         "through simengine, no Verilog/Verilator involved"
+    requireKernelType("gapl", "runHlsKernelTest")
     dependsOn(":netfpga:sim-kernel-test:installDist")
     outputs.upToDateWhen { false } // always run
 

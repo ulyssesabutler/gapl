@@ -91,7 +91,11 @@ file delete -force ${repo_dir}
 file copy ${public_repo_dir}/ ${repo_dir}
 set_property ip_repo_paths ${repo_dir} [current_fileset]
 
-update_ip_catalog
+# -rebuild: a plain update_ip_catalog on a reused project can keep serving its cached parse of a
+# core's previous component.xml even though the copy above is brand new - confirmed with
+# gapl_kernel_ip, where it kept a previous kernel type's file list after a GAPL <-> HLS switch and IP
+# generation then failed on files that no longer exist. Rescanning costs a few seconds.
+update_ip_catalog -rebuild -repo_path ${repo_dir}
 if {[get_ips -quiet output_port_lookup_ip] eq ""} {
     create_ip -name switch_output_port_lookup -vendor NetFPGA -library NetFPGA -module_name output_port_lookup_ip
     set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_PORT_LOOKUP_BASEADDR] [get_ips output_port_lookup_ip]
@@ -297,7 +301,13 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/packet_processor/packet_processor.v"
 # generate_target always rerun to pick up whatever packageCoreGaplKernel most recently produced.
 #
 # The kernel itself is every *.v installGaplVerilog put in hw/hdl/kernel/ (see installedKernelDir in
-# netfpga/build.gradle.kts), not one fixed file name.
+# netfpga/build.gradle.kts), not one fixed file name. A reused project still lists whatever kernel
+# files earlier runs read, which after an application or GAPL <-> HLS switch may no longer exist -
+# so drop those first and read the current set.
+set stale_kernel_sources [get_files -quiet "$::env(NF_DESIGN_DIR)/hw/hdl/kernel/*"]
+if {[llength $stale_kernel_sources] > 0} {
+    remove_files $stale_kernel_sources
+}
 set kernel_sources [lsort [glob -nocomplain "$::env(NF_DESIGN_DIR)/hw/hdl/kernel/*.v"]]
 if {[llength $kernel_sources] == 0} {
     error "No kernel Verilog found in $::env(NF_DESIGN_DIR)/hw/hdl/kernel/ - run installGaplVerilog"
@@ -307,6 +317,14 @@ foreach kernel_source $kernel_sources {
 }
 if {[get_ips -quiet gapl_kernel_ip] eq ""} {
     create_ip -name gapl_kernel -vendor GAPL -library GAPL -module_name gapl_kernel_ip
+}
+# upgrade_ip first, like run_impl.tcl does: reset_target/generate_target alone keep the reused
+# project's cached copy of the IP definition, including its file list. That was harmless while only
+# file contents changed between applications, but a GAPL <-> HLS switch changes which files the IP
+# has (e.g. gapl_wrapper.v -> hls_wrapper.v), and generating from the stale list fails with "Failed
+# to copy file ... it does not exist". catch: upgrade_ip errors on an IP that's already current.
+if {[catch {upgrade_ip [get_ips gapl_kernel_ip]} upgrade_msg]} {
+    puts "GAPL: upgrade_ip gapl_kernel_ip skipped: $upgrade_msg"
 }
 reset_target all [get_ips gapl_kernel_ip]
 generate_target all [get_ips gapl_kernel_ip]

@@ -96,12 +96,41 @@ much larger II and is out of scope for now.
   wide margins, which suggests both are pipelined deeper than 10 ns strictly needs. The HLS
   kernel's figures include its two AXI-Stream register slices (in and out). These are rough
   post-synthesis numbers, and the real comparison should come from the routed full design.
-- **Then: `hls_wrapper.v` and Gradle dispatch.**
-  - `hls_wrapper.v`.
-  - A `generateHlsVerilog` / `installHlsVerilog` pair feeding `packageCoreGaplKernel`.
-  - `gapl_kernel.tcl`'s `set top` and the wrapper's util-file list become per-kernel-type.
-  - `kernel=` handling in `compile.properties`.
-  - An `md5/hls-pipelined` variation.
+- **Done: `hls_wrapper.v` and Gradle dispatch.**
+  - `hw/hdl/hls_wrapper.v` has `gapl_wrapper.v`'s outer ports, padder, `axis_mutual_exclusion` and
+    `reverse_bytes`, but no `processor_controller`.
+  - `compile.properties` takes `kernel=gapl|hls` (default `gapl`) and `hlsClockPeriodNs` (default
+    `clockPeriodNs`).
+  - New tasks: `generateHlsVerilog` (Vitis HLS csynth) and `runHlsKernelTest` (runs
+    `check_kernel.sh`).
+  - `installGaplVerilog` now installs whichever kernel type is selected. Its name is kept, per the
+    deferred-renames decision.
+  - `packageCoreGaplKernel` rebuilds the core's `hdl/` from scratch with the selected wrapper and
+    its utilities, and passes the IP's top module to `gapl_kernel.tcl` as `KERNEL_WRAPPER_TOP`.
+  - GAPL-only tasks (`generateGaplVerilog`, `buildKernelTest`/`runKernelTest`, `runSimKernelTest`)
+    fail with a pointer to the HLS equivalent on an HLS variation, and vice versa.
+  - New variation: `md5/hls-pipelined`.
+- **Found and fixed on the way: stale kernel IP definitions in reused Vivado projects.**
+  - Switching applications within one kernel type only ever changed file *contents*. A GAPL ↔ HLS
+    switch changes the kernel IP's file *list*, which exposed three layered problems. Each made IP
+    generation use the previous kernel's file list ("Failed to copy file ... it does not exist").
+  - First, every packaging was `gapl_kernel` 1.0 revision 1. `gapl_kernel.tcl` now sets
+    `core_revision` to a timestamp.
+  - Second, the reused sim project's `update_ip_catalog` served a cached parse of the old
+    `component.xml`. It now uses `-rebuild`.
+  - Third, the hardware project's catalog is `hw/ip_repo/`, a copy of `lib/hw/` made only once at
+    project creation. `run_impl.tcl` now refreshes that core's copy and rebuilds the catalog before
+    `upgrade_ip`.
+  - Also fixed a regression from `7b5e6f9`: `run_impl.tcl`'s force-copy of the packaged kernel HDL
+    only copied top-level `hdl/*.v`, so it skipped `hdl/kernel/`. It now replaces the whole
+    directory.
+  - `reference_switch_sim.tcl` also now calls `upgrade_ip` and drops kernel files read by earlier
+    runs.
+  - Verified in simulation: md5/hls-pipelined → crc32/unretimed (GAPL) → md5/hls-pipelined in one
+    reused sim project all pass `runSimulation`, with the right wrapper compiled each time. The
+    `run_impl.tcl` side is only exercised by a real hardware build.
+  - `runSimulation`'s `run.py` compares packet contents against `test.properties`'
+    `testExpectedOutputs`, so this is an end-to-end digest check through the whole switch.
 - **Then: bring-up.** `runSimulation`, build, flash, and the traffic-generator test. Then collect
   resource and timing numbers against `md5/min-register-count` and `md5/per-port-min-register-count`.
 

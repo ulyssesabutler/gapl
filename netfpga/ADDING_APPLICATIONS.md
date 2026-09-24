@@ -10,6 +10,8 @@ correctness. This doc covers the steps to add one and, in particular, how to wri
 ```
 netfpga/src/<app-name>/
     gapl-processor.gapl   # the application itself - shared by every variation below
+    hls-processor.cpp     # optional: an HLS implementation of the same application (see below)
+    hls-processor.h
     test.properties        # test vectors - also shared by every variation
     <variation-name>/
         compile.properties  # per-variation compiler settings (retime, flatten, clock period, ...)
@@ -19,6 +21,37 @@ netfpga/src/<app-name>/
 retiming/flattening are meant to be semantics-preserving, so the same GAPL source and the same test
 vectors must hold regardless of which variation is selected (see the comment above `testPropsFile`
 in `netfpga/build.gradle.kts`).
+
+Subdirectories are always variations. A variation builds the GAPL implementation by default. Set
+`kernel=hls` in its `compile.properties` to build the HLS one instead (`netfpga/src/md5/hls-pipelined/`
+is an example). Either way the result fills the same kernel slot in the NetFPGA design and is
+checked against the same `test.properties`.
+
+## HLS implementations
+
+`hls-processor.cpp` is synthesized with Vitis HLS 2024.2. Only its generated Verilog enters the
+Vivado 2020.1 NetFPGA build, inside `hw/hdl/hls_wrapper.v`, which is the counterpart of
+`gapl_wrapper.v`. It must define:
+
+```cpp
+#include "netfpga_axis.h"   // netfpga/hls/common/
+void packet_body_processor(hls::stream<nf_beat> &i, hls::stream<nf_beat> &o);
+```
+
+This uses `axis` ports and `ap_ctrl_none`. `netfpga/hls/common/netfpga_axis.h` spells out the
+rest. In particular, **read input with `read_nb()`, never a blocking `read()`**: a blocking read
+deadlocks the NetFPGA pipeline at the end of every packet, and C-sim can't catch that. See
+`netfpga/hls/experiments/pipeline-drain/README.md`. Beats arrive in the same byte order a GAPL
+kernel sees, so `test.properties` is written exactly as below either way.
+
+`netfpga/src/md5/hls-processor.cpp` is the worked example. For an HLS variation:
+
+- `./gradlew :netfpga:runHlsKernelTest -PprogramName=<app-name> -PprogramVariationName=<variation-name>`
+  is the fast path. It runs C-sim and C/RTL cosim against `test.properties`, then an RTL check that
+  the kernel drains and handles backpressure. No NetFPGA build is involved.
+  - `netfpga/hls/check_kernel.sh <app-name>` does the same outside Gradle.
+- `runSimulation` and the hardware build work exactly as for GAPL variations.
+- `runSimKernelTest` and `runKernelTest` are GAPL-only.
 
 ## The GAPL contract
 

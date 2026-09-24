@@ -72,6 +72,16 @@ if {[llength [get_ips gapl_kernel_ip -quiet]] > 0} {
     set gapl_kernel_xci [get_property IP_FILE [get_ips gapl_kernel_ip]]
     if {[file mtime $gapl_kernel_component] > [file mtime $gapl_kernel_xci]} {
         puts "GAPL: gapl_kernel_ip's packaged core changed since this project's .xci was generated - refreshing"
+        # This project's IP catalog is hw/ip_repo/, a copy of lib/hw/ that create_project.tcl makes
+        # once, when the project is created - so on its own, upgrade_ip below would upgrade to the
+        # *first* packaged kernel's definition forever. Refresh this one core's copy and rescan
+        # first. Required since a GAPL <-> HLS switch changes the core's file list (gapl_wrapper.v
+        # vs hls_wrapper.v, ...); a stale definition then references files that no longer exist.
+        set gapl_kernel_repo_copy "[get_property DIRECTORY [current_project]]/../ip_repo/contrib/cores/gapl_kernel_v1_0_0"
+        puts "GAPL: refreshing $gapl_kernel_repo_copy from the packaged core"
+        file delete -force $gapl_kernel_repo_copy
+        file copy "$::env(SUME_FOLDER)/lib/hw/contrib/cores/gapl_kernel_v1_0_0" $gapl_kernel_repo_copy
+        update_ip_catalog -rebuild -repo_path [file normalize "[get_property DIRECTORY [current_project]]/../ip_repo"]
         upgrade_ip [get_ips gapl_kernel_ip]
         reset_target all [get_ips gapl_kernel_ip]
         generate_target all [get_ips gapl_kernel_ip]
@@ -104,10 +114,14 @@ if {[llength [get_ips gapl_kernel_ip -quiet]] > 0} {
         # of whatever Vivado's own IP-generation logic decided to do.
         set gapl_kernel_packaged_hdl "$::env(SUME_FOLDER)/lib/hw/contrib/cores/gapl_kernel_v1_0_0/hdl"
         set gapl_kernel_project_hdl "[file dirname $gapl_kernel_xci]/hdl"
-        puts "GAPL: force-copying packaged core HDL ($gapl_kernel_packaged_hdl) over project's IP source copy ($gapl_kernel_project_hdl)"
-        foreach f [glob -directory $gapl_kernel_packaged_hdl -nocomplain "*.v"] {
-            file copy -force $f "$gapl_kernel_project_hdl/[file tail $f]"
-        }
+        #
+        # Replaced as a whole directory, not file by file: the kernel itself lives in the hdl/kernel/
+        # subdirectory (see installedKernelDir in netfpga/build.gradle.kts), which a top-level *.v
+        # copy would silently skip, and a GAPL <-> HLS switch changes which wrapper/utility files
+        # exist at all, so a merge would leave the other kernel type's files behind.
+        puts "GAPL: replacing project's IP source copy ($gapl_kernel_project_hdl) with packaged core HDL ($gapl_kernel_packaged_hdl)"
+        file delete -force $gapl_kernel_project_hdl
+        file copy $gapl_kernel_packaged_hdl $gapl_kernel_project_hdl
     } else {
         puts "GAPL: gapl_kernel_ip is already up to date with its packaged core - skipping refresh"
     }
