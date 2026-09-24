@@ -131,8 +131,35 @@ much larger II and is out of scope for now.
     `run_impl.tcl` side is only exercised by a real hardware build.
   - `runSimulation`'s `run.py` compares packet contents against `test.properties`'
     `testExpectedOutputs`, so this is an end-to-end digest check through the whole switch.
-- **Then: bring-up.** `runSimulation`, build, flash, and the traffic-generator test. Then collect
-  resource and timing numbers against `md5/min-register-count` and `md5/per-port-min-register-count`.
+- **Done: hardware builds (bitstreams, routed timing).** Three `:netfpga:build` runs in one
+  project: `md5/hls-pipelined` (fresh project), then `md5/min-register-count`, then
+  `md5/hls-pipelined` again. The last is a pure application switch: `makeSynthShell` was
+  UP-TO-DATE, and `run_impl.tcl` refreshed, upgraded and resynthesized the kernel IP.
+  - **Every build met all timing constraints.** The design-wide worst slack (+0.097 ns setup,
+    +0.015 ns hold) is in the static shell's PCIe `userclk1` domain and is identical for GAPL and
+    HLS. Kernel numbers, measured on the routed checkpoint at 10 ns and including each kernel's
+    wrapper (GAPL's also carries `processor_controller`'s two queues):
+
+    | md5 kernel (routed) | LUTs | FFs | Worst slack into / out of kernel |
+    |---|---|---|---|
+    | HLS `hls-pipelined`, fresh project | 8,027 | 8,315 | +3.572 / +3.158 ns |
+    | HLS `hls-pipelined`, after the GAPL build | 8,766 | 8,315 | +2.810 / +2.810 ns |
+    | GAPL `min-register-count` | 8,373 | 10,314 | +2.078 / +2.078 ns |
+
+  - The two HLS rows are the same RTL. The second build's placement was done incrementally from
+    the GAPL build's routed checkpoint.
+  - The worst kernel paths are each design's pipeline-advance signal fanning out as clock enables.
+    For HLS that's the stall-control register (`ap_enable_reg_pp0_iter*`), the ~27k-fanout signal
+    flagged earlier. For GAPL it's `processor_controller`'s queue state driving `enable`.
+  - One more fix came from these builds. A *real* `upgrade_ip` (possible only since the
+    `core_revision` fix) moves the kernel's `.xci` into `sources_1`, turning off its out-of-context
+    synthesis and deleting `gapl_kernel_ip_synth_1`. `run_impl.tcl` now restores
+    `generate_synth_checkpoint` after `upgrade_ip`, and recreates the run just before relaunching
+    it if it's missing. The third build exercised exactly that path.
+- **Next: on-board test.** The FPGA is on a separate server. Flash the bitstream there and run the
+  traffic-generator test (`netfpga/README.md`). Then compare against
+  `md5/per-port-min-register-count` too, and look at why both implementations meet 10 ns with
+  this much slack.
 
 ## Open questions and things to check
 

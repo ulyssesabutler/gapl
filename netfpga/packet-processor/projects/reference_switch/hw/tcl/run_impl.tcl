@@ -83,6 +83,13 @@ if {[llength [get_ips gapl_kernel_ip -quiet]] > 0} {
         file copy "$::env(SUME_FOLDER)/lib/hw/contrib/cores/gapl_kernel_v1_0_0" $gapl_kernel_repo_copy
         update_ip_catalog -rebuild -repo_path [file normalize "[get_property DIRECTORY [current_project]]/../ip_repo"]
         upgrade_ip [get_ips gapl_kernel_ip]
+        # A real upgrade (which only happens now that every packaging has a new core_revision - see
+        # gapl_kernel.tcl) moves the .xci out of its own out-of-context fileset into sources_1,
+        # silently switching the IP to global synthesis and deleting gapl_kernel_ip_synth_1, which
+        # the sub-run relaunch below needs ("No runs matched 'gapl_kernel_ip_synth_1'"). Restore the
+        # OOC setup create_project.tcl's create_ip gave it (the missing run itself is recreated just
+        # before the sub-run relaunch below).
+        set_property generate_synth_checkpoint true [get_files [get_property IP_FILE [get_ips gapl_kernel_ip]]]
         reset_target all [get_ips gapl_kernel_ip]
         generate_target all [get_ips gapl_kernel_ip]
         # GAPL: gapl_kernel_ip is deliberately left with generate_synth_checkpoint enabled (see
@@ -136,6 +143,14 @@ if {[llength [get_ips gapl_kernel_ip -quiet]] > 0} {
 # reset/relaunched/waited on in complete isolation (synth_1's own STATUS is untouched by it), and
 # that the impl_1 link_design step below picks up the refreshed checkpoint automatically with zero
 # "could not resolve black box cell" warnings.
+#
+# Checked here rather than only right after upgrade_ip above, so a project left without the run (e.g.
+# by an earlier build that failed after its upgrade) recovers on the next build too.
+if {[llength [get_runs -quiet gapl_kernel_ip_synth_1]] == 0} {
+    puts "GAPL: gapl_kernel_ip_synth_1 is missing (removed by a real upgrade_ip) - restoring OOC synthesis and recreating it"
+    set_property generate_synth_checkpoint true [get_files [get_property IP_FILE [get_ips gapl_kernel_ip]]]
+    create_ip_run [get_ips gapl_kernel_ip]
+}
 puts "GAPL: refreshing gapl_kernel_ip_synth_1 to pick up the currently installed application"
 reset_run gapl_kernel_ip_synth_1
 launch_runs gapl_kernel_ip_synth_1
