@@ -1,0 +1,53 @@
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data  => internet_checksum_256() => o.data;
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* INTERNET CHECKSUM (RFC 1071) BODY */
+
+/*
+ * Computes each beat's Internet checksum independently, as if the beat's 32 bytes were a complete
+ * message: the ones'-complement of the ones'-complement sum of its 16 big-endian 16-bit words. The
+ * 16-bit checksum is placed in the low bits of the output beat, the rest zeroed (like crc32).
+ */
+function internet_checksum_256() i: wire[256] => o: wire[256] {
+    i => ones_complement_sum_256() => bitwise_not(16) => left_pad(16, 240) => o;
+}
+
+/*
+ * Byte lane j of a beat holds the message byte that is chronologically later the lower j is, so
+ * each 16-bit chunk already has its earlier byte in the high half - i.e. it is the big-endian word.
+ * Ones'-complement addition is associative and commutative, so the word order doesn't matter and
+ * the words can be reduced as a balanced tree.
+ */
+function ones_complement_sum_256() i: wire[256] => o: wire[16] {
+    i => vector_chunk(wire, 16, 16)
+      => combinational_vector_reduce(wire[16], 16, ones_complement_add())
+      => o;
+}
+
+/*
+ * The ones'-complement sum of two 16-bit words: add them, then add the carry out back in (the
+ * "end-around carry"). Adding the carry back can't carry again, since a + b carrying out means the
+ * low 16 bits are at most 0xFFFE.
+ */
+function ones_complement_add() a: wire[16], b: wire[16] => o: wire[16] {
+    a => left_pad(16, 1) => declare a_wide: wire[17];
+    b => left_pad(16, 1) => declare b_wide: wire[17];
+    a_wide, b_wide => add(17) => declare sum: wire[17];
+
+    sum[16:16] => left_pad(1, 15) => declare carry: wire[16];
+    sum[0:15], carry => add(16) => o;
+}
