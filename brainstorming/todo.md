@@ -10,6 +10,15 @@ There are a few different validations we need to do, but currently don't.
   - There is a bit of complication here, specifically, with function parameters.
     - These might depend on other parameters to evaluate
 
+## Verilog generation
+- **GAPL identifiers that are Verilog/SystemVerilog keywords are emitted unescaped.**
+  `netfpga/src/md5-stream`'s `popcount32_step() bit: boolean, ...` keeps its port name `bit` in the
+  generated Verilog (the NetFPGA build keeps module boundaries), and Verilator, which parses as
+  SystemVerilog, rejects it with "syntax error, unexpected bit". This is why
+  `:netfpga:runKernelTest -PprogramName=md5-stream` fails even though `runSimKernelTest` passes.
+  Either rename or escape (`\bit `) generated identifiers that collide with keywords, or reject
+  such names in the analyzer with a diagnostic.
+
 ## Retiming
 
 > The plan for fixing the first two entries below lives in

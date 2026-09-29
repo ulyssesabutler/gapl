@@ -1,0 +1,84 @@
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Decodes each 256-bit beat independently as 32 Base64 characters, producing 24 bytes per beat.
+ * '=' padding is not supported: every beat is assumed to be 32 characters from the Base64 alphabet,
+ * and any other character (including '=') decodes as if it were 'A' (zero).
+ *
+ * Byte-lane convention: byte lane j (bits[8j:8j+7]) of a beat holds the byte that is
+ * chronologically later the lower j is. The 24 decoded bytes are right-aligned, in lanes 0..23 with
+ * the first byte in lane 23, and keep marks exactly those lanes - the same layout the test harness
+ * uses for a short beat.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data => base64_decode_256() => o.data;
+
+    literal(1, 1) => vector_to_wire() => declare one_bit: wire;
+    literal(1, 0) => vector_to_wire() => declare zero_bit: wire;
+    one_bit  => replicate(wire, 24) => o.keep[0:23];
+    zero_bit => replicate(wire, 8)  => o.keep[24:31];
+
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* BASE64 BODY */
+
+/*
+ * Chunk j holds character 31 - j, so after flattening, the first character's 6 bits are the top 6
+ * of the 192 - exactly where Base64's big-endian bit stream puts the first decoded byte's high bits.
+ * No reordering is needed.
+ */
+function base64_decode_256() i: wire[256] => o: wire[256] {
+    i => vector_chunk(wire, 8, 32)
+      => vector_map(wire[8], wire[6], 32, base64_decode_char())
+      => vector_flatten(wire, 6, 32)
+      => left_pad(192, 64)
+      => o;
+}
+
+function base64_char_in_range(low: integer, high: integer) c: wire[8] => o: boolean {
+    c, literal(8, low)  => greater_than_equals(8) => declare at_least_low: boolean;
+    c, literal(8, high) => less_than_equals(8)    => declare at_most_high: boolean;
+    at_least_low, at_most_high => and() => o;
+}
+
+/*
+ * One Base64 character to its 6-bit value: 'A'-'Z' -> 0-25, 'a'-'z' -> 26-51, '0'-'9' -> 52-61,
+ * '+' -> 62, '/' -> 63. Anything else -> 0. The character classes are disjoint, so the priority
+ * order doesn't matter.
+ */
+function base64_decode_char() c: wire[8] => o: wire[6] {
+    declare classes: conditional(wire[6])[5];
+    declare default: wire[6];
+
+    c => base64_char_in_range(65, 90)  => classes[0].condition;
+    c, literal(8, 65) => subtract(8)   => declare upper_value: wire[8];
+    upper_value[0:5]                   => classes[0].value;
+
+    c => base64_char_in_range(97, 122) => classes[1].condition;
+    c, literal(8, 71) => subtract(8)   => declare lower_value: wire[8];
+    lower_value[0:5]                   => classes[1].value;
+
+    c => base64_char_in_range(48, 57)  => classes[2].condition;
+    c, literal(8, 4) => add(8)         => declare digit_value: wire[8];
+    digit_value[0:5]                   => classes[2].value;
+
+    c => base64_char_in_range(43, 43)  => classes[3].condition;
+    literal(6, 62)                     => classes[3].value;
+
+    c => base64_char_in_range(47, 47)  => classes[4].condition;
+    literal(6, 63)                     => classes[4].value;
+
+    literal(6, 0)                      => default;
+
+    classes, default => priority(wire[6], 5) => o;
+}

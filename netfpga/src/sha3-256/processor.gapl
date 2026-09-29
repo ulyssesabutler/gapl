@@ -1,0 +1,263 @@
+interface lane wire[64]
+interface keccak_state lane[25]
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Hashes each 256-bit beat independently as a complete 32-byte SHA3-256 message, replacing the beat
+ * with its 256-bit digest
+ *
+ * A 32-byte message always fits in one 1088-bit SHA3-256 rate block, so absorbing is a single XOR
+ * into the all-zero initial state - i.e. just wiring the message and the constant padding into the
+ * initial state - followed by one Keccak-f[1600] permutation, and the digest is the first 4 lanes.
+ *
+ * State layout: lane (x, y) of the 5x5 Keccak state is element [x + 5 * y] of keccak_state.
+ *
+ * Byte-lane convention (same as md5): byte lane j (bits[8j:8j+7]) of a beat holds the message
+ * byte that is chronologically later the lower j is, so lane 31 is the first byte. Keccak lanes are
+ * little-endian (a lane's first message byte is its least-significant byte), so each 64-bit chunk of
+ * the beat is byte-reversed on the way into the state and again on the way out.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data => sha3_absorb_single_block()
+           => keccak_permutation()
+           => sha3_squeeze_digest()
+           => o.data;
+
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* ABSORB / SQUEEZE */
+
+function reverse_lane_bytes() i: lane => o: lane
+{
+    i => vector_chunk(wire, 8, 8)
+      => reverse(wire[8], 8)
+      => vector_flatten(wire, 8, 8)
+      => o;
+}
+
+/*
+ * The message occupies lanes 0..3. SHA3 padding for a 32-byte message is constant: the 0x06 domain
+ * and pad byte right after the message (message byte 32 = the low byte of lane 4) and the final 0x80
+ * pad bit in the last byte of the rate (byte 135 = the high byte of lane 16). The capacity lanes
+ * 17..24 and everything else stay zero.
+ */
+function sha3_absorb_single_block() i: wire[256] => o: keccak_state
+{
+    // Chunk 0 is the beat's low 64 bits, i.e. its last 8 message bytes, so the chunks are reversed
+    // to put the first 8 bytes in lane 0
+    i => vector_chunk(wire, 64, 4)
+      => reverse(lane, 4)
+      => vector_map(lane, lane, 4, reverse_lane_bytes())
+      => o[0:3];
+
+    literal(64, 0) => declare zero_lane: lane;
+
+    literal(64, 6)                   => o[4];
+    zero_lane => replicate(lane, 11) => o[5:15];
+    literal(64, 9223372036854775808) => o[16];
+    zero_lane => replicate(lane, 8)  => o[17:24];
+}
+
+function sha3_squeeze_digest() i: keccak_state => o: wire[256]
+{
+    // The inverse of sha3_absorb_single_block: lane 0 holds the digest's first 8 bytes, which belong
+    // in the beat's high 64 bits, so the lanes are reversed before flattening
+    i[0:3] => vector_map(lane, lane, 4, reverse_lane_bytes())
+           => reverse(lane, 4)
+           => vector_flatten(wire, 64, 4)
+           => o;
+}
+
+/* BIT OPERATIONS */
+
+function rotate_left_by(count: integer) i: lane => o: lane
+{
+    if (count == 0) {
+        i => o;
+    } else {
+        i[0:63 - count]  => o[count:63];
+        i[64 - count:63] => o[0:count - 1];
+    }
+}
+
+/* KECCAK-F[1600] */
+
+function keccak_permutation() i: keccak_state => o: keccak_state
+{
+    i => keccak_rounds_from_iteration(0) => o;
+}
+
+function keccak_rounds_from_iteration(iteration: integer) i: keccak_state => o: keccak_state
+{
+    if (iteration < 23) {
+        i => keccak_round(iteration) => declare round_state: keccak_state;
+        round_state => keccak_rounds_from_iteration(iteration + 1) => o;
+    } else {
+        i => keccak_round(iteration) => o;
+    }
+}
+
+function keccak_round(iteration: integer) i: keccak_state => o: keccak_state
+{
+    i => keccak_theta()
+      => keccak_rho_pi()
+      => keccak_chi()
+      => keccak_iota(iteration)
+      => o;
+}
+
+/* theta: XOR every lane with the parities of the two neighbouring columns */
+
+function keccak_xor_rows() a: lane[5], b: lane[5] => o: lane[5]
+{
+    a, b => vector_zip(lane, lane, 5)
+         => vector_map(pair(lane, lane), lane, 5, unpair(lane, lane, lane, bitwise_xor(64)))
+         => o;
+}
+
+function keccak_theta_d(x: integer) c: lane[5] => o: lane
+{
+    c[(x + 1) % 5] => rotate_left_by(1) => declare rotated: lane;
+    c[(x + 4) % 5], rotated => bitwise_xor(64) => o;
+}
+
+// d[0..count-1], unrolled recursively
+function keccak_theta_d_lanes(count: integer) c: lane[5] => o: lane[count]
+{
+    c => keccak_theta_d(count - 1) => o[count - 1];
+
+    if (count > 1) {
+        c => keccak_theta_d_lanes(count - 1) => o[0:count - 2];
+    }
+}
+
+function keccak_theta() i: keccak_state => o: keccak_state
+{
+    i => vector_chunk(lane, 5, 5) => declare rows: lane[5][5];
+
+    // Column x's parity is lane x of all 5 rows XORed together
+    rows => combinational_vector_reduce(lane[5], 5, keccak_xor_rows()) => declare c: lane[5];
+    c => keccak_theta_d_lanes(5) => declare d: lane[5];
+
+    // Every row gets the same d XORed in, lane x with d[x]
+    d => replicate(lane[5], 5) => declare d_rows: lane[5][5];
+
+    rows, d_rows
+        => vector_zip(lane[5], lane[5], 5)
+        => vector_map(pair(lane[5], lane[5]), lane[5], 5, unpair(lane[5], lane[5], lane[5], keccak_xor_rows()))
+        => vector_flatten(lane, 5, 5)
+        => o;
+}
+
+/* rho and pi: rotate each lane by its fixed offset, and move lane (x, y) to (y, 2x + 3y) */
+
+function keccak_rho_pi() i: keccak_state => o: keccak_state
+{
+    i[0] => rotate_left_by(0) => o[0];
+    i[1] => rotate_left_by(1) => o[10];
+    i[2] => rotate_left_by(62) => o[20];
+    i[3] => rotate_left_by(28) => o[5];
+    i[4] => rotate_left_by(27) => o[15];
+    i[5] => rotate_left_by(36) => o[16];
+    i[6] => rotate_left_by(44) => o[1];
+    i[7] => rotate_left_by(6) => o[11];
+    i[8] => rotate_left_by(55) => o[21];
+    i[9] => rotate_left_by(20) => o[6];
+    i[10] => rotate_left_by(3) => o[7];
+    i[11] => rotate_left_by(10) => o[17];
+    i[12] => rotate_left_by(43) => o[2];
+    i[13] => rotate_left_by(25) => o[12];
+    i[14] => rotate_left_by(39) => o[22];
+    i[15] => rotate_left_by(41) => o[23];
+    i[16] => rotate_left_by(45) => o[8];
+    i[17] => rotate_left_by(15) => o[18];
+    i[18] => rotate_left_by(21) => o[3];
+    i[19] => rotate_left_by(8) => o[13];
+    i[20] => rotate_left_by(18) => o[14];
+    i[21] => rotate_left_by(2) => o[24];
+    i[22] => rotate_left_by(61) => o[9];
+    i[23] => rotate_left_by(56) => o[19];
+    i[24] => rotate_left_by(14) => o[4];
+}
+
+/* chi: the only non-linear step, a[x] ^ (~a[x + 1] & a[x + 2]) along each row */
+
+function keccak_chi_lane(x: integer) row: lane[5] => o: lane
+{
+    row[(x + 1) % 5] => bitwise_not(64) => declare not_next: lane;
+    not_next, row[(x + 2) % 5] => bitwise_and(64) => declare masked: lane;
+    row[x], masked => bitwise_xor(64) => o;
+}
+
+// Lanes 0..count-1 of one row, unrolled recursively
+function keccak_chi_row_lanes(count: integer) row: lane[5] => o: lane[count]
+{
+    row => keccak_chi_lane(count - 1) => o[count - 1];
+
+    if (count > 1) {
+        row => keccak_chi_row_lanes(count - 1) => o[0:count - 2];
+    }
+}
+
+function keccak_chi_row() row: lane[5] => o: lane[5]
+{
+    row => keccak_chi_row_lanes(5) => o;
+}
+
+// Chi only mixes lanes within a row, so it is applied to each of the 5 rows (y) independently
+function keccak_chi() i: keccak_state => o: keccak_state
+{
+    i => vector_chunk(lane, 5, 5)
+      => vector_map(lane[5], lane[5], 5, keccak_chi_row())
+      => vector_flatten(lane, 5, 5)
+      => o;
+}
+
+/* iota: XOR the round constant into lane (0, 0) */
+
+function keccak_iota(iteration: integer) i: keccak_state => o: keccak_state
+{
+    keccak_round_constant(iteration) => declare rc: lane;
+    i[0], rc => bitwise_xor(64) => o[0];
+    i[1:24] => o[1:24];
+}
+
+function keccak_round_constant(iteration: integer) null => o: lane
+{
+    if (iteration == 0)  literal(64, 1)                   => o;
+    if (iteration == 1)  literal(64, 32898)               => o;
+    if (iteration == 2)  literal(64, 9223372036854808714) => o;
+    if (iteration == 3)  literal(64, 9223372039002292224) => o;
+    if (iteration == 4)  literal(64, 32907)               => o;
+    if (iteration == 5)  literal(64, 2147483649)          => o;
+    if (iteration == 6)  literal(64, 9223372039002292353) => o;
+    if (iteration == 7)  literal(64, 9223372036854808585) => o;
+    if (iteration == 8)  literal(64, 138)                 => o;
+    if (iteration == 9)  literal(64, 136)                 => o;
+    if (iteration == 10) literal(64, 2147516425)          => o;
+    if (iteration == 11) literal(64, 2147483658)          => o;
+    if (iteration == 12) literal(64, 2147516555)          => o;
+    if (iteration == 13) literal(64, 9223372036854775947) => o;
+    if (iteration == 14) literal(64, 9223372036854808713) => o;
+    if (iteration == 15) literal(64, 9223372036854808579) => o;
+    if (iteration == 16) literal(64, 9223372036854808578) => o;
+    if (iteration == 17) literal(64, 9223372036854775936) => o;
+    if (iteration == 18) literal(64, 32778)               => o;
+    if (iteration == 19) literal(64, 9223372039002259466) => o;
+    if (iteration == 20) literal(64, 9223372039002292353) => o;
+    if (iteration == 21) literal(64, 9223372036854808704) => o;
+    if (iteration == 22) literal(64, 2147483649)          => o;
+    if (iteration == 23) literal(64, 9223372039002292232) => o;
+}

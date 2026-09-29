@@ -26,16 +26,18 @@ data class Reference(
     }
 }
 
+/**
+ * An integer literal. With [width] set it is emitted as a sized hex constant (`64'h...`); without,
+ * it is emitted unsized.
+ *
+ * An unsized Verilog literal is treated as a 32-bit decimal number, so any value that may not fit
+ * in 32 bits must carry its width. The width also stops a wide constant from silently narrowing:
+ * unsized, a 2048-bit constant whose top three bits happen to be zero is a 2045-bit constant, and
+ * Verilator rejects the assignment. Emitting the width makes the constant say how wide it is
+ * instead of leaving it to be inferred.
+ */
 data class IntLiteral(
     val value: BigInteger,
-    /**
-     * Width of the constant, when it has one.
-     *
-     * An unsized Verilog constant takes its width from its value, so a wide literal whose top bits
-     * happen to be zero silently narrows: a 2048-bit constant with three leading zeros is a 2045-bit
-     * constant, and Verilator rejects the assignment. Emitting the width makes the constant say how
-     * wide it is instead of leaving it to be inferred.
-     */
     val width: Int? = null,
 ): Expression() {
     override fun verilogSerialize() =

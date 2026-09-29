@@ -44,8 +44,13 @@ sealed class PredefinedFunction(
         )
 
         fun search(invocation: Module.Invocation): PredefinedFunction? {
-            val size = invocation.parameters.firstOrNull()?.let {
-                if (it is IntegerParameterValue) it.value.intValueExact() else null
+            // Lazy so the Int conversion only happens once the name has matched a predefined function:
+            // this runs for every invocation, and a user function's first integer parameter can be
+            // arbitrarily large (e.g. a 64-bit constant), which intValueExact() would throw on.
+            val size by lazy {
+                invocation.parameters.firstOrNull()?.let {
+                    if (it is IntegerParameterValue) it.value.intValueExact() else null
+                }
             }
 
             val value = invocation.parameters.getOrNull(1)?.let {
