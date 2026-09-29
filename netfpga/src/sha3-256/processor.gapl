@@ -1,0 +1,387 @@
+interface lane wire[64]
+interface keccak_state lane[25]
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Hashes each 256-bit beat independently as a complete 32-byte SHA3-256 message, replacing the beat
+ * with its 256-bit digest - the SHA3 counterpart to the single-block md5 and sha256 applications.
+ *
+ * A 32-byte message always fits in one 1088-bit SHA3-256 rate block, so absorbing is a single XOR
+ * into the all-zero initial state - i.e. just wiring the message and the constant padding into the
+ * initial state - followed by one Keccak-f[1600] permutation, and the digest is the first 4 lanes.
+ *
+ * State layout: lane (x, y) of the 5x5 Keccak state is element [x + 5 * y] of keccak_state.
+ *
+ * Byte-lane convention (same as md5/sha256): byte lane j (bits[8j:8j+7]) of a beat holds the message
+ * byte that is chronologically later the lower j is, so lane 31 is the first byte. Keccak lanes are
+ * little-endian (a lane's first message byte is its least-significant byte), so each 64-bit chunk of
+ * the beat is byte-reversed on the way into the state and again on the way out.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data => sha3_absorb_single_block()
+           => keccak_permutation()
+           => sha3_squeeze_digest()
+           => o.data;
+
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* ABSORB / SQUEEZE */
+
+function reverse_lane_bytes() i: lane => o: lane
+{
+    i[0:7]   => o[56:63];
+    i[8:15]  => o[48:55];
+    i[16:23] => o[40:47];
+    i[24:31] => o[32:39];
+    i[32:39] => o[24:31];
+    i[40:47] => o[16:23];
+    i[48:55] => o[8:15];
+    i[56:63] => o[0:7];
+}
+
+/*
+ * The message occupies lanes 0..3. SHA3 padding for a 32-byte message is constant: the 0x06 domain
+ * and pad byte right after the message (message byte 32 = the low byte of lane 4) and the final 0x80
+ * pad bit in the last byte of the rate (byte 135 = the high byte of lane 16). The capacity lanes
+ * 17..24 and everything else stay zero.
+ */
+function sha3_absorb_single_block() i: wire[256] => o: keccak_state
+{
+    i[192:255] => reverse_lane_bytes() => o[0];
+    i[128:191] => reverse_lane_bytes() => o[1];
+    i[64:127]  => reverse_lane_bytes() => o[2];
+    i[0:63]    => reverse_lane_bytes() => o[3];
+
+    literal(64, 6) => o[4];
+    literal(64, 0) => declare zero_lane: lane;
+
+    zero_lane => o[5];
+    zero_lane => o[6];
+    zero_lane => o[7];
+    zero_lane => o[8];
+    zero_lane => o[9];
+    zero_lane => o[10];
+    zero_lane => o[11];
+    zero_lane => o[12];
+    zero_lane => o[13];
+    zero_lane => o[14];
+    zero_lane => o[15];
+    // Split into two 32-bit literals - see the comment above keccak_round_constant
+    literal(32, 2147483648) => o[16][32:63];
+    literal(32, 0)          => o[16][0:31];
+    zero_lane => o[17];
+    zero_lane => o[18];
+    zero_lane => o[19];
+    zero_lane => o[20];
+    zero_lane => o[21];
+    zero_lane => o[22];
+    zero_lane => o[23];
+    zero_lane => o[24];
+}
+
+function sha3_squeeze_digest() i: keccak_state => o: wire[256]
+{
+    i[0] => reverse_lane_bytes() => o[192:255];
+    i[1] => reverse_lane_bytes() => o[128:191];
+    i[2] => reverse_lane_bytes() => o[64:127];
+    i[3] => reverse_lane_bytes() => o[0:63];
+}
+
+/* BIT OPERATIONS */
+
+function rotate_left_by(count: integer) i: lane => o: lane
+{
+    if (count == 0) {
+        i => o;
+    } else {
+        i[0:63 - count]  => o[count:63];
+        i[64 - count:63] => o[0:count - 1];
+    }
+}
+
+function xor5_lanes() a: lane, b: lane, c: lane, d: lane, e: lane => o: lane
+{
+    a, b    => bitwise_xor(64) => declare ab: lane;
+    c, d    => bitwise_xor(64) => declare cd: lane;
+    ab, cd  => bitwise_xor(64) => declare abcd: lane;
+    abcd, e => bitwise_xor(64) => o;
+}
+
+/* KECCAK-F[1600] */
+
+function keccak_permutation() i: keccak_state => o: keccak_state
+{
+    i => keccak_rounds_from_iteration(0) => o;
+}
+
+function keccak_rounds_from_iteration(iteration: integer) i: keccak_state => o: keccak_state
+{
+    if (iteration < 23) {
+        i => keccak_round(iteration) => declare round_state: keccak_state;
+        round_state => keccak_rounds_from_iteration(iteration + 1) => o;
+    } else {
+        i => keccak_round(iteration) => o;
+    }
+}
+
+function keccak_round(iteration: integer) i: keccak_state => o: keccak_state
+{
+    i => keccak_theta()
+      => keccak_rho_pi()
+      => keccak_chi()
+      => keccak_iota(iteration)
+      => o;
+}
+
+/* theta: XOR every lane with the parities of the two neighbouring columns */
+
+function keccak_column_parity(x: integer) i: keccak_state => o: lane
+{
+    i[x], i[x + 5], i[x + 10], i[x + 15], i[x + 20] => xor5_lanes() => o;
+}
+
+function keccak_theta_d(x: integer) c: lane[5] => o: lane
+{
+    c[(x + 1) % 5] => rotate_left_by(1) => declare rotated: lane;
+    c[(x + 4) % 5], rotated => bitwise_xor(64) => o;
+}
+
+function keccak_theta() i: keccak_state => o: keccak_state
+{
+    declare c: lane[5];
+    declare d: lane[5];
+
+    i => keccak_column_parity(0) => c[0];
+    i => keccak_column_parity(1) => c[1];
+    i => keccak_column_parity(2) => c[2];
+    i => keccak_column_parity(3) => c[3];
+    i => keccak_column_parity(4) => c[4];
+
+    c => keccak_theta_d(0) => d[0];
+    c => keccak_theta_d(1) => d[1];
+    c => keccak_theta_d(2) => d[2];
+    c => keccak_theta_d(3) => d[3];
+    c => keccak_theta_d(4) => d[4];
+
+    i[0], d[0] => bitwise_xor(64) => o[0];
+    i[1], d[1] => bitwise_xor(64) => o[1];
+    i[2], d[2] => bitwise_xor(64) => o[2];
+    i[3], d[3] => bitwise_xor(64) => o[3];
+    i[4], d[4] => bitwise_xor(64) => o[4];
+    i[5], d[0] => bitwise_xor(64) => o[5];
+    i[6], d[1] => bitwise_xor(64) => o[6];
+    i[7], d[2] => bitwise_xor(64) => o[7];
+    i[8], d[3] => bitwise_xor(64) => o[8];
+    i[9], d[4] => bitwise_xor(64) => o[9];
+    i[10], d[0] => bitwise_xor(64) => o[10];
+    i[11], d[1] => bitwise_xor(64) => o[11];
+    i[12], d[2] => bitwise_xor(64) => o[12];
+    i[13], d[3] => bitwise_xor(64) => o[13];
+    i[14], d[4] => bitwise_xor(64) => o[14];
+    i[15], d[0] => bitwise_xor(64) => o[15];
+    i[16], d[1] => bitwise_xor(64) => o[16];
+    i[17], d[2] => bitwise_xor(64) => o[17];
+    i[18], d[3] => bitwise_xor(64) => o[18];
+    i[19], d[4] => bitwise_xor(64) => o[19];
+    i[20], d[0] => bitwise_xor(64) => o[20];
+    i[21], d[1] => bitwise_xor(64) => o[21];
+    i[22], d[2] => bitwise_xor(64) => o[22];
+    i[23], d[3] => bitwise_xor(64) => o[23];
+    i[24], d[4] => bitwise_xor(64) => o[24];
+}
+
+/* rho and pi: rotate each lane by its fixed offset, and move lane (x, y) to (y, 2x + 3y) */
+
+function keccak_rho_pi() i: keccak_state => o: keccak_state
+{
+    i[0] => rotate_left_by(0) => o[0];
+    i[1] => rotate_left_by(1) => o[10];
+    i[2] => rotate_left_by(62) => o[20];
+    i[3] => rotate_left_by(28) => o[5];
+    i[4] => rotate_left_by(27) => o[15];
+    i[5] => rotate_left_by(36) => o[16];
+    i[6] => rotate_left_by(44) => o[1];
+    i[7] => rotate_left_by(6) => o[11];
+    i[8] => rotate_left_by(55) => o[21];
+    i[9] => rotate_left_by(20) => o[6];
+    i[10] => rotate_left_by(3) => o[7];
+    i[11] => rotate_left_by(10) => o[17];
+    i[12] => rotate_left_by(43) => o[2];
+    i[13] => rotate_left_by(25) => o[12];
+    i[14] => rotate_left_by(39) => o[22];
+    i[15] => rotate_left_by(41) => o[23];
+    i[16] => rotate_left_by(45) => o[8];
+    i[17] => rotate_left_by(15) => o[18];
+    i[18] => rotate_left_by(21) => o[3];
+    i[19] => rotate_left_by(8) => o[13];
+    i[20] => rotate_left_by(18) => o[14];
+    i[21] => rotate_left_by(2) => o[24];
+    i[22] => rotate_left_by(61) => o[9];
+    i[23] => rotate_left_by(56) => o[19];
+    i[24] => rotate_left_by(14) => o[4];
+}
+
+/* chi: the only non-linear step, a[x] ^ (~a[x + 1] & a[x + 2]) along each row */
+
+function keccak_chi_lane(x: integer, y: integer) i: keccak_state => o: lane
+{
+    i[(x + 1) % 5 + 5 * y] => bitwise_not(64) => declare not_next: lane;
+    not_next, i[(x + 2) % 5 + 5 * y] => bitwise_and(64) => declare masked: lane;
+    i[x + 5 * y], masked => bitwise_xor(64) => o;
+}
+
+function keccak_chi() i: keccak_state => o: keccak_state
+{
+    i => keccak_chi_lane(0, 0) => o[0];
+    i => keccak_chi_lane(1, 0) => o[1];
+    i => keccak_chi_lane(2, 0) => o[2];
+    i => keccak_chi_lane(3, 0) => o[3];
+    i => keccak_chi_lane(4, 0) => o[4];
+    i => keccak_chi_lane(0, 1) => o[5];
+    i => keccak_chi_lane(1, 1) => o[6];
+    i => keccak_chi_lane(2, 1) => o[7];
+    i => keccak_chi_lane(3, 1) => o[8];
+    i => keccak_chi_lane(4, 1) => o[9];
+    i => keccak_chi_lane(0, 2) => o[10];
+    i => keccak_chi_lane(1, 2) => o[11];
+    i => keccak_chi_lane(2, 2) => o[12];
+    i => keccak_chi_lane(3, 2) => o[13];
+    i => keccak_chi_lane(4, 2) => o[14];
+    i => keccak_chi_lane(0, 3) => o[15];
+    i => keccak_chi_lane(1, 3) => o[16];
+    i => keccak_chi_lane(2, 3) => o[17];
+    i => keccak_chi_lane(3, 3) => o[18];
+    i => keccak_chi_lane(4, 3) => o[19];
+    i => keccak_chi_lane(0, 4) => o[20];
+    i => keccak_chi_lane(1, 4) => o[21];
+    i => keccak_chi_lane(2, 4) => o[22];
+    i => keccak_chi_lane(3, 4) => o[23];
+    i => keccak_chi_lane(4, 4) => o[24];
+}
+
+/* iota: XOR the round constant into lane (0, 0) */
+
+function keccak_iota(iteration: integer) i: keccak_state => o: keccak_state
+{
+    keccak_round_constant(iteration) => declare rc: lane;
+    i[0], rc => bitwise_xor(64) => o[0];
+    i[1:24] => o[1:24];
+}
+
+/*
+ * Each 64-bit constant is written as two 32-bit literals because the Verilog serializer emits every
+ * literal as an unsized decimal, which Verilator rejects once the value no longer fits 32 bits (it
+ * treats unsized decimals as 32-bit). A single literal(64, v) with high bits set passes simengine but
+ * fails the Verilator path.
+ */
+function keccak_round_constant(iteration: integer) null => o: lane
+{
+    if (iteration == 0) {
+        literal(32, 0) => o[32:63];
+        literal(32, 1) => o[0:31];
+    }
+    if (iteration == 1) {
+        literal(32, 0) => o[32:63];
+        literal(32, 32898) => o[0:31];
+    }
+    if (iteration == 2) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32906) => o[0:31];
+    }
+    if (iteration == 3) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 2147516416) => o[0:31];
+    }
+    if (iteration == 4) {
+        literal(32, 0) => o[32:63];
+        literal(32, 32907) => o[0:31];
+    }
+    if (iteration == 5) {
+        literal(32, 0) => o[32:63];
+        literal(32, 2147483649) => o[0:31];
+    }
+    if (iteration == 6) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 2147516545) => o[0:31];
+    }
+    if (iteration == 7) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32777) => o[0:31];
+    }
+    if (iteration == 8) {
+        literal(32, 0) => o[32:63];
+        literal(32, 138) => o[0:31];
+    }
+    if (iteration == 9) {
+        literal(32, 0) => o[32:63];
+        literal(32, 136) => o[0:31];
+    }
+    if (iteration == 10) {
+        literal(32, 0) => o[32:63];
+        literal(32, 2147516425) => o[0:31];
+    }
+    if (iteration == 11) {
+        literal(32, 0) => o[32:63];
+        literal(32, 2147483658) => o[0:31];
+    }
+    if (iteration == 12) {
+        literal(32, 0) => o[32:63];
+        literal(32, 2147516555) => o[0:31];
+    }
+    if (iteration == 13) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 139) => o[0:31];
+    }
+    if (iteration == 14) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32905) => o[0:31];
+    }
+    if (iteration == 15) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32771) => o[0:31];
+    }
+    if (iteration == 16) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32770) => o[0:31];
+    }
+    if (iteration == 17) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 128) => o[0:31];
+    }
+    if (iteration == 18) {
+        literal(32, 0) => o[32:63];
+        literal(32, 32778) => o[0:31];
+    }
+    if (iteration == 19) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 2147483658) => o[0:31];
+    }
+    if (iteration == 20) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 2147516545) => o[0:31];
+    }
+    if (iteration == 21) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 32896) => o[0:31];
+    }
+    if (iteration == 22) {
+        literal(32, 0) => o[32:63];
+        literal(32, 2147483649) => o[0:31];
+    }
+    if (iteration == 23) {
+        literal(32, 2147483648) => o[32:63];
+        literal(32, 2147516424) => o[0:31];
+    }
+}

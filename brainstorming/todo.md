@@ -10,6 +10,24 @@ There are a few different validations we need to do, but currently don't.
   - There is a bit of complication here, specifically, with function parameters.
     - These might depend on other parameters to evaluate
 
+## Integer literals wider than 32 bits
+Found while writing `netfpga/src/sha3-256`, whose 64-bit Keccak constants hit both of these. That
+app currently works around them by writing every 64-bit constant as two inline `literal(32, ...)`
+halves.
+- **The Verilog serializer emits literals unsized.** `IntLiteral.verilogSerialize()`
+  (`compiler/.../verilogir/module/statement/expression/Expression.kt`) prints just
+  `value.toString()`, e.g. `assign x = 9223372036854775808;`. Verilator rejects any unsized decimal
+  that doesn't fit ("Too many digits for 32 bit number"), so `literal(64, v)` with bit 63 set
+  passes `runSimKernelTest` but fails `runKernelTest`. The fix is to emit a sized literal
+  (`<width>'d<value>`), but that changes every app's generated Verilog, so do it as its own
+  change and regression-check it.
+- **`PredefinedFunction.search` crashes on large first integer parameters of user functions.**
+  It calls `intValueExact()` on the first integer parameter of *every* invocation before checking
+  whether the function is a predefined one at all, so a user-defined generic such as
+  `f(high: integer, ...)` invoked with a first argument above 2^31 - 1 throws
+  `ArithmeticException: BigInteger out of int range` from the netlist builder. The size should only
+  be converted once the name has matched a predefined function.
+
 ## Retiming
 
 > The plan for fixing the first two entries below lives in
