@@ -69,30 +69,29 @@ function md5_single_round_hash() i: md5_input_block => o: md5_state
 
 function md5_hash_block_from_input() i: wire[512] => o: md5_input_block
 {
-    i[0:31]    => reverse_endianess() => o[15];
-    i[32:63]   => reverse_endianess() => o[14];
-    i[64:95]   => reverse_endianess() => o[13];
-    i[96:127]  => reverse_endianess() => o[12];
-    i[128:159] => reverse_endianess() => o[11];
-    i[160:191] => reverse_endianess() => o[10];
-    i[192:223] => reverse_endianess() => o[9];
-    i[224:255] => reverse_endianess() => o[8];
-    i[256:287] => reverse_endianess() => o[7];
-    i[288:319] => reverse_endianess() => o[6];
-    i[320:351] => reverse_endianess() => o[5];
-    i[352:383] => reverse_endianess() => o[4];
-    i[384:415] => reverse_endianess() => o[3];
-    i[416:447] => reverse_endianess() => o[2];
-    i[448:479] => reverse_endianess() => o[1];
-    i[480:511] => reverse_endianess() => o[0];
+    // Chunk 0 is the block's low 32 bits, i.e. its last 4 bytes, so the chunks are reversed to put
+    // the first 4 bytes in word 0
+    i => vector_chunk(wire, 32, 16)
+      => reverse(word, 16)
+      => vector_map(word, word, 16, reverse_endianess())
+      => o;
 }
 
 function md5_hash_output_from_state() i: md5_state => o: wire[128]
 {
-    i.a => reverse_endianess() => o[96:127];
-    i.b => reverse_endianess() => o[64:95];
-    i.c => reverse_endianess() => o[32:63];
-    i.d => reverse_endianess() => o[0:31];
+    declare words: word[4];
+
+    i.a => words[0];
+    i.b => words[1];
+    i.c => words[2];
+    i.d => words[3];
+
+    // Word a holds the digest's first 4 bytes, which belong in the high 32 bits, so the words are
+    // reversed before flattening
+    words => vector_map(word, word, 4, reverse_endianess())
+          => reverse(word, 4)
+          => vector_flatten(wire, 32, 4)
+          => o;
 }
 
 function left_rotate() i: word => o: word
@@ -103,10 +102,10 @@ function left_rotate() i: word => o: word
 
 function reverse_endianess() i: word => o: word
 {
-    i[0:7]  => o[24:31];
-    i[8:15] => o[16:23];
-    i[16:23] => o[8:15];
-    i[24:31] => o[0:7];
+    i => vector_chunk(wire, 8, 4)
+      => reverse(wire[8], 4)
+      => vector_flatten(wire, 8, 4)
+      => o;
 }
 
 function left_rotate_by(count: integer) i: word => o: word
