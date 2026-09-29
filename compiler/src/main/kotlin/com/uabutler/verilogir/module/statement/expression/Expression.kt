@@ -26,10 +26,16 @@ data class Reference(
     }
 }
 
+/**
+ * A decimal integer literal. With [width] set, it is emitted sized (`64'd...`); without, unsized.
+ * Verilog treats an unsized decimal as a 32-bit number, so any literal whose value may not fit in 32
+ * bits must carry its width.
+ */
 data class IntLiteral(
     val value: BigInteger,
+    val width: Int? = null,
 ): Expression() {
-    override fun verilogSerialize() = value.toString()
+    override fun verilogSerialize() = if (width != null) "$width'd$value" else value.toString()
 }
 
 data class BinaryOperation(

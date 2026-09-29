@@ -117,11 +117,11 @@ object PredefinedFunctionNodeCreator {
 
     private fun literalFunction(node: PredefinedFunctionNode): Statement {
         val result = node.outputWireVectors()[0]
-        val value = (node.predefinedFunction as LiteralFunction).value
+        val literal = node.predefinedFunction as LiteralFunction
 
         return Assignment(
             destReference = Reference(Identifier.wire(result)),
-            expression = IntLiteral(value)
+            expression = IntLiteral(literal.value, literal.size)
         )
     }
 
