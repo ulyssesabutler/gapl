@@ -1,0 +1,334 @@
+interface word wire[32]
+interface sha256_message_window word[16]
+
+interface sha256_state {
+    a: word;
+    b: word;
+    c: word;
+    d: word;
+    e: word;
+    f: word;
+    g: word;
+    h: word;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: wire[256];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Hashes each 256-bit beat independently as a complete 32-byte SHA-256 message, replacing the beat
+ * with its 256-bit digest - the SHA-256 counterpart to the single-block md5 application.
+ *
+ * Byte-lane convention (same as md5): byte lane j (bits[8j:8j+7]) of a beat holds the message byte
+ * that is chronologically later the lower j is, so lane 31 is the first byte. SHA-256 is big-endian,
+ * so unlike md5 no byte swapping is needed anywhere: message word 0 is simply bits[480:511] of the
+ * padded block, and digest word H0 lands directly in bits[224:255] of the output.
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body
+{
+    i.data => sha256_pad_nf_data()
+           => sha256_message_window_from_block()
+           => sha256_single_block_hash()
+           => sha256_output_from_state()
+           => o.data;
+
+    i.keep  => o.keep;
+    i.valid => o.valid;
+    i.last  => o.last;
+}
+
+/* PADDING - the message is always exactly 256 bits, so padding is a constant */
+
+function sha256_generate_256bit_padding() null => o: wire[256]
+{
+    literal(1, 1) => declare true_vector: wire[1];
+    true_vector[0] => declare true_value: wire;
+
+    // 0x80 marker byte immediately after the message (block byte 32)
+    true_value => o[255];
+    // Big-endian 64-bit message length (256 = 0x100) in block bytes 56..63
+    true_value => o[8];
+
+    literal(8, 0)   => o[0:7];
+    literal(246, 0) => o[9:254];
+}
+
+function sha256_pad_nf_data() i: wire[256] => o: wire[512]
+{
+    sha256_generate_256bit_padding() => o[0:255];
+    i                                => o[256:511];
+}
+
+function sha256_message_window_from_block() i: wire[512] => o: sha256_message_window
+{
+    i[480:511] => o[0];
+    i[448:479] => o[1];
+    i[416:447] => o[2];
+    i[384:415] => o[3];
+    i[352:383] => o[4];
+    i[320:351] => o[5];
+    i[288:319] => o[6];
+    i[256:287] => o[7];
+    i[224:255] => o[8];
+    i[192:223] => o[9];
+    i[160:191] => o[10];
+    i[128:159] => o[11];
+    i[96:127]  => o[12];
+    i[64:95]   => o[13];
+    i[32:63]   => o[14];
+    i[0:31]    => o[15];
+}
+
+function sha256_output_from_state() i: sha256_state => o: wire[256]
+{
+    i.a => o[224:255];
+    i.b => o[192:223];
+    i.c => o[160:191];
+    i.d => o[128:159];
+    i.e => o[96:127];
+    i.f => o[64:95];
+    i.g => o[32:63];
+    i.h => o[0:31];
+}
+
+/* BIT OPERATIONS */
+
+function add_words() lhs: word, rhs: word => result: word
+{
+    lhs, rhs => add(32) => result;
+}
+
+function xor3_words() x: word, y: word, z: word => o: word
+{
+    x, y => bitwise_xor(32) => declare xy: word;
+    xy, z => bitwise_xor(32) => o;
+}
+
+function rotate_right_by(count: integer) i: word => o: word
+{
+    i[count:31]    => o[0:31 - count];
+    i[0:count - 1] => o[32 - count:31];
+}
+
+function shift_right_by(count: integer) i: word => o: word
+{
+    i[count:31]       => o[0:31 - count];
+    literal(count, 0) => o[32 - count:31];
+}
+
+/* SHA-256 FUNCTIONS */
+
+function sha256_big_sigma0() x: word => o: word
+{
+    x => rotate_right_by(2)  => declare r0: word;
+    x => rotate_right_by(13) => declare r1: word;
+    x => rotate_right_by(22) => declare r2: word;
+    r0, r1, r2 => xor3_words() => o;
+}
+
+function sha256_big_sigma1() x: word => o: word
+{
+    x => rotate_right_by(6)  => declare r0: word;
+    x => rotate_right_by(11) => declare r1: word;
+    x => rotate_right_by(25) => declare r2: word;
+    r0, r1, r2 => xor3_words() => o;
+}
+
+function sha256_small_sigma0() x: word => o: word
+{
+    x => rotate_right_by(7)  => declare r0: word;
+    x => rotate_right_by(18) => declare r1: word;
+    x => shift_right_by(3)   => declare r2: word;
+    r0, r1, r2 => xor3_words() => o;
+}
+
+function sha256_small_sigma1() x: word => o: word
+{
+    x => rotate_right_by(17) => declare r0: word;
+    x => rotate_right_by(19) => declare r1: word;
+    x => shift_right_by(10)  => declare r2: word;
+    r0, r1, r2 => xor3_words() => o;
+}
+
+function sha256_choose() x: word, y: word, z: word => o: word
+{
+    x, y => bitwise_and(32) => declare xy: word;
+    x => bitwise_not(32) => declare not_x: word;
+    not_x, z => bitwise_and(32) => declare not_xz: word;
+    xy, not_xz => bitwise_xor(32) => o;
+}
+
+function sha256_majority() x: word, y: word, z: word => o: word
+{
+    x, y => bitwise_and(32) => declare xy: word;
+    x, z => bitwise_and(32) => declare xz: word;
+    y, z => bitwise_and(32) => declare yz: word;
+    xy, xz, yz => xor3_words() => o;
+}
+
+/* COMPRESSION */
+
+function sha256_single_block_hash() m: sha256_message_window => o: sha256_state
+{
+    declare initial_state: sha256_state;
+
+    literal(32, 1779033703) => initial_state.a;
+    literal(32, 3144134277) => initial_state.b;
+    literal(32, 1013904242) => initial_state.c;
+    literal(32, 2773480762) => initial_state.d;
+    literal(32, 1359893119) => initial_state.e;
+    literal(32, 2600822924) => initial_state.f;
+    literal(32, 528734635)  => initial_state.g;
+    literal(32, 1541459225) => initial_state.h;
+
+    m, initial_state => sha256_hash_block() => o;
+}
+
+function sha256_hash_block() m: sha256_message_window, input_state: sha256_state => output_state: sha256_state
+{
+    m, input_state => sha256_hash_block_from_iteration(0) => declare final_local_state: sha256_state;
+
+    input_state.a, final_local_state.a => add_words() => output_state.a;
+    input_state.b, final_local_state.b => add_words() => output_state.b;
+    input_state.c, final_local_state.c => add_words() => output_state.c;
+    input_state.d, final_local_state.d => add_words() => output_state.d;
+    input_state.e, final_local_state.e => add_words() => output_state.e;
+    input_state.f, final_local_state.f => add_words() => output_state.f;
+    input_state.g, final_local_state.g => add_words() => output_state.g;
+    input_state.h, final_local_state.h => add_words() => output_state.h;
+}
+
+/*
+ * The message schedule is carried through the rounds as a 16-word sliding window: round t consumes
+ * window[0] (= W[t]) and hands the next round the window shifted down by one, with W[t + 16]
+ * appended. Computing W[t] on demand from its own recurrence instead would duplicate every earlier
+ * schedule word once per reference, growing the netlist exponentially.
+ */
+function sha256_hash_block_from_iteration(iteration: integer) window: sha256_message_window, input_state: sha256_state => output_state: sha256_state
+{
+    window[0], input_state => sha256_round(iteration) => declare round_state: sha256_state;
+
+    if (iteration < 63) {
+        window => sha256_next_message_window(iteration) => declare next_window: sha256_message_window;
+        next_window, round_state => sha256_hash_block_from_iteration(iteration + 1) => output_state;
+    } else {
+        round_state => output_state;
+    }
+}
+
+function sha256_next_message_window(iteration: integer) i: sha256_message_window => o: sha256_message_window
+{
+    i[1:15] => o[0:14];
+
+    // The last 16 rounds only consume words already in the window, so no new word is needed
+    if (iteration < 48) {
+        i[14] => sha256_small_sigma1() => declare s1: word;
+        i[1]  => sha256_small_sigma0() => declare s0: word;
+
+        s1, i[9]   => add_words() => declare sum1: word;
+        s0, i[0]   => add_words() => declare sum2: word;
+        sum1, sum2 => add_words() => o[15];
+    } else {
+        literal(32, 0) => o[15];
+    }
+}
+
+function sha256_round(iteration: integer) w: word, input_state: sha256_state => output_state: sha256_state
+{
+    sha256_k_table(iteration) => declare k_i: word;
+
+    input_state.e => sha256_big_sigma1() => declare big_s1: word;
+    input_state.e, input_state.f, input_state.g => sha256_choose() => declare ch: word;
+
+    input_state.h, big_s1 => add_words() => declare t1_a: word;
+    ch, k_i               => add_words() => declare t1_b: word;
+    t1_a, t1_b            => add_words() => declare t1_c: word;
+    t1_c, w               => add_words() => declare temp1: word;
+
+    input_state.a => sha256_big_sigma0() => declare big_s0: word;
+    input_state.a, input_state.b, input_state.c => sha256_majority() => declare maj: word;
+    big_s0, maj => add_words() => declare temp2: word;
+
+    input_state.g => output_state.h;
+    input_state.f => output_state.g;
+    input_state.e => output_state.f;
+    input_state.d, temp1 => add_words() => output_state.e;
+    input_state.c => output_state.d;
+    input_state.b => output_state.c;
+    input_state.a => output_state.b;
+    temp1, temp2 => add_words() => output_state.a;
+}
+
+function sha256_k_table(iteration: integer) null => o: word
+{
+    if (iteration == 0)  literal(32, 1116352408) => o;
+    if (iteration == 1)  literal(32, 1899447441) => o;
+    if (iteration == 2)  literal(32, 3049323471) => o;
+    if (iteration == 3)  literal(32, 3921009573) => o;
+    if (iteration == 4)  literal(32, 961987163)  => o;
+    if (iteration == 5)  literal(32, 1508970993) => o;
+    if (iteration == 6)  literal(32, 2453635748) => o;
+    if (iteration == 7)  literal(32, 2870763221) => o;
+    if (iteration == 8)  literal(32, 3624381080) => o;
+    if (iteration == 9)  literal(32, 310598401)  => o;
+    if (iteration == 10) literal(32, 607225278)  => o;
+    if (iteration == 11) literal(32, 1426881987) => o;
+    if (iteration == 12) literal(32, 1925078388) => o;
+    if (iteration == 13) literal(32, 2162078206) => o;
+    if (iteration == 14) literal(32, 2614888103) => o;
+    if (iteration == 15) literal(32, 3248222580) => o;
+    if (iteration == 16) literal(32, 3835390401) => o;
+    if (iteration == 17) literal(32, 4022224774) => o;
+    if (iteration == 18) literal(32, 264347078)  => o;
+    if (iteration == 19) literal(32, 604807628)  => o;
+    if (iteration == 20) literal(32, 770255983)  => o;
+    if (iteration == 21) literal(32, 1249150122) => o;
+    if (iteration == 22) literal(32, 1555081692) => o;
+    if (iteration == 23) literal(32, 1996064986) => o;
+    if (iteration == 24) literal(32, 2554220882) => o;
+    if (iteration == 25) literal(32, 2821834349) => o;
+    if (iteration == 26) literal(32, 2952996808) => o;
+    if (iteration == 27) literal(32, 3210313671) => o;
+    if (iteration == 28) literal(32, 3336571891) => o;
+    if (iteration == 29) literal(32, 3584528711) => o;
+    if (iteration == 30) literal(32, 113926993)  => o;
+    if (iteration == 31) literal(32, 338241895)  => o;
+    if (iteration == 32) literal(32, 666307205)  => o;
+    if (iteration == 33) literal(32, 773529912)  => o;
+    if (iteration == 34) literal(32, 1294757372) => o;
+    if (iteration == 35) literal(32, 1396182291) => o;
+    if (iteration == 36) literal(32, 1695183700) => o;
+    if (iteration == 37) literal(32, 1986661051) => o;
+    if (iteration == 38) literal(32, 2177026350) => o;
+    if (iteration == 39) literal(32, 2456956037) => o;
+    if (iteration == 40) literal(32, 2730485921) => o;
+    if (iteration == 41) literal(32, 2820302411) => o;
+    if (iteration == 42) literal(32, 3259730800) => o;
+    if (iteration == 43) literal(32, 3345764771) => o;
+    if (iteration == 44) literal(32, 3516065817) => o;
+    if (iteration == 45) literal(32, 3600352804) => o;
+    if (iteration == 46) literal(32, 4094571909) => o;
+    if (iteration == 47) literal(32, 275423344)  => o;
+    if (iteration == 48) literal(32, 430227734)  => o;
+    if (iteration == 49) literal(32, 506948616)  => o;
+    if (iteration == 50) literal(32, 659060556)  => o;
+    if (iteration == 51) literal(32, 883997877)  => o;
+    if (iteration == 52) literal(32, 958139571)  => o;
+    if (iteration == 53) literal(32, 1322822218) => o;
+    if (iteration == 54) literal(32, 1537002063) => o;
+    if (iteration == 55) literal(32, 1747873779) => o;
+    if (iteration == 56) literal(32, 1955562222) => o;
+    if (iteration == 57) literal(32, 2024104815) => o;
+    if (iteration == 58) literal(32, 2227730452) => o;
+    if (iteration == 59) literal(32, 2361852424) => o;
+    if (iteration == 60) literal(32, 2428436474) => o;
+    if (iteration == 61) literal(32, 2756734187) => o;
+    if (iteration == 62) literal(32, 3204031479) => o;
+    if (iteration == 63) literal(32, 3329325298) => o;
+}

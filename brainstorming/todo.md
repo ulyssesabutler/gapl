@@ -215,6 +215,16 @@ There are a few different validations we need to do, but currently don't.
   git repo/submodule). The files still declare `package retiming` rather than a package matching
   their directory - harmless (Kotlin doesn't require the two to match), but worth cleaning up
   if these are ever touched again.
+- **Per-port retiming gets the first beat after reset wrong on `netfpga/src/sha256`.** The
+  `per-port-min-register-count` variation fails `:netfpga:runKernelTest` (Verilator), but only on
+  the first beat after each reset: a probe packet of three back-to-back beats failed beat 0 and
+  passed beats 1 and 2. The same GAPL passes `runSimKernelTest`, the `unretimed` variation and
+  `min-register-count`, and `md5`'s own per-port variation passes, so the GAPL is fine and this is
+  specific to the per-port solver's output for this design. Suspected cause, not yet verified:
+  registers retimed onto paths fed only by constants (SHA-256's K table, initial H values and
+  constant padding) reset to 0 rather than to the constant they carry, so the first computation
+  after reset reads 0 for one cycle. The kernel-test harness resets between packets, which is why
+  every single-beat vector fails.
 
 ## NetFPGA build (Gradle)
 - `netfpga/build.gradle.kts`'s per-core IP packaging tasks (`packageCore*`, registered via
