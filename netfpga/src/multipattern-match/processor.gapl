@@ -1,0 +1,140 @@
+/* STRING MATCHING */
+
+interface string(size: integer) character[size]
+
+/*
+ * Bit-parallel (Shift-And) matching state for one needle of the given size: previous_equals[k] is
+ * true when the most recent k + 1 characters equal the needle's first k + 1 characters, and result
+ * is a sticky flag recording whether the whole needle has appeared yet.
+ */
+interface string_state(string_size: integer)
+{
+    previous_equals: boolean[string_size];
+    result: boolean;
+}
+
+function check_character(string_size: integer) str: string(string_size), char: character => result: boolean[string_size]
+{
+    char => replicate(character, string_size) => declare char_array: string(string_size);
+    str, char_array => vector_zip(character, character, string_size)
+                    => vector_map(pair(character, character), boolean, string_size, unpair(character, character, boolean, equals(8)))
+                    => result;
+}
+
+/*
+ * Advances one needle's state by one character. `current` is the new character, and
+ * needle_check(current)[k] says whether it equals needle[k].
+ */
+function update_string_state(size: integer, needle_check: character => boolean[size]) prev: string_state(size), current: character => next: string_state(size)
+{
+    current => needle_check => declare needle_check_result: boolean[size];
+
+    needle_check_result[0] => next.previous_equals[0];
+
+    needle_check_result[1:size - 1], prev.previous_equals[0:size - 2]
+        => vector_zip(boolean, boolean, size - 1)
+        => vector_map(pair(boolean, boolean), boolean, size - 1, unpair(boolean, boolean, boolean, and))
+        => next.previous_equals[1:size - 1];
+
+    prev.previous_equals[size - 2], needle_check_result[size - 1] => and() => declare current_success: boolean;
+    prev.result, current_success => or() => next.result;
+}
+
+/* NEEDLES */
+
+function needle_check_foo() char: character => o: boolean[3]
+{
+    declare needle: string(3);
+
+    literal(8, 102) => needle[0]; // f
+    literal(8, 111) => needle[1]; // o
+    literal(8, 111) => needle[2]; // o
+
+    needle, char => check_character(3) => o;
+}
+
+function needle_check_bar() char: character => o: boolean[3]
+{
+    declare needle: string(3);
+
+    literal(8, 98)  => needle[0]; // b
+    literal(8, 97)  => needle[1]; // a
+    literal(8, 114) => needle[2]; // r
+
+    needle, char => check_character(3) => o;
+}
+
+function needle_check_banana() char: character => o: boolean[6]
+{
+    declare needle: string(6);
+
+    literal(8, 98)  => needle[0]; // b
+    literal(8, 97)  => needle[1]; // a
+    literal(8, 110) => needle[2]; // n
+    literal(8, 97)  => needle[3]; // a
+    literal(8, 110) => needle[4]; // n
+    literal(8, 97)  => needle[5]; // a
+
+    needle, char => check_character(6) => o;
+}
+
+/* MULTI-PATTERN MATCHING */
+
+interface match_state {
+    foo: string_state(3);
+    bar: string_state(3);
+    banana: string_state(6);
+}
+
+function update_match_state() new_character: character, current_state: match_state => next_state: match_state
+{
+    current_state.foo,    new_character => update_string_state(3, needle_check_foo())    => next_state.foo;
+    current_state.bar,    new_character => update_string_state(3, needle_check_bar())    => next_state.bar;
+    current_state.banana, new_character => update_string_state(6, needle_check_banana()) => next_state.banana;
+}
+
+/* NETFPGA PACKET BODY PROCESSOR */
+
+interface netfpga_packet_body {
+    data: byte[32];
+    keep: boolean[32];
+    valid: boolean;
+    last: boolean;
+}
+
+/*
+ * Like the regex application: the beat's 32 characters are folded through the matcher in
+ * transmission order, the matching state is carried across beats in a register (so a needle split
+ * across two beats still matches), and one result beat is emitted when the packet's last beat
+ * arrives. The result is the first byte of the output: bit 0 = "foo", bit 1 = "bar",
+ * bit 2 = "banana".
+ */
+function packet_body_processor() i: netfpga_packet_body => o: netfpga_packet_body {
+    declare input_characters: character[32];
+    declare input_state: match_state;
+    declare output_state: match_state;
+
+    i.data => reverse(character, 32) => input_characters;
+
+    input_characters, input_state
+        => combinational_vector_fold(character, match_state, 32, update_match_state)
+        => output_state;
+
+    output_state => register(match_state) => input_state;
+
+    declare o_register: register(netfpga_packet_body) => o;
+
+    output_state.foo.result    => o_register.data[31][0];
+    output_state.bar.result    => o_register.data[31][1];
+    output_state.banana.result => o_register.data[31][2];
+    literal(5, 0)              => o_register.data[31][3:7];
+    literal(8, 0) => replicate(wire[8], 31) => o_register.data[0:30];
+
+    literal(1, 1)
+        => vector_to_wire()
+        => replicate(wire, 32)
+        => o_register.keep;
+
+    i.last => o_register.valid;
+    i.last => o_register.last;
+}
