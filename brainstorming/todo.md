@@ -224,8 +224,29 @@ There are a few different validations we need to do, but currently don't.
   git repo/submodule). The files still declare `package retiming` rather than a package matching
   their directory - harmless (Kotlin doesn't require the two to match), but worth cleaning up
   if these are ever touched again.
+- **The per-port hierarchical solver's feasibility is not monotonic in the clock period.** On
+  `netfpga/src/bloom-filter-32bit` (`per-port-min-register-count`, `flatten=recursive`, the shared
+  `netfpga/delay.yaml`), `generateGaplVerilog -PretimingClockPeriod=<p>` succeeds at 120, 220, 300
+  and 1000 but throws `RetimingInfeasibleException` ("No feasible per-port hierarchical retiming
+  found for clock period 160"), as it also does at 9/20/40/80. A retiming feasible at 120 is feasible
+  at 160 by definition, so the 160 verdict is wrong - most likely a heuristic search box or a
+  per-module boundary choice that excludes every feasible point at some periods. It also means any
+  minimum-clock-period binary search over this solver can land on a wrong answer.
 
 ## NetFPGA build (Gradle)
+- **`netfpga/kernel-test/test.cpp` samples outputs after the clock edge**, so an application whose
+  output is a *combinational* function of a register sees the register's post-update value. Both
+  `bloom-filter` and `bloom-filter-32bit` fail `runKernelTest` in their `unretimed` variation for
+  exactly this reason (every lookup reports a hit, because the filter already holds the current
+  beat), while passing `runSimKernelTest`, which samples before the update; their retimed
+  variations pass because retiming puts registers on the output path. Apps that register their
+  outputs (`cms`, `cms-32bit`) or keep no state (`crc32`) are unaffected. Fix either by capturing
+  outputs before `tick()` in the harness (check every app still passes - registered-output apps
+  just shift by a cycle), or by convention that every stateful app registers its outputs.
+- **`cms-32bit`'s `monolithic-min-register-count` variation (`flatten=all`) needs more than the
+  default JVM heap** - `gapl --flatten all` on it OOMs at the default (~1/4 of RAM, 8 GB here) inside
+  `ConstantSimplifier`, and completes with `JAVA_OPTS=-Xmx20g`. 8 items x 4 hashes is 32 fully
+  inlined MD5 instances. The `flatten=recursive` variations compile fine at the default heap.
 - `netfpga/build.gradle.kts`'s per-core IP packaging tasks (`packageCore*`, registered via
   `registerNetfpgaCoreBuildTask`) declare `component.xml`/`xgui/` as Gradle `outputs`, so that
   `makeInit`/`makeIPs` skip re-invoking Vivado when nothing changed. This assumes Vivado's
