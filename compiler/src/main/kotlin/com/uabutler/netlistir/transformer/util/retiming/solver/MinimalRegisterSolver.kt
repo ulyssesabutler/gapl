@@ -65,6 +65,9 @@ class MinimalRegisterSolver<G, N, E>(
     companion object {
         init { Loader.loadNativeLibraries() }
 
+        // A backstop only - widening normally stops after one or two solves (see widenWhileAtLabelBound)
+        private const val MAX_LABEL_BOUND_DOUBLINGS = 16
+
         /**
          * [edgeSourceBits] for a graph built from a netlist: the driving wires behind the edge, one
          * per bit. Two edges out of the same node report the same `OutputWire` object for a bit they
@@ -130,18 +133,72 @@ class MinimalRegisterSolver<G, N, E>(
         // So: try the cheap box when there is one, then fall through to a bound that is actually
         // provable before reporting infeasible.
         val heuristicBound = computeUpperRetimingUpperBound(graph, targetClockPeriod)?.plus(1)
-        if (heuristicBound != null) {
-            solveWithLabelBound(heuristicBound, timingConstrainedPaths)?.let { return@run it }
-        }
+        val boxedSolve = heuristicBound?.let { solveWithLabelBound(it, timingConstrainedPaths) } ?: run {
+            val provableBound = provableLabelBound(timingConstrainedPaths)
+            if (heuristicBound != null && provableBound <= heuristicBound) return@run null
 
-        val provableBound = provableLabelBound(timingConstrainedPaths)
-        if (heuristicBound != null && provableBound <= heuristicBound) return@run null
+            Logger.debug {
+                "Retrying at provable retiming-label bound $provableBound " +
+                    "(heuristic bound ${heuristicBound ?: "unavailable - FastSolver found no feasible relaxation"})"
+            }
+            solveWithLabelBound(provableBound, timingConstrainedPaths)
+        } ?: return@run null
 
-        Logger.debug {
-            "Retrying at provable retiming-label bound $provableBound " +
-                "(heuristic bound ${heuristicBound ?: "unavailable - FastSolver found no feasible relaxation"})"
+        val solve = widenWhileAtLabelBound(boxedSolve, timingConstrainedPaths)
+        lastSolveNodeLags = solve.nodeLags
+        return@run solve.problem
+    }
+
+    /** One CP-SAT solve inside `|r(v)| <= bound`. */
+    private inner class BoundedSolve(
+        val bound: Long,
+        val problem: MonolithicRetimingProblem<G, N, E>,
+        val nodeLags: Map<WeightedGraph.Node<N>, Int>,
+        val objective: Long,
+    ) {
+        /** Whether any label sits on the box, i.e. the box may be what kept a cheaper retiming out. */
+        val touchesBound: Boolean get() = nodeLags.values.any { kotlin.math.abs(it.toLong()) >= bound }
+    }
+
+    /**
+     * Re-solves in a doubled box for as long as the answer has a label on the box and widening still
+     * lowers the objective.
+     *
+     * CP-SAT's OPTIMAL is optimal *within the label domains*, and neither box above is guaranteed to
+     * contain a true optimum (see their comments), so a box-optimal answer can be strictly worse than
+     * the real one - on netfpga's bloom-filter at period 160, `bloom_filter_process_item`'s heuristic
+     * box of +/-7 forced 4 registers onto its 256-bit state path, because the free optimum needed a
+     * label of -11, and that pinned boundary then made the parent loop infeasible.
+     *
+     * An answer with *no* label on the box is a true optimum: every constraint here is a difference
+     * constraint and the objective is a sum of linear terms and maxima of label differences, which
+     * makes the problem L-natural-convex, and for those a point no unit step (+/-1 on a subset of the
+     * labels) can improve is a global minimum - every such step from an interior point is inside the
+     * box, so CP-SAT has already ruled them all out. An answer *on* the box may still be optimal,
+     * since a label can sit there at no cost, which is why widening also stops once it stops paying:
+     * the best objective inside a box of size B is non-increasing and (for the continuous relaxation,
+     * at least) convex in B, so once doubling doesn't improve it, no larger box should.
+     */
+    private fun widenWhileAtLabelBound(
+        initial: BoundedSolve,
+        timingConstrainedPaths: List<LeisersonCircuitGraph.FastestConnection<N>>,
+    ): BoundedSolve {
+        var current = initial
+        repeat(MAX_LABEL_BOUND_DOUBLINGS) {
+            if (!current.touchesBound) return current
+
+            val widerBound = current.bound * 2
+            Logger.debug {
+                "Solution has a retiming label on the bound ${current.bound} (objective ${current.objective}); " +
+                    "re-solving at $widerBound"
+            }
+            val wider = solveWithLabelBound(widerBound, timingConstrainedPaths) ?: return current
+            if (wider.objective >= current.objective) return current
+
+            Logger.debug { "Widening to $widerBound lowered the objective from ${current.objective} to ${wider.objective}" }
+            current = wider
         }
-        return@run solveWithLabelBound(provableBound, timingConstrainedPaths)
+        return current
     }
 
     /**
@@ -212,7 +269,7 @@ class MinimalRegisterSolver<G, N, E>(
     private fun solveWithLabelBound(
         upperBound: Long,
         timingConstrainedPaths: List<LeisersonCircuitGraph.FastestConnection<N>>,
-    ): MonolithicRetimingProblem<G, N, E>? = Logger.run("Solving at retiming-label bound $upperBound", Logger.Level.DEBUG) {
+    ): BoundedSolve? = Logger.run("Solving at retiming-label bound $upperBound", Logger.Level.DEBUG) {
         Logger.start("Creating LP problem", Logger.Level.TRACE)
 
         // Step 1: create the module
@@ -437,8 +494,12 @@ class MinimalRegisterSolver<G, N, E>(
         }
 
         nodeLags.forEach { (node, lag) -> retiming.setNodeLag(node, lag) }
-        lastSolveNodeLags = nodeLags
 
-        return@run MonolithicRetimingProblem(retiming.generateNewCircuit())
+        return@run BoundedSolve(
+            bound = upperBound,
+            problem = MonolithicRetimingProblem(retiming.generateNewCircuit()),
+            nodeLags = nodeLags,
+            objective = kotlin.math.round(solver.objectiveValue()).toLong(),
+        )
     }
 }

@@ -270,12 +270,27 @@ There are a few different validations we need to do, but currently don't.
      put registers on `init->o` roughly every other item (it reports 3). Nothing in the child's
      objective rewards leaving timing slack at an output.
 
-  Possible fixes: for (1), re-solve at the provable bound whenever the heuristic box's answer has
-  any lag at the box edge (or skip the heuristic box for these small per-module models); for (2),
-  have a child prefer zero registers / minimal output delay on pass-through pairs (a secondary
-  objective), let the parent pass down per-pair caps for pairs on its cycles, or let the parent
-  re-solve a child whose summary makes it infeasible. Also note any minimum-clock-period binary
-  search over this solver can land on a wrong answer.
+  **[DONE] (1) is fixed**: `MinimalRegisterSolver.widenWhileAtLabelBound` re-solves in a doubled box
+  whenever the answer has a label on the box, keeping the wider answer only if its objective is
+  strictly lower, and stops once an answer is off the box or widening stops paying (the comment there
+  has the L-natural-convexity argument for why an off-box answer is a true optimum). The original
+  `bloom-filter` now retimes per-port at every period tried, 160 included (Verilator passes at 9 and
+  160). On `bloom-filter-32bit` at 160 the box check fires 134 times without ever improving an
+  objective - that period fails by (2), not (1): `new_state` output delay 149, so 149 + 9 + 9 > 160.
+
+  **(2) is still open** - `bloom-filter-32bit` still fails per-port at every period 9-80 and at 160.
+  Possible fixes: have a child prefer zero registers / minimal output delay on pass-through pairs (a
+  secondary objective), let the parent pass down per-pair caps for pairs on its cycles, or let the
+  parent re-solve a child whose summary makes it infeasible. Until then, any minimum-clock-period
+  binary search over this solver can land on a wrong answer.
+- **CP-SAT's multithreaded default makes `minimal-register` retiming non-deterministic.**
+  `MinimalRegisterSolver` sets no worker count or seed, so equal-cost optima are tie-broken
+  differently run to run: two compiles of `verilator-test/tests/aes` (`register-minimization`, period
+  40) with the *same* compiler differ by 1332 lines of Verilog, same size and same 4290 register bits.
+  This breaks the "byte-identical output" regression check in the root `CLAUDE.md` for any fixture on
+  that solver (aes/register-minimization diffs against itself). Fix with `solver.parameters.numWorkers
+  = 1` (or a fixed seed plus deterministic search) - check the effect on solve time for the big
+  monolithic models first.
 
 ## NetFPGA build (Gradle)
 - **`netfpga/kernel-test/test.cpp` samples outputs after the clock edge**, so an application whose
