@@ -248,13 +248,34 @@ There are a few different validations we need to do, but currently don't.
   (The CP-SAT phase of these monolithic 32-bit compiles takes several minutes and was never seen to
   finish here.)
 
-  The child is minimising its own register count with no knowledge that one of its port pairs is
-  part of a parent loop, and the choice between equal- or near-equal-cost placements is effectively
-  arbitrary per period - hence the "random" failures. Possible fixes: have a child prefer zero
-  registers on pass-through pairs (a tie-break or secondary objective), let the parent pass down a
-  per-pair register cap for pairs on its cycles, or let the parent re-solve a child whose summary
-  makes it infeasible. Also note any minimum-clock-period binary search over this solver can land on
-  a wrong answer.
+  Why a *minimum-register* child puts registers on that pair - two distinct mechanisms:
+
+  1. **The heuristic label box excludes the child's true optimum** (original `bloom-filter` at 160,
+     confirmed from the `--log-level trace` LP dump). `bloom_filter_process_item` is solved at
+     "retiming-label bound 7", i.e. every r in [-7, 7], with `r(current_state) = 0` as the anchor.
+     Its pinned hash child has exactly 11 registers from `i` to the indices, and its pinned
+     `update_indices` child forces the state and the indices to arrive at one lag, so
+     `r(new_state) >= r(i) + 11 >= -7 + 11 = 4`: at least 4 registers on the 256-bit state path. The
+     cheaper solution, `r(i) = -11` with 0 state registers (1024 fewer flip-flops), is outside the
+     box. `MinimalRegisterSolver.solveOrNull` widens to the provable bound only when the boxed model
+     is *infeasible*, so this suboptimal-but-feasible answer is returned as final - its own comment
+     notes the box is "not a proof that an optimal solution fits inside", but the fallback only
+     guards against false infeasibility, not suboptimality. At 120 the box is [-16, 16], which
+     contains `r(i) = -16`, so the state path gets 0 registers.
+  2. **The child spends its timing budget at an output port** (`bloom-filter-32bit` at 80 - the box
+     there is +/-616 / +/-1624, not binding; inferred from the boundary summaries, not an LP dump).
+     `bloom_filter_process_item` reports `new_state` with output delay 68 at period 80 (10 at 120):
+     its last hash register sits 68 delay units before `new_state`. That's locally optimal, but
+     chained 8 times in the fold's state loop it gives 68 + 9 = 77, then 86 > 80, so the fold must
+     put registers on `init->o` roughly every other item (it reports 3). Nothing in the child's
+     objective rewards leaving timing slack at an output.
+
+  Possible fixes: for (1), re-solve at the provable bound whenever the heuristic box's answer has
+  any lag at the box edge (or skip the heuristic box for these small per-module models); for (2),
+  have a child prefer zero registers / minimal output delay on pass-through pairs (a secondary
+  objective), let the parent pass down per-pair caps for pairs on its cycles, or let the parent
+  re-solve a child whose summary makes it infeasible. Also note any minimum-clock-period binary
+  search over this solver can land on a wrong answer.
 
 ## NetFPGA build (Gradle)
 - **`netfpga/kernel-test/test.cpp` samples outputs after the clock edge**, so an application whose
