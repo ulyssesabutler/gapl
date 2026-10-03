@@ -279,6 +279,17 @@ There are a few different validations we need to do, but currently don't.
   objective - that period fails by (2), not (1): `new_state` output delay 149, so 149 + 9 + 9 > 160.
 
   **(2) is still open** - `bloom-filter-32bit` still fails per-port at every period 9-80 and at 160.
+  `cms-32bit` hits it too, with the box fix in place. Swept per-port with its own unit-delay
+  `per-port-min-register-count/delay.yaml` over periods 1-40, 50, 60, 80, 100, 150, 200, 500, 1000: OK
+  at 12-14, 18-20, 24-26, 30-32, 36-38, 50, 60, 80, 200, 500, 1000; infeasible at 1-11, 15-17,
+  21-23, 27-29, 33-35, 39-40, 100, 150 - a near-period-6 pattern between 12 and 40. The true minimum
+  is 9 (FastSolver on the `flatten=all` design reaches exactly 9 and stalls at 9 when asked for 8),
+  which is the sketch loop: 8 items x the 1-deep `add` + the `if_else`. So every failure from 9 up is
+  spurious. At 14, `count_min_update_sketch4` spends 4 registers to keep `updated`'s output delay at 3
+  and the fold's `init->o` stays combinational; at 15 it saves them, `updated`'s output delay becomes
+  15 (the whole period), and the fold needs 7 registers on `init->o` against the root's 1-register
+  loop. At 150 it's `updated` delay 149 and 3 fold registers. In both the infeasible module is the
+  root, `packet_body_processor`.
   Possible fixes: have a child prefer zero registers / minimal output delay on pass-through pairs (a
   secondary objective), let the parent pass down per-pair caps for pairs on its cycles, or let the
   parent re-solve a child whose summary makes it infeasible. Until then, any minimum-clock-period
