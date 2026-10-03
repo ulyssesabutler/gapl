@@ -237,9 +237,16 @@ There are a few different validations we need to do, but currently don't.
   root then logs "Missing child solve result", which is just the downstream symptom.
 
   `bloom-filter-32bit` hits the same thing one level up: the inlined `combinational_vector_fold`
-  module reports `init->o regs=3` at period 80, against the same 1-register loop. Its combinational
-  `init->o` delay is 72 (8 items x 9), so its true minimum period should be ~73, but every period
-  from 65 to 80 fails this way; 120 happens to work (the fold picks `init->o regs=0`), 160 doesn't.
+  module reports `init->o regs=3` at period 80, against the same 1-register loop. Every period from
+  65 to 80 fails this way; 120 happens to work (the fold picks `init->o regs=0`), 160 doesn't.
+
+  Cross-checked without any child boundaries to pin, using `--flatten all --retiming-solver
+  minimal-register`: the original `bloom-filter` retimes at 160 (and 120), and on `bloom-filter-32bit`
+  `FastSolver`'s whole-design pass - which builds the retimed circuit and checks its clock period -
+  finds a retiming at 80, 75, 70 and exactly 65, while at 64 it exhausts its iterations at 66. 65 is
+  precisely the filter loop: 8 items x the 8-deep OR tree in `update_indices`, plus the 1 `if_else`.
+  (The CP-SAT phase of these monolithic 32-bit compiles takes several minutes and was never seen to
+  finish here.)
 
   The child is minimising its own register count with no knowledge that one of its port pairs is
   part of a parent loop, and the choice between equal- or near-equal-cost placements is effectively
