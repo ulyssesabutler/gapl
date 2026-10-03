@@ -224,14 +224,30 @@ There are a few different validations we need to do, but currently don't.
   git repo/submodule). The files still declare `package retiming` rather than a package matching
   their directory - harmless (Kotlin doesn't require the two to match), but worth cleaning up
   if these are ever touched again.
-- **The per-port hierarchical solver's feasibility is not monotonic in the clock period.** On
-  `netfpga/src/bloom-filter-32bit` (`per-port-min-register-count`, `flatten=recursive`, the shared
-  `netfpga/delay.yaml`), `generateGaplVerilog -PretimingClockPeriod=<p>` succeeds at 120, 220, 300
-  and 1000 but throws `RetimingInfeasibleException` ("No feasible per-port hierarchical retiming
-  found for clock period 160"), as it also does at 9/20/40/80. A retiming feasible at 120 is feasible
-  at 160 by definition, so the 160 verdict is wrong - most likely a heuristic search box or a
-  per-module boundary choice that excludes every feasible point at some periods. It also means any
-  minimum-clock-period binary search over this solver can land on a wrong answer.
+- **The per-port hierarchical solver can put registers on a child's port pair that closes a loop in
+  its parent, making the parent infeasible - so feasibility isn't monotonic in the clock period.**
+  Reproduces on the *original* `netfpga/src/bloom-filter` (`per-port-min-register-count`,
+  `flatten=recursive`, `netfpga/delay.yaml`): retiming succeeds at 9, 20, 40, 80, 120, 220, 300 and
+  1000 but fails at 160. With `--log-level debug` at 160, `bloom_filter_process_item` - solved
+  bottom-up, before its parent - reports `current_state->new_state regs=4` (at 120 it reports
+  `regs=0`). In `bloom_filter` that pair sits on the filter register's feedback loop, which holds
+  exactly 1 register, and the child's boundary is pinned by equality constraints, so the parent's
+  `MinimalRegisterSolver` is INFEASIBLE at both the heuristic and the provable label bound (while
+  `FastSolver`, which doesn't see the pinned child boundaries, says "Found feasible solution"). The
+  root then logs "Missing child solve result", which is just the downstream symptom.
+
+  `bloom-filter-32bit` hits the same thing one level up: the inlined `combinational_vector_fold`
+  module reports `init->o regs=3` at period 80, against the same 1-register loop. Its combinational
+  `init->o` delay is 72 (8 items x 9), so its true minimum period should be ~73, but every period
+  from 65 to 80 fails this way; 120 happens to work (the fold picks `init->o regs=0`), 160 doesn't.
+
+  The child is minimising its own register count with no knowledge that one of its port pairs is
+  part of a parent loop, and the choice between equal- or near-equal-cost placements is effectively
+  arbitrary per period - hence the "random" failures. Possible fixes: have a child prefer zero
+  registers on pass-through pairs (a tie-break or secondary objective), let the parent pass down a
+  per-pair register cap for pairs on its cycles, or let the parent re-solve a child whose summary
+  makes it infeasible. Also note any minimum-clock-period binary search over this solver can land on
+  a wrong answer.
 
 ## NetFPGA build (Gradle)
 - **`netfpga/kernel-test/test.cpp` samples outputs after the clock edge**, so an application whose
