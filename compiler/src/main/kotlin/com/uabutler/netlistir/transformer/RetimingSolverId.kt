@@ -11,7 +11,8 @@ enum class RetimingSolverId(val id: String, val kind: RetimingSolverKind) {
     SCC("scc", RetimingSolverKind.MONOLITHIC),
     DAG("dag", RetimingSolverKind.MONOLITHIC),
     HIERARCHICAL_MINIMAL_REGISTER("hierarchical-minimal-register", RetimingSolverKind.HIERARCHICAL),
-    PER_PORT_HIERARCHICAL_MINIMAL_REGISTER("per-port-hierarchical-minimal-register", RetimingSolverKind.HIERARCHICAL);
+    PER_PORT_HIERARCHICAL_MINIMAL_REGISTER("per-port-hierarchical-minimal-register", RetimingSolverKind.HIERARCHICAL),
+    PER_PORT_HIERARCHICAL_MIN_PERIOD("per-port-hierarchical-min-period", RetimingSolverKind.HIERARCHICAL);
 
     companion object {
         fun fromId(id: String): RetimingSolverId =

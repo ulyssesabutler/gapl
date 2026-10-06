@@ -290,6 +290,20 @@ There are a few different validations we need to do, but currently don't.
   15 (the whole period), and the fold needs 7 registers on `init->o` against the root's 1-register
   loop. At 150 it's `updated` delay 149 and 3 fold registers. In both the infeasible module is the
   root, `packet_body_processor`.
+
+  Tried and rejected: `--retiming-solver per-port-hierarchical-min-period` (kept as an experimental,
+  opt-in solver) retimes every non-top-level module at its own minimum clock period (binary search
+  with the module's own min-register solve as oracle) and only the top level at the target. It makes
+  things *worse*: a child can't tell which of its input-to-output paths close a loop in a caller,
+  so minimising its period pipelines those too. On `bloom-filter-32bit` at 80, `update_indices`
+  (own min 4) puts 1 register on `current_state->new_state`, `bloom_filter_process_item` (own min 5)
+  puts 2, and `combinational_vector_fold` (own min 4) puts 16-23 on `init->o`, so `bloom_filter`,
+  which owns the 1-register loop, is infeasible even at the target. `cms-32bit` at 20, which the
+  ordinary per-port solver retimes fine, becomes infeasible. It's also as expensive as feared: the
+  hash path in `bloom_filter_process_item` carries 369 registers at period 5 vs 28 at 80. Any fix
+  along these lines needs to know which child pairs sit on a caller's loop - the SCC information
+  this hack was meant to avoid.
+
   Possible fixes: have a child prefer zero registers / minimal output delay on pass-through pairs (a
   secondary objective), let the parent pass down per-pair caps for pairs on its cycles, or let the
   parent re-solve a child whose summary makes it infeasible. Until then, any minimum-clock-period

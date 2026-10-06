@@ -56,6 +56,11 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
     private val edgeSourceBits: (WeightedGraph.Edge<N, E>) -> Collection<Any> = { listOf(Any()) },
     /** See `--verify-retiming`: runs [PerPortHierarchicalRetimingVerifier] after a successful solve. */
     private val verify: Boolean = false,
+    /**
+     * `--retiming-solver per-port-hierarchical-min-period`: retime every non-top-level module at its
+     * own minimum clock period instead of the target - see [ownMinimumPeriodSolve].
+     */
+    private val childrenAtOwnMinimumPeriod: Boolean = false,
 ) : PortHierarchicalSolver<G, N, E>(PortHierarchicalRetimingProblem(graphs)) {
 
     /**
@@ -87,7 +92,13 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         fun processGraph(graph: PortHierarchicalCircuitGraph<G, N, E>) {
             if (processed[graph] == true) return
             graph.childInstances().forEach { processGraph(it.childGraph) }
-            solveSingle(graph, results, targetClockPeriod, isTopLevel = graph in topLevel)?.let { results[graph] = it }
+            val isTopLevel = graph in topLevel
+            val result = if (childrenAtOwnMinimumPeriod && !isTopLevel) {
+                ownMinimumPeriodSolve(graph, results, targetClockPeriod)
+            } else {
+                solveSingle(graph, results, targetClockPeriod, isTopLevel)
+            }
+            result?.let { results[graph] = it }
             processed[graph] = true
         }
 
@@ -108,6 +119,48 @@ class PerPortHierarchicalMinimalRegisterSolver<G, N, E>(
         }
 
         return PortHierarchicalRetimingProblem(problem.graphs.map { results.getValue(it).retimedGraph })
+    }
+
+    /**
+     * Solves a non-top-level [graph] at the smallest clock period it can reach on its own (with its
+     * children already fixed), rather than at [targetClockPeriod].
+     *
+     * A child solved at the target is free to spend that whole period on a path that ends at one of
+     * its output ports, and its caller can't win the time back: the registers that would shorten it
+     * belong inside the child, which is fixed by the time the caller is solved. When the caller
+     * chains that output into a feedback loop, which holds a fixed number of registers, it goes
+     * infeasible - netfpga's `bloom-filter-32bit` and `cms-32bit` fail this way at periods well above
+     * their real minimum (see `brainstorming/todo.md`). At its own minimum period every path a child
+     * exposes is as short as it can make it. The price is registers: a child with no loop of its own
+     * can pipeline down to its slowest single operator.
+     *
+     * Binary search over integer periods in [1, target], with this module's own min-register solve
+     * as the oracle - exact, unlike FastSolver, which can't see the equality constraints pinning the
+     * children. With the children fixed, feasibility is monotone in the period. Returns null exactly
+     * when the module is infeasible at the target, as [solveSingle] would.
+     */
+    private fun ownMinimumPeriodSolve(
+        graph: PortHierarchicalCircuitGraph<G, N, E>,
+        childResults: Map<PortHierarchicalCircuitGraph<G, N, E>, SolveResult<G, N, E>>,
+        targetClockPeriod: Int,
+    ): SolveResult<G, N, E>? = Logger.run("Retiming per-port hierarchical graph at its own minimum clock period") {
+        var best = solveSingle(graph, childResults, targetClockPeriod, isTopLevel = false) ?: return@run null
+        var bestPeriod = targetClockPeriod
+
+        var low = 1
+        while (low < bestPeriod) {
+            val mid = low + (bestPeriod - low) / 2
+            val attempt = solveSingle(graph, childResults, mid, isTopLevel = false)
+            if (attempt != null) {
+                best = attempt
+                bestPeriod = mid
+            } else {
+                low = mid + 1
+            }
+        }
+
+        Logger.debug { "Own minimum clock period for graph=${graph.value}: $bestPeriod (target $targetClockPeriod)" }
+        best
     }
 
     /** One child instance's contracted subgraph inside its parent's flat graph. */

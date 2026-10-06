@@ -124,7 +124,10 @@ class Gapl : CliktCommand(name = "gapl") {
             "per-port-hierarchical-minimal-register are hierarchical (require --flatten none or " +
             "recursive). The per-port solver summarises a module boundary per port rather than " +
             "per module, which lets a module's ports sit at different pipeline depths - needed " +
-            "whenever a caller has a feedback loop through a submodule. dag additionally " +
+            "whenever a caller has a feedback loop through a submodule. " +
+            "per-port-hierarchical-min-period is the per-port solver with every non-top-level " +
+            "module retimed at its own minimum clock period rather than the target, which leaves " +
+            "callers more timing slack at child boundaries at the cost of more registers. dag additionally " +
             "requires the circuit to be fully acyclic (no register-protected loops). Defaults to " +
             "fast with --flatten all, and to per-port-hierarchical-minimal-register otherwise.",
     ).choice(RetimingSolverId.entries.associate { it.id to it })

@@ -58,7 +58,8 @@ class Retimer(
             RetimingSolverId.SCC -> SccSolver(problem)
             RetimingSolverId.DAG -> DagSolver(problem)
             RetimingSolverId.HIERARCHICAL_MINIMAL_REGISTER,
-            RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER ->
+            RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER,
+            RetimingSolverId.PER_PORT_HIERARCHICAL_MIN_PERIOD ->
                 error("$id is a hierarchical solver, not a monolithic one")
         }
     }
@@ -196,6 +197,8 @@ class Retimer(
         return when (retimingSolverId) {
             RetimingSolverId.PER_PORT_HIERARCHICAL_MINIMAL_REGISTER ->
                 PerPortHierarchicalRetimer(original).retimeAll(delay, targetClockPeriod, verify)
+            RetimingSolverId.PER_PORT_HIERARCHICAL_MIN_PERIOD ->
+                PerPortHierarchicalRetimer(original).retimeAll(delay, targetClockPeriod, verify, childrenAtOwnMinimumPeriod = true)
             else -> HierarchicalRetimer(original).retimeAll(delay, targetClockPeriod)
         }
     }

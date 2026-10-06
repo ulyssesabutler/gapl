@@ -25,6 +25,7 @@ class PerPortHierarchicalRetimer(
         propagationDelay: PropagationDelay,
         targetClockPeriod: Int?,
         verify: Boolean = false,
+        childrenAtOwnMinimumPeriod: Boolean = false,
     ): List<MutableModule> {
         val graphs = PortHierarchicalNetlistConverter.fromModules(modules, propagationDelay)
 
@@ -40,6 +41,7 @@ class PerPortHierarchicalRetimer(
             expansionEdgeValueFactory = { emptyList<NonRegisterConnection>() },
             edgeSourceBits = MinimalRegisterSolver.Companion::netlistEdgeSourceBits,
             verify = verify,
+            childrenAtOwnMinimumPeriod = childrenAtOwnMinimumPeriod,
         )
 
         val clockPeriod = targetClockPeriod ?: findMinimumClockPeriod(solver, solver.problem)
