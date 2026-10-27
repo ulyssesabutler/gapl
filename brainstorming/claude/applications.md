@@ -211,6 +211,18 @@ would desynchronize its FSM. Marking keeps the flow 1:1 and needs no wrapper cha
 Roughly 40 lines. The smallest possible demonstration that cross-lifecycle state works without a raw
 `register`.
 
+> **Two complications found 2026-10**, both relevant to that claim:
+>
+> - **It needs per-beat state that persists across packets** — tokens are debited as bytes flow and
+>   carried between packets. That is the one near-path case needing a standing scan able to consume a
+>   nested channel at beat granularity (or a flatten). Written instead as an outer scan over packets
+>   with an inner scan over beats, the outer state would only round-trip the inner's and duplicate the
+>   register bank. See `type-system.md` §10 item 17.
+> - **The every-cycle refill is not expressible as a scan over beats at all.** A scan advances on
+>   `fire`, and a cycle carrying no beat does not fire — but the refill must happen on every clock
+>   regardless of data flow. That is state advancing on *cycles* rather than *beats*, which is arguably
+>   a layer-3 concern, and the design does not yet address it. Unresolved.
+
 ### 7. HyperLogLog
 
 **What it does:** count *distinct* elements in a stream. Exact counting needs memory proportional to the
@@ -236,6 +248,13 @@ per item instead of *d*.
 That is why it is the right test of the `register` restriction. CMS uses `register(sketch4(16))`
 directly at `netfpga/src/cms/processor.gapl:29`; if `scan` over an `infinite` stream cannot express the
 same shape cleanly, that decision does not hold.
+
+> **Reframed 2026-10.** CMS's initial version is **per-packet** — it treats each packet independently —
+> so it is not in fact a cross-lifecycle example: it is `oneach` over packets with a `scan` over each
+> packet's beats. That makes **HyperLogLog itself** the near-path test of cross-lifecycle state, and it
+> passes cleanly: counting distinct flows wants one update per packet, so HLL is a standing scan over
+> `infinite(packet)` whose step hashes the header — no inner per-beat scan, so no duplicated storage
+> and no flatten needed. See `type-system.md` §6 "State scoping" and §10 item 17.
 
 **What to build:** reuse `count_min_int_hash0` (hash functions already exist, and CMS already hashes a
 whole 256-bit beat). Bucket index = top *p* bits; ρ = a leading-zero count, purely combinational. State

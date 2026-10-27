@@ -981,9 +981,9 @@ constraint: forcing all of a module's outputs to share one lag is what makes "th
 single well-defined number rather than a per-path one.
 
 **Open from this work:** how `phase` and the branch tag are *surfaced* to a consumer's body (§10 item
-14 — really a grammar question); how a lifecycle register is tagged with its scope so nested lifecycles
-reset the right things; and two small checks — whether a static `clog2` exists or needs writing by
-static recursion, and `if_else`'s actual signature.
+14 — really a grammar question); and two small checks — whether a static `clog2` exists or needs
+writing by static recursion, and `if_else`'s actual signature. (Scope-tagging of lifecycle registers,
+formerly listed here, turned out to need no mechanism — see "State scoping" in §6.)
 
 ### Fork and join
 
@@ -1151,6 +1151,40 @@ function cms_netfpga() i: infinite(packet) => o: infinite(packet) {
 The outer step takes a whole `packet`, which is legal once the function-parameter rule above is
 corrected. The inner scan is seeded from the outer scan's state, which is exactly the data-seeded init
 in §10 item 16. Between them the case is covered.
+
+> **Corrected 2026-10 — two problems with the above.**
+>
+> **CMS is per-packet, so this is the wrong structure for it.** Its initial version treats each packet
+> independently (confirmed with the author), so it is `oneach` over the packets with a `scan` over each
+> packet's beats inside — one accumulator, reset per packet, no outer state at all.
+>
+> **And the nested structure doubles storage whenever the outer state only round-trips the inner's.**
+> The outer register holds the sketch between packets; the inner holds the running sketch during one;
+> the outer sits idle for the whole inner lifecycle, then is overwritten. That is two full banks of
+> silent hardware. Precisely, the pair is redundant when *both* hold: the outer's next value is exactly
+> the inner's final value, *and* the inner's seed is exactly the outer's current value. Then one
+> non-resetting register behaves identically. If either side transforms the value, the two registers
+> hold genuinely different information and nothing is redundant.
+>
+> So "no flattening operation is needed" was wrong. Per-beat state that persists across lifecycles
+> needs either a flatten from `infinite(stream(T))` to `infinite(T)`, or a standing scan able to
+> consume a nested channel at beat granularity. Of the near-path applications only the **token bucket**
+> needs it: CMS is per-packet, and HyperLogLog updates once per packet (hashing the header), so it is a
+> standing scan over `infinite(packet)` with **no** inner scan — no second bank, no flatten. See §10
+> item 17. The nested structure remains correct when the two scopes hold *different* state, e.g. a
+> per-packet byte count beside a running total.
+
+**Scope-tagging is a wiring rule, not a mechanism** (settled 2026-10). When a lifecycle ends, which
+registers reset? Three existing decisions answer it without any new machinery: `register` is
+stdlib-restricted, so every lifecycle-scoped register lives inside a stdlib combinator; each combinator
+is applied to one specific channel, whose lifecycle FSM provides `first`; and lifecycle reset is an
+init-select mux driven by `first`. So an accumulator's reset is wired to the FSM of the channel its
+combinator consumes, and *that* is its scope. A standing scan over `infinite(T)` connects to an FSM
+whose `first` fires once, at hardware reset. Pipeline registers inside `@dataflow` islands get no
+lifecycle reset, correctly, since they hold in-flight data. The answer is always unambiguous because of
+§4's rule that two bounded `stream` inputs to one function is a type error — a combinator has at most
+one bounded-lifecycle input. Under nesting, an outer combinator's effective `fire` is "an inner
+lifecycle completed," i.e. inner `fire && last`, and the same rule applies.
 
 **A scan over an infinite lifecycle should not share a name with a scan over a bounded one.** They
 differ in whether state resets — a semantic difference invisible at the call site, which is precisely
@@ -1365,11 +1399,12 @@ tree during the 2026-09 merge of this document — locations below are current a
   interfaces (`StandardLibrary.kt:34-58`) — hand-rolled versions of things this design needs.
 - **Nothing in GAPL currently has cross-packet state**, because `axis_mutual_exclusion` drives
   `module_reset` into the kernel between packets (`processor_controller` only gates `enable`). So
-  CMS's `register(sketch4(16))` is *written* as a persistent sketch but is wiped every packet — it
-  accumulates within one packet only. The code wants cross-lifecycle state; the deployment cannot
-  provide it. This is a known consequence of the serialization, not a bug report, and it is one more
-  thing that per-lifecycle `scan` reset would fix by making the intended scope sayable.
-- **`register` usage in application code** is: intended-cross-lifecycle state (`netfpga/src/cms/processor.gapl:29`),
+  CMS's `register(sketch4(16))` is wiped every packet and accumulates within one packet only.
+  **Corrected 2026-10:** an earlier version of this note claimed the code "wants cross-lifecycle state"
+  that the deployment cannot provide. That was an inference, and the wrong one — CMS's initial version
+  is *intended* to be per-packet, treating each packet independently. So here the deployment and the
+  intent agree; it is the absence of cross-packet state *in general* that the serialization imposes.
+- **`register` usage in application code** is: per-packet sketch state (`netfpga/src/cms/processor.gapl:29`),
   per-lifecycle feedback (`netfpga/src/regex/processor.gapl:169`,
   `verilator-test/tests/email-with-opt/test.gapl:248`, `gapl-example/src/count-min.gapl:128`), and
   **hand-matched control delay** (`cms/processor.gapl:53-55` delays `valid`/`keep`/`last` by one to
@@ -1774,7 +1809,33 @@ Ordered roughly by how much they block.
     time-multiplexed core would need to seed from the incoming block; and any `scan` whose initial state
     depends on a parsed header field needs it. Small, concrete, and it has now come up three times from
     unrelated directions, which usually means the signature is wrong rather than the use cases being
-    exotic.
+    exotic. **Resolved (2026-09):** the initial state arrives as a `single` port, for both bounded and
+    infinite scans, with its scope inherited from the lifecycle the scan is applied to. See "State
+    scoping" in §6.
+17. **Round-tripping outer state, and the beat-granular standing scan.** *Not a blocker; deferred
+    2026-10.* When an outer state only round-trips an inner scan's state — outer's next value is exactly
+    the inner's final value, and the inner's seed is exactly the outer's current value — the two
+    register banks are redundant, and one non-resetting register behaves identically. See the
+    correction under "State scoping" in §6.
+
+    *Detecting it:* the general question ("is this register redundant with that one?") is sequential
+    equivalence checking, expensive and not worth attempting. But this specific pattern is trivially
+    syntactic **at the combinator level, before lowering** — an inner `scan` seeded straight from the
+    outer state, inside a step returning the inner's final state straight back. After lowering it is
+    much harder, since the reason the banks are equal is gone.
+
+    *Optimising versus linting:* a silent rewrite is possible but sits badly with goal 7 — the source
+    implies two banks and the compiler builds one — and, worse, it creates a **cliff**: insert any
+    non-identity transform on the round trip and the pattern stops matching, so area silently doubles
+    by the full width of the state. Leaning instead toward making the efficient form *writable* and
+    using the detection as a **lint** ("this outer state only round-trips the inner scan's state; write
+    it as a standing scan"), which keeps source and hardware in agreement. §7's point that developers do
+    not read warnings applies, but less sharply: ignoring this one costs area, not correctness.
+
+    *The efficient form* is a standing scan able to consume a nested channel at beat granularity (or a
+    flatten from `infinite(stream(T))` to `infinite(T)`). It is **independently required by the token
+    bucket** (`applications.md` #6), which keeps per-beat state across packets — so one feature serves
+    both. Not needed by CMS (per-packet) or HyperLogLog (one update per packet).
 
 ---
 
