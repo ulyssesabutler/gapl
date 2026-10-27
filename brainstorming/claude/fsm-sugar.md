@@ -561,6 +561,11 @@ is what replaces it.
 
 ## 10. Recommended sequencing
 
+> **Placement in the overall build (decided 2026-10):** this track comes *after* layer 2 of the type
+> system, so that `match` (rung 3) is designed once to cover both value-level enums and layer 2's
+> `choice` tags. See "Build order" in `type-system.md` §1. The ladder below is the order *within* this
+> track.
+
 A ladder, ordered so each rung is independently useful and none is thrown away.
 
 | rung | what | needs | buys |

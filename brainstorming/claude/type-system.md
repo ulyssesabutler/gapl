@@ -19,6 +19,10 @@ roadmap). Read this one first.
 > three of the nineteen surveyed FSMs (§8), and removing `processor_controller` from the wrapper. Note
 > the *largest* single win — the roughly 5× from packet-level pipelining — is **not** among them: it
 > comes from deleting `axis_mutual_exclusion`, which needs only per-lifecycle `scan` reset from layer 2.
+>
+> **Correction (2026-10):** "needs only layer 2" predates the rule that `@dataflow` means every port is
+> `single` (§5). A function with a `stream` port must be `@valid` or `@ready_valid`, so layer 2's streams
+> need layer 3 underneath them. That is why layer 3 is built first — see "Build order" in §1.
 
 > **Syntax warning.** `brainstorming/archive/interfaces.md` and several `gapl-example/wip/*.gapl` files
 > use `<T>` generics and a `parameter` keyword that **do not match the actual grammar**. Real syntax, per
@@ -107,6 +111,29 @@ Independently deliverable; each has standalone value.
 L2 is the highest-value near-term target — it validates the semantics before committing to generating
 hardware from them, and L3's hard problems mostly evaporate if you have not yet promised to generate
 anything.
+
+### Build order (decided 2026-10)
+
+The design was worked out with all three layers in view; the *build* is staged so each stage is a
+bounded piece of work. (Stages are layers; the levels above are a separate axis, and "L1 first" applies
+within each stage.)
+
+1. **Views** — finishes layer 1 (§3). Adds no ports and no control wires. The stricter nominal
+   connection check stays deferred (§10 item 18); views do not need it, and it is the only breaking
+   change in this effort.
+2. **Layer 3, `single` ports only** — protocol annotations, `valid`/`ready`, `fire`, call-site coercion
+   (join and delay as stdlib functions; `enable` threading already exists), the no-join check, and the
+   post-retiming delay pass (§5). Independent of views; they share only the grammar. Useful on its own
+   for block-at-a-time kernels such as AES-CTR, though not yet for packet kernels.
+3. **Layer 2** — datatypes, lifecycles, `last` and the branch tag, combinators (§4, §6). Must follow
+   layer 3: `@dataflow` means every port is `single`, so a `stream` port needs `@valid` or
+   `@ready_valid` underneath it. Nothing built in stage 2 should need redoing, since a `single` port
+   is the one-beat case of a datatype. This is the stage that delivers the ~5× from deleting
+   `axis_mutual_exclusion`, and lifts the six restrictions listed at the top of this document.
+4. **FSM sugar** (`fsm-sugar.md`) — after layer 2, so that `match` is designed once and covers both
+   value-level enums and `choice` tags rather than being retrofitted.
+
+Stages 1 and 2 are independent and could run in either order; this is the chosen one.
 
 ---
 
