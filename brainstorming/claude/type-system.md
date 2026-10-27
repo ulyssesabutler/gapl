@@ -286,6 +286,17 @@ implement, not a design position, and it is precisely the failure "producer and 
 the data is" exists to fix. Layer 2 is where the discipline arrives; it should not inherit layer 1's
 permissiveness.
 
+**Tightening layer 1 itself is deferred from this round** (settled 2026-10) — small to decide, large to
+do, and the only part of this whole effort that would break existing code. Strict nominal checking would
+reject every connection from a slice into a named field (`data[0:47] => o.mac`), which is pervasive. The
+obvious repair — anonymous `wire[N]` structural, named interfaces nominal — partially reopens the hole,
+since a field access like `checksum.value` yields an anonymous `wire[48]` that would then connect to
+`mac_addr`; and view fields, being named slices, need a rule of their own. So it needs its own design.
+Deferring blocks nothing here, because datatype compatibility is nominal *by datatype name* regardless of
+how base interfaces are checked. When it is picked up, the migration path is **a warning first, promoted
+to an error once existing code is migrated** — and keeping it out of this round means regressions in the
+layer-2/3 work stay attributable.
+
 The arguments for structural, recorded because they are real: a protocol type *is* a serialization
 scheme (§1), so two identical schemes arguably are the same thing; external formats are defined by
 standards bodies rather than by your naming, so two independent descriptions of Ethernet describe the
@@ -722,10 +733,27 @@ properties is an unchecked obligation." The restriction changes the status of th
 | nothing downstream ever stalls | **becomes checkable** — mandatory call-site coercion already catches wiring a `@valid` producer to a stalling consumer |
 | init before stream | **survives** — a `@valid` consumer cannot wait for a configuration value |
 
-The one residual is narrow enough to rule out directly: forbid configuration ports on `@valid`
-functions, or require them `@ready_valid`. Note the difference in kind from what was rejected — the
-original argument was *expose it and trust the user*; this is *expose it with the dangerous
-compositions forbidden*.
+The one residual turns out to be **already forbidden by the no-join rule** (settled 2026-10). A
+configuration port is a second input channel, and firing a function with two input channels requires
+both valid — `fire = valid_a && valid_b` — which *is* a join. So `@valid` functions cannot take
+configuration ports at all. (An earlier draft offered "require the config port to be `@ready_valid`" as
+an alternative; that is incoherent, since a function carries exactly one protocol and per-port overrides
+are rejected.) The escapes:
+
+- **compile-time configuration** → a static parameter, which has no arrival-timing problem;
+- **runtime configuration** → make the whole function `@ready_valid`, where §4's sticky latch lets it
+  stall until the value arrives.
+
+Note the difference in kind from what was rejected — the original argument was *expose it and trust
+the user*; this is *expose it with the dangerous compositions forbidden*.
+
+**Where the no-join check lives** (settled 2026-10): alongside coercion checking. Both are per-call-site
+protocol checks, and both need only protocol-per-function and datatype-per-channel, which are known after
+resolution — so it can run early with a diagnostic pointing at the offending call. The rule: *inside a
+`@valid` function's body, no call may take more than one input channel.* Fork-and-join is not banned
+outright; it goes **inside a single-input `@dataflow` island**, where there is no handshake at all, so
+forking and recombining are ordinary wires and gates rather than a join in the handshake sense. The
+island's boundary has one input and no join.
 
 **Two consequences.** `@valid` is what the NetFPGA pipeline actually speaks, so this is the protocol
 that lets `processor_controller` disappear without forcing full `@ready_valid` into the kernel. And it
@@ -1191,14 +1219,16 @@ differ in whether state resets — a semantic difference invisible at the call s
 the failure that split `map` from `oneach`. Same reasoning, same remedy. (Note `fold` over an infinite
 lifecycle is already a type error per §4, since it never reaches `last` and so never emits.)
 
-**Name not finally picked.** Candidates: **`accumulate`** (plainest; reads as ongoing with no endpoint,
-though it slightly suggests addition) or **`standing_scan`** (reuses vocabulary the doc already has —
-§4 calls an all-infinite top-level module "a standing process"). The short name should stay with the
-bounded case, which is the common one; the marked name belongs on the rarer standing behaviour.
-`oneach` needs no rename: it sits on a different axis, being a lifting operator rather than a
-computation, so a differently-shaped name is appropriate. The resulting scheme is `map` stateless,
-`scan` stateful per-lifecycle, `accumulate` stateful standing, `fold` reducing per-lifecycle, `oneach`
-lifting.
+**Named `standing_scan`** (settled 2026-10). It stays visibly a scan, reuses vocabulary the doc already
+has (§4 calls an all-infinite top-level module "a standing process"), and the extra length marks it as the
+rarer case — the short name stays with the common, bounded behaviour. `accumulate` was the alternative;
+rejected because it does not look related to `scan`, and English hears it as summation where a
+HyperLogLog updates with `max`. Worth noting this split is lower-stakes than `map`/`oneach`: that one
+was about **cost** (one generates logic, the other nothing), whereas both scans build the same
+accumulator and differ only in whether reset is wired — so this is about **semantics**. `oneach` needs no
+rename: it sits on a different axis, being a lifting operator rather than a computation. The resulting
+scheme is `map` stateless, `scan` stateful per-lifecycle, `standing_scan` stateful standing, `fold`
+reducing per-lifecycle, `oneach` lifting.
 
 **`scan`'s step takes `last(T)` and `fold`'s does not, and that asymmetry is deliberate** (settled
 2026-09; it had looked like an oversight). `scan` emits an output *per beat*, so per-beat position is
@@ -1836,6 +1866,10 @@ Ordered roughly by how much they block.
     flatten from `infinite(stream(T))` to `infinite(T)`). It is **independently required by the token
     bucket** (`applications.md` #6), which keeps per-beat state across packets — so one feature serves
     both. Not needed by CMS (per-packet) or HyperLogLog (one update per packet).
+18. **Tightening layer-1 connection checking.** *Deferred from this round, 2026-10.* Replacing today's
+    width-only check with nominal checking is the only breaking change in this effort and needs its own
+    design (slices, anonymous `wire[N]`, view fields). Migrate warning-first. See "Compatibility is
+    nominal" in §4.
 
 ---
 
