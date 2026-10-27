@@ -582,6 +582,11 @@ in the grammar, and it is the only rung with no design risk.
 The `md5-stream` FSM is the right regression target throughout: it is real, it is the densest
 specimen available, and §2 gives concrete before-numbers to measure against.
 
+> **Keep `md5-stream` across merges with `main`.** `main` deleted `netfpga/src/md5-stream/` (`d443eea`,
+> for unrelated reasons); this branch predates that and still has it. A merge in either direction will
+> silently take the deletion. Afterwards, restore it with
+> `git checkout d443eea^ -- netfpga/src/md5-stream` (its contents are identical to this branch's).
+
 ---
 
 ## 11. Rejected alternatives
