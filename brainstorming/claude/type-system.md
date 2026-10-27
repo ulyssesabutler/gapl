@@ -573,6 +573,17 @@ Today's NetFPGA setup is accidentally immune, since `axis_mutual_exclusion` full
 between packets — but removing that serialization is the largest throughput win available
 (`md5-lifecycle-sketch.md` finding 5), and this rule is a precondition for removing it.
 
+**What a consumer *emits* on a truncated lifecycle is deferred** (2026-10; §10 item 19). Resync is
+settled; the open half is the output. A header parser that saw `h0` but never `h1` can (1) emit anyway
+with the unseen fields don't-care, (2) drop its output, or (3) flag it by typing its output as
+`choice { ok: single(header); runt: null }` and picking `runt` on an early `last` — producer-chooses, no
+new mechanism. The working lean: (1) by default, (3) as opt-in, and **never (2)**. Dropping breaks the
+one-output-per-lifecycle rate that split/recombine depends on: the header path loses the packet while
+the payload path does not, and the rejoin pairs every later header with the wrong payload — the same
+desynchronization one level up. Dropping, if wanted, belongs after the rejoin, as a filter on `runt`.
+Option (3) needs the body to observe "`last` arrived early", which is part of the grammar's
+phase-surfacing question.
+
 ### Alternation: the producer chooses
 
 **Decided 2026-09, superseding the embedded-selector `choice` material above.** `choice` survives as a
@@ -1870,6 +1881,11 @@ Ordered roughly by how much they block.
     width-only check with nominal checking is the only breaking change in this effort and needs its own
     design (slices, anonymous `wire[N]`, view fields). Migrate warning-first. See "Compatibility is
     nominal" in §4.
+19. **Consumer output on a truncated lifecycle.** *Deferred 2026-10.* Resync on early `last` is settled;
+    whether a consumer emits, drops, or flags its output is not. Lean: emit by default, flag via `choice`
+    as opt-in, never drop. Also open: whether the compiler should warn when a `seq` consumer ignores
+    truncation. See "`last` returns the FSM to its initial state" in §4, and `header-parser-sketch.md`
+    finding 4.
 
 ---
 
