@@ -118,7 +118,8 @@ The design was worked out with all three layers in view; the *build* is staged s
 bounded piece of work. (Stages are layers; the levels above are a separate axis, and "L1 first" applies
 within each stage.)
 
-1. **Views** — finishes layer 1 (§3). Adds no ports and no control wires. The stricter nominal
+1. **Views** — finishes layer 1 (§3). Views become types with projection, `fill` and `overlay`; no
+   control wires. The stricter nominal
    connection check stays deferred (§10 item 18); views do not need it, and it is the only breaking
    change in this effort.
 2. **Layer 3, `single` ports only** — protocol annotations, `valid`/`ready`, `fire`, call-site coercion
@@ -199,8 +200,10 @@ hand at lines 30–32. `last` becomes derived by layer 2, `valid`/`ready` by lay
 
 ### Views
 
-A **view** is a named reinterpretation of an interface's bits — a second set of names bound to bit
-ranges of an existing value, not a new value.
+A **view** is a named selection of an interface's bits — a set of names bound to bit ranges of a
+**base** interface. **A view is a type** (decided 2026-10, reversing the September lens model; see
+"Views are types" below): a view-typed node holds *only* the named bits, laid out like a record of its
+fields, and converting a base value to it is a projection.
 
 ```text
 interface axi_beat { data: wire[256]; keep: boolean[32]; }
@@ -234,29 +237,105 @@ body streams past really does cost N× the flip-flops if each variant gets its o
 
 ### Rules for views
 
-- **Views produce no ports.** A view is slicing applied to a base-interface value inside a body, not a
-  port type of its own.
+- **A view is a type, and a view-typed node holds only the named bits.** Nodes and function ports may be
+  view-typed. `h: eth_hdr` is 112 wires, not the base's 288. Projecting a base value to a view drops the
+  unnamed bits, which is free — the same wires, nothing emitted.
 - **Structural, not bit-flat.** A view is defined over the base's named fields and their slices, never
   over its flattened bit string — otherwise you can write a view cutting incoherently across `data` and
   `keep`, which is never meaningful.
-- **Partial views are legal, and the obligation is asymmetric.** *Reading* through a view is a
-  **projection** — name the bits you care about, no obligation for the rest. *Writing* through a view is
-  a **construction** — you must produce a complete value of the base, so unnamed bits are an obligation
-  you have not discharged. Partial view + output is an error unless the view declares a fill.
-- **Unnamed bits are don't-care**, not zero. Zero-filling silently asserts a value someone may come to
-  depend on. `left_pad` in the stdlib is the existing idiom for an explicit fill
-  (`literal(padding, 0) => o[original:original + padding - 1]`).
-- **No implicit widening** from a view-typed lifecycle to its base. This is what makes don't-care
-  *safe* rather than merely honest: no type grants access to the unnamed bits, so nothing can read
-  them. An explicit widen is where a fill gets declared.
-- **External (hardware) interfaces may not use views.** Their datatype is over a plain GAPL interface.
-  This is what removes the correctness concern entirely — undriven bits can never reach a real bus,
-  where "nobody reads them" would be false. A boundary keyword marks these; see §4.
+- **Widening (view → base) is always explicit, and always says where the missing bits come from.** Two
+  forms:
+  - **fill** — the gaps take a stated value, e.g. `fill(eth_hdr, t, 0)`. `left_pad` in the stdlib is the
+    existing idiom (`literal(padding, 0) => o[original:original + padding - 1]`).
+  - **overlay** — the gaps take their values from a base value **the user supplies**:
+    `base, h => overlay(t, eth_hdr) => o`. This is in-place modification (rewrite the TTL, pass the rest
+    through), and it is expected to be the most common widening in the applications.
+
+  There is **no implicit promotion**: the compiler never remembers what a view's unnamed bits were. See
+  "Why overlay takes the base explicitly" below.
+- **No don't-care fill in stage 1.** Under this model nothing needs one — every widening states its
+  source — so stage 1 needs no X semantics in `simengine` or the IR.
+- **External (hardware) ports may not be view-typed.** The port list has to match the bus exactly. A
+  boundary keyword marks these (§4); stage 1 can use the top-level function's ports as a stand-in.
 
 **Undriven wires are a hard error today, at bit granularity** — `NodeBuilder.validateWiresConnected`
 (`analyzer/.../netlistir/builder/NodeBuilder.kt:121-147`) reports `UndrivenOutputPort` if *any single
-wire* of an output group lacks a driver. So "the unused bits will just be optimized away" is not the
-current behaviour; the compile fails before codegen. The rules above are what keep that check intact.
+wire* of an output group lacks a driver. Under the rules above that check stays exactly as it is: a
+view-typed output has no unnamed bits to leave undriven, and every widening drives all of the base.
+
+### Why overlay takes the base explicitly
+
+The alternative is implicit promotion: "widen `h` back to `t`, filling each gap with the value it had
+before projection." That requires the compiler to track provenance — which base each view value came
+from — and it fails in every direction a value can travel:
+
+- **Function boundaries.** `h` arrives at a function through a port; nothing inside knows the rest of the
+  bits unless the compiler adds hidden ports to carry them.
+- **Registers.** If `h` is held for a cycle, the rest of the base must be held too — storage the source
+  never mentions, which goal 7 forbids.
+- **Merges.** `if_else(c, h1, h2)` with `h1` and `h2` projected from different bases has no answer.
+- **Constructed views.** An `eth_hdr` built field by field never had a base.
+
+Explicit `overlay` makes all four disappear: a function that rewrites in place takes the base in its
+signature; a held `h` means the user holds `base` too, as a visible register; merges and constructed
+views raise no question. The only check is that `base` has the view's base interface type.
+
+One requirement survives, and it is not new: `base` and `h` must belong to the same beat. If the path
+modifying `h` is registered and the base path is not, they are misaligned — the same problem as any two
+GAPL signals with different delays today, left to the user as it is now, and helped later by layer 3's
+delay coercion.
+
+### Views are types — reversing the September lens model
+
+**Decided 2026-10.** In September a view was a **lens**: a base value stayed its base type and was read
+or written *through* a view, and views produced no ports. "View as a narrower port type" was considered
+then and rejected, for two reasons. Neither survives:
+
+1. *"Narrow view ports solve a diagnostic problem, not a hardware problem."* The problem was partial
+   writes leaving base bits undriven; since views cost nothing in hardware, restructuring the type system
+   to fix a diagnostic seemed wrong. But that shows the narrow model is not *needed*, not that the lens
+   is *better*. The hardware is essentially identical either way — synthesis deletes nets and flip-flops
+   nobody reads. The difference is what the **source** says: under the lens, `register(t)` read through
+   `eth_hdr` states 288 bits of storage and synthesis quietly removes 176; under view types the source
+   states the 112 that get built. That is goal 7, and the storage argument views were justified by.
+2. *In-place modification* (the L4 load balancer) seemed to need the lens. It does not help: GAPL allows
+   one driver per wire, so `i => o; new_ttl => ipv4(o).ttl` drives the TTL bits twice, and the lens
+   still leaves "everything except TTL" to be wired by hand. Both models need `overlay`.
+
+What the lens did guarantee — that every view had a real base value under it, which is why the
+top-level "raw interfaces only" rule mattered — held only because a view could never travel without its
+base. Under view types it no longer holds, which is exactly why overlay must take the base explicitly
+(above). The top-level rule survives for the simpler reason that external port lists must match the bus.
+
+The one real ergonomic loss: building one base from several partial views ("write the Ethernet fields
+and the IPv4 fields into one outgoing beat") read naturally as several writes through different lenses;
+under view types it is a `fill` followed by a chain of `overlay`s.
+
+### Still open for stage 1
+
+- **Conversion syntax.** Function-style (`narrow(t, eth_hdr)`, `fill(...)`, `overlay(...)`) fits GAPL's
+  explicit-parameter style, but these cannot be stdlib GAPL — a GAPL body cannot inspect a view's field
+  list — so they are compiler primitives or per-view generated functions. Whether projection may also
+  happen implicitly at a connection (`i => h` with `h: eth_hdr`) is open; it is safe, since it only
+  drops bits, but "explicit conversions at layer boundaries" (§4) argues for keeping it explicit.
+- **View-use and view-definition syntax** against `CST.g4` (the `view … of …` form above is illustrative).
+- **Fill declared on the view vs. per conversion.** The September rules had partial views declare a fill;
+  per-conversion `fill` is more flexible.
+- **Generic binding.** `T: interface` must accept a view, or views cannot pass through `register`,
+  `if_else`, `vector_map`. Lowering each view to an ordinary record interface plus conversions makes
+  this fall out.
+- **Overlapping fields.** Fine for projection; on widening, two fields covering the same bit are two
+  drivers. Forbid overlap or reject that widening.
+- **Byte order.** On AXI, byte 0 is `tdata[7:0]`, so `ethertype: data[96:111]` reads byte-swapped
+  relative to the protocol (`0x0800` as `0x0008`). Reordering wires is free, so a field could declare
+  its byte order; otherwise every comparison with a protocol constant is a trap.
+- **Non-adjacent fields** (one field joined from several slices) — free, but extra syntax.
+- **Field types** (`dst: mac_addr` rather than `wire[48]`) — touches the deferred nominal checking.
+- **Parameterized views** (`view hdr(n: integer) of beat(n)`), with slice bounds as static expressions.
+- **Width-only checking** (§10 item 18, deferred) means `eth_hdr` connects to any 112-bit value; the
+  base link is checked only inside the conversions.
+- **Tooling** — LSP semantic tokens and go-to-definition for view fields; `simgen` wrappers for
+  view-typed ports.
 
 **Scope.** Views describe **static** header layouts, which covers the near-term applications. The
 dynamic case — fields at runtime-computed offsets — is a stdlib `parse` over a stream, deliberately

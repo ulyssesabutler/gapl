@@ -553,6 +553,12 @@ Three contact points. All three are questions for the type-system session.
    decided here**; noted because §5's `else` arm makes it much less pressing (you write the default
    once per block rather than once per field), so the FSM work can proceed without it.
 
+   > **Update (2026-10):** the tension is gone. `type-system.md` §3 now makes views types, and
+   > widening always states its source — an explicit `fill(view, base, 0)` or an `overlay` onto a
+   > supplied base — with no don't-care fill at all in stage 1. The objection was to zeros being
+   > *implied*; an explicit, written zero fill is now the endorsed form, so `zeros(T)` is consistent
+   > with it.
+
 Nothing in §5, §6, or §7 depends on lifecycle types, protocols, or `scan`. The register-plus-feedback
 idiom (`declare x: register(T); … => x;`) is left exactly as it is, since the parallel track's `scan`
 is what replaces it.
