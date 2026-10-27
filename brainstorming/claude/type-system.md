@@ -311,16 +311,32 @@ The one real ergonomic loss: building one base from several partial views ("writ
 and the IPv4 fields into one outgoing beat") read naturally as several writes through different lenses;
 under view types it is a `fill` followed by a chain of `overlay`s.
 
+### Conversions (decided 2026-10)
+
+Three compiler primitives. They cannot be stdlib GAPL — a GAPL body cannot inspect a view's field list —
+but their *use sites* need no grammar change: interface-parameterized primitives already parse as
+ordinary calls (`if_else(wire[512])`, `register(T)`).
+
+| primitive | shape | meaning |
+|---|---|---|
+| `project(t, v)` | `i: t => h: v` | keep the named bits, drop the rest |
+| `overlay(t, v)` | `base: t, h: v => o: t` | write `h`'s fields into `base`, keep the rest |
+| `zeros(T)` | `null => o: T` | a constant all-zero value of any interface |
+
+- **There is no `fill`.** It is `overlay` onto a constant:
+  `zeros(axi_beat), h => overlay(axi_beat, eth_hdr) => o`. `zeros(T)` is needed because `literal(size,
+  value)` produces only a flat `wire[size]`, not a record — and it is the same primitive `fsm-sugar.md`
+  §9 wanted for default values, so one primitive serves both tracks.
+- **Projection is explicit.** No implicit `i => h`, per "explicit conversions at layer boundaries" (§4).
+  The usual pattern is one `project` into a declared node, then field access (`h.dst`). An implicit rule
+  could be added later without breaking code; removing one could not.
+- **Parameter order is (base, view)** for both view primitives.
+- **No fill declared on the view.** The September rules had partial views declare a fill; with `overlay`
+  every widening states its source at the use site, so a declared fill has nothing left to do.
+
 ### Still open for stage 1
 
-- **Conversion syntax.** Function-style (`narrow(t, eth_hdr)`, `fill(...)`, `overlay(...)`) fits GAPL's
-  explicit-parameter style, but these cannot be stdlib GAPL — a GAPL body cannot inspect a view's field
-  list — so they are compiler primitives or per-view generated functions. Whether projection may also
-  happen implicitly at a connection (`i => h` with `h: eth_hdr`) is open; it is safe, since it only
-  drops bits, but "explicit conversions at layer boundaries" (§4) argues for keeping it explicit.
-- **View-use and view-definition syntax** against `CST.g4` (the `view … of …` form above is illustrative).
-- **Fill declared on the view vs. per conversion.** The September rules had partial views declare a fill;
-  per-conversion `fill` is more flexible.
+- **View-definition syntax** against `CST.g4` (the `view … of …` form above is illustrative).
 - **Generic binding.** `T: interface` must accept a view, or views cannot pass through `register`,
   `if_else`, `vector_map`. Lowering each view to an ordinary record interface plus conversions makes
   this fall out.
