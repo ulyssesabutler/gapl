@@ -373,10 +373,25 @@ program:        (interfaceDefinition | functionDefinition | viewDefinition)+;
   the deferred nominal checking.
 - Two new tokens, `view` and `of`. Views share the interface namespace, since both are types.
 
+### A view is an interface in every respect except its definition (decided 2026-10)
+
+A view lowers to an **ordinary record interface** — its fields, with their inferred types — plus a
+**link to its base**, which only `project` and `overlay` consult. Everything else falls out of existing
+machinery:
+
+- **Generics:** `T: interface` accepts a view — `register(eth_hdr)`, `if_else(eth_hdr)`, `vector_map`.
+- **Composition:** vectors of views (`eth_hdr[4]`), record fields of view type, aliases of views.
+- **Views of views** are allowed: a view's base is just an interface. `project(l4_hdr, tcp_ports)`
+  checks against the immediate base only. Forbidding them would be a special case with nothing gained.
+- **The netlist IR, Verilog emission and `simengine` never see "view"** — by the time the netlist is
+  built it is a record. Only the resolver and the two conversion primitives know the difference, which
+  keeps stage 1 small.
+
+**The one exception is the top-level port ban**, which must be checked in the resolver, since after
+lowering the builder cannot tell a view from a record. Because views compose, the check looks *inside*
+port types: a record containing an `eth_hdr` is barred too.
+
 ### Still open for stage 1
-- **Generic binding.** `T: interface` must accept a view, or views cannot pass through `register`,
-  `if_else`, `vector_map`. Lowering each view to an ordinary record interface plus conversions makes
-  this fall out.
 - ~~**Overlapping fields.**~~ **Decided 2026-10: fields within one view may not overlap.** Overlapping
   interpretations (a byte and its two nibbles) are written as separate views of the same base; project
   into both. The alternatives were allowing overlap and rejecting `overlay` for such views — which makes
