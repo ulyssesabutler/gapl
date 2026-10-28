@@ -1,0 +1,27 @@
+function sum() a: wire[8], b: wire[8] => o: wire[8] {
+    a, b => add(8) => o;
+}
+
+function inc() i: wire[8] => o: wire[8] {
+    i, literal(8, 1) => add(8) => o;
+}
+
+function twin() i: wire[8] => p: wire[8], q: wire[8] {
+    i => p;
+    i, literal(8, 255) => bitwise_xor(8) => q;
+}
+
+@valid function stage() i: wire[8] => o: wire[8] {
+    i => inc()@valid => o;
+}
+
+// Exercises every piece of stage 2c's handshake: a join (an island over a two-input @pure function), an
+// eager fork, a @valid function as an island (coercion C), a two-output island (its outputs drain
+// independently), and a lazy fork whose branches never rejoin.
+@ready_valid function test() a: wire[8], b: wire[8] => s: wire[8], p: wire[8], q: wire[8], u: wire[8], v: wire[8] {
+    a, b => sum()@ready_valid => declare t: wire[8];
+    t => fork_eager(wire[8], 3) => declare t1: wire[8], declare t2: wire[8], declare t3: wire[8];
+    t1 => stage()@ready_valid => s;
+    t2 => twin()@ready_valid => p, q;
+    t3 => fork_lazy(wire[8], 2) => u, v;
+}

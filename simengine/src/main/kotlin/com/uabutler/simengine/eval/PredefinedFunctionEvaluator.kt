@@ -26,6 +26,8 @@ import com.uabutler.netlistir.util.PriorityFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
+import com.uabutler.netlistir.util.IslandControlFunction
+import com.uabutler.netlistir.util.LazyForkFunction
 import com.uabutler.netlistir.util.ValidDelayFunction
 
 /**
@@ -113,7 +115,7 @@ object PredefinedFunctionEvaluator {
             is RegisterFunction, is IntegerRegisterFunction ->
                 error("register nodes are handled by ModuleInstance.latchRegisters(), never dispatched to eval")
 
-            is ValidDelayFunction ->
+            is ValidDelayFunction, is IslandControlFunction, is LazyForkFunction ->
                 error("handshake primitives are expanded by HandshakeLowering in Engine.build, never dispatched to eval")
         }
     }

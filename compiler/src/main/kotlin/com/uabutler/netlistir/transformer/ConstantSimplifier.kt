@@ -32,6 +32,8 @@ import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
 import com.uabutler.netlistir.util.UnaryFunction
+import com.uabutler.netlistir.util.IslandControlFunction
+import com.uabutler.netlistir.util.LazyForkFunction
 import com.uabutler.netlistir.util.ValidDelayFunction
 import java.math.BigInteger
 
@@ -133,6 +135,7 @@ object ConstantSimplifier: Transformer {
                 is RegisterFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
                 is IntegerRegisterFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
                 is ValidDelayFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
+                is IslandControlFunction, is LazyForkFunction -> TODO("handshake control is not constant-folded")
                 is MuxFunction -> TODO("dont wanna")
                 is DemuxFunction -> TODO("dont wanna")
                 is PriorityFunction -> TODO("dont wanna")

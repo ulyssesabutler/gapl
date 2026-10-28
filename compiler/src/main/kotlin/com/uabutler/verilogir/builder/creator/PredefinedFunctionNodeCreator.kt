@@ -27,6 +27,8 @@ import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
 import com.uabutler.netlistir.util.UnaryFunction
+import com.uabutler.netlistir.util.IslandControlFunction
+import com.uabutler.netlistir.util.LazyForkFunction
 import com.uabutler.netlistir.util.ValidDelayFunction
 import com.uabutler.verilogir.builder.creator.util.Declarations
 import com.uabutler.verilogir.builder.creator.util.Identifier
@@ -540,7 +542,7 @@ object PredefinedFunctionNodeCreator {
             is PriorityFunction -> addAll(priorityFunction(node))
             is BitwiseNotFunction -> add(unaryFunction(node))
             LogicalNotFunction -> add(unaryFunction(node))
-            is ValidDelayFunction -> throw IllegalStateException(
+            is ValidDelayFunction, is IslandControlFunction, is LazyForkFunction -> throw IllegalStateException(
                 "Handshake primitives are expanded by HandshakeLowering before Verilog emission - this is a compiler bug"
             )
         }

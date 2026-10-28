@@ -10,6 +10,7 @@ enum class StandardLibraryFunctions(val identifier: String) {
     REPEAT("repeat"),
     REVERSE("reverse"),
     UNPAIR("unpair"),
+    MAKE_PAIR("make_pair"),
     VECTOR_MAP("vector_map"),
     VECTOR_ZIP("vector_zip"),
     COMBINATIONAL_VECTOR_FOLD("combinational_vector_fold"),
@@ -112,6 +113,14 @@ function ${StandardLibraryFunctions.UNPAIR.identifier}(
     operation: T, U => V
 ) i: pair(T, U) => o: V {
     i.first, i.second => operation => o;
+}
+
+// The single-item counterpart of zip: called as a @ready_valid island (`a, b => make_pair(T, U)@ready_valid`),
+// it waits for one item on each input and emits them as a pair. The join comes from the coercion; this is
+// just the wiring.
+function ${StandardLibraryFunctions.MAKE_PAIR.identifier}(T: interface, U: interface) a: T, b: U => o: pair(T, U) {
+    a => o.first;
+    b => o.second;
 }
 
 function ${StandardLibraryFunctions.VECTOR_MAP.identifier}(I: interface, O: interface, size: integer, operation: I => O) i: I[size] => o: O[size]

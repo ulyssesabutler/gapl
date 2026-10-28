@@ -232,6 +232,24 @@ pre-existing output is byte-identical.
   of a two-output island, say) dangles nothing and stays legal. Considered and not taken: tying the
   `ready` to 1, consuming and dropping the item.
 
+**2c implemented (2026-10, branch `layer3`).** A `@ready_valid` function's signature carries `i$$valid` in
+and `i$$ready` out per input, `o$$valid` out and `o$$ready` in per output. 2b's `valid`-only bookkeeping in
+`NodeBuilder` became one channel model in which each source and sink also carries an optional `ready`;
+`wireChannels` inserts an `IslandControlFunction` per island (B, C and `fork_eager`) or a
+`LazyForkFunction`, then wires each sink from its one source. Under `@ready_valid` it also checks each
+channel reaches exactly one sink, which **replaces 2a's node-level implicit-fork check** — that one counted
+consumer *nodes*, so `i, i => sum()@ready_valid` (one channel into two inputs of one island) slipped past,
+and wiring its `ready` twice would have crashed. Coercion C is supported; `make_pair` is in the stdlib.
+`CombinationalLoopDetector` honours `PredefinedFunction.combinationalPaths`, and `HandshakeLowering`
+expands both new primitives into `and`/`or`/`not` gates plus done-bit registers.
+
+Verified by analyzer tests (including: an eager fork that rejoins compiles with no false loop; a lazy fork
+that rejoins is reported as a combinational loop) and by a `ready-valid-channels` scoreboard in both
+`sim-test` and `verilator-test` — sources with random gaps that hold `valid` until accepted, sinks with
+random `ready`, five seeds of 40 items, every output's sequence checked against a model. A mutant whose
+done bits never set was caught (items delivered twice). Regression: byte-identical except
+`aes/register-minimization`, the known retiming variation (same 488 registers).
+
 ---
 
 ## 2. The three layers

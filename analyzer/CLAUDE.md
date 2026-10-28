@@ -231,13 +231,19 @@ memoizing into one `Module.Invocation`, and what lets `project(t, v)` be passed 
 function like `vector_map` and still know its mapping.
 
 **Layer-3 handshake plumbing follows the same "keep it out of downstream" pattern, one step later.**
-Protocol'd functions (`@valid` so far) get extra one-bit ports named `i$$valid` (`HandshakePorts`; `$$`
-can't collide with anything a user writes), which every downstream stage carries as ordinary ports.
-`NodeBuilder.wireValidChannels` wires them, and inserts a `ValidDelayFunction` per island. That *is* a
-`PredefinedFunction` subtype, deliberately first-class through the transformer pipeline (so retiming can
-tell control plumbing from datapath), but `netlistir/util/HandshakeLowering` expands it into wires or
-registers after the compiler's transformers and in `simengine`'s `Engine.build`, so Verilog emission and
-the simulator never see one — their `when` branches for it just throw. See
+Protocol'd functions get extra one-bit ports named `i$$valid` / `i$$ready` (`HandshakePorts`; `$$` can't
+collide with anything a user writes; `ready` flows against the data, so an input channel's ready is an
+output port), which every downstream stage carries as ordinary ports. `NodeBuilder.wireChannels` wires
+them, inserting control primitives — `ValidDelayFunction` (a `@valid` island), `IslandControlFunction`
+(a `@ready_valid` island, and `fork_eager`), `LazyForkFunction`. These *are* `PredefinedFunction` subtypes,
+deliberately first-class through the transformer pipeline (so retiming can tell control plumbing from
+datapath), but `netlistir/util/HandshakeLowering` expands them into gates and registers after the
+compiler's transformers and in `simengine`'s `Engine.build`, so Verilog emission and the simulator never
+see one — their `when` branches for them just throw. **They declare their own combinational paths**
+(`PredefinedFunction.combinationalPaths`, null = all-to-all for every other primitive), which
+`CombinationalLoopDetector` honours: they carry `valid` forward and `ready` back through one node and hold
+state, so all-to-all would invent loops between connected islands. Anything else that builds a
+combinational graph from primitives (retiming's converters, from stage 2d) must honour it too. See
 `brainstorming/claude/type-system.md` §5 for why.
 
 ## Known gotchas

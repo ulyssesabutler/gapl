@@ -61,8 +61,8 @@ class ProtocolDiagnosticsTest {
     }
 
     @Test
-    fun `calling a @valid function from @ready_valid waits for stage 2c`() {
-        val diagnostics = compileFullExpectingDiagnostics("""
+    fun `a @valid function can be an island in @ready_valid`() {
+        compilesCleanly("""
             $helpers
 
             @valid function v() i: wire[8] => o: wire[8] {
@@ -73,8 +73,6 @@ class ProtocolDiagnosticsTest {
                 i => v()@ready_valid => o;
             }
         """.trimIndent())
-
-        assertIs<BuilderDiagnosticKind.NotYetSupported>(diagnostics.single().kind)
     }
 
     @Test
@@ -342,6 +340,124 @@ class ProtocolDiagnosticsTest {
         """.trimIndent())
 
         assertIs<BuilderDiagnosticKind.IllegalProtocolCall>(diagnostics.single().kind)
+    }
+
+    // ---- @ready_valid handshake (stage 2c) ----
+
+    @Test
+    fun `a @ready_valid function gets a valid and a ready per port, ready flowing against the data`() {
+        val result = Analyzer.analyzeFull("""
+            $helpers
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i => inc()@ready_valid => o;
+            }
+        """.trimIndent(), defaultOptions)
+
+        assertEquals(emptyList(), result.diagnostics.map { it.message })
+        val module = result.modules!!.single { it.invocation.gaplFunctionName == "rv" }
+        assertEquals(listOf("i", "i$\$valid", "o$\$ready"), module.getInputNodes().map { it.name() })
+        assertEquals(listOf("o", "o$\$valid", "i$\$ready"), module.getOutputNodes().map { it.name() })
+    }
+
+    @Test
+    fun `islands in series and an eager fork that rejoins compile, with no false combinational loop`() {
+        compilesCleanly("""
+            $helpers
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i => inc()@ready_valid => declare x: wire[8];
+                x => fork_eager(wire[8], 2) => declare a: wire[8], declare b: wire[8];
+                a => inc()@ready_valid => declare a2: wire[8];
+                a2, b => sum()@ready_valid => o;
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun `a lazy fork whose branches rejoin is reported as a combinational loop`() {
+        val diagnostics = compileFullExpectingDiagnostics("""
+            $helpers
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i => fork_lazy(wire[8], 2) => declare a: wire[8], declare b: wire[8];
+                a => inc()@ready_valid => declare a2: wire[8];
+                a2, b => sum()@ready_valid => o;
+            }
+        """.trimIndent())
+
+        assertIs<BuilderDiagnosticKind.CombinationalLoop>(diagnostics.single().kind)
+    }
+
+    @Test
+    fun `an unconsumed channel is an error in @ready_valid but not in @valid`() {
+        val diagnostics = compileFullExpectingDiagnostics("""
+            function split() i: wire[8] => lo: wire[4], hi: wire[4] {
+                i[0:3] => lo;
+                i[4:7] => hi;
+            }
+
+            @ready_valid function rv() i: wire[8] => o: wire[4] {
+                i => split()@ready_valid => o, declare unused: wire[4];
+            }
+        """.trimIndent())
+        val kind = assertIs<BuilderDiagnosticKind.UnconsumedChannel>(diagnostics.single().kind)
+        assertEquals("rv", kind.functionName)
+
+        compilesCleanly("""
+            function split() i: wire[8] => lo: wire[4], hi: wire[4] {
+                i[0:3] => lo;
+                i[4:7] => hi;
+            }
+
+            @valid function v() i: wire[8] => o: wire[4] {
+                i => split()@valid => o, declare unused: wire[4];
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun `one channel into two inputs of the same island is an implicit fork`() {
+        val diagnostics = compileFullExpectingDiagnostics("""
+            $helpers
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i, i => sum()@ready_valid => o;
+            }
+        """.trimIndent())
+
+        val kind = assertIs<BuilderDiagnosticKind.ImplicitFork>(diagnostics.single().kind)
+        assertEquals("i", kind.channel)
+    }
+
+    @Test
+    fun `under @ready_valid one island's outputs are separate channels, so recombining them is a join`() {
+        val diagnostics = compileFullExpectingDiagnostics("""
+            function split() i: wire[8] => lo: wire[4], hi: wire[4] {
+                i[0:3] => lo;
+                i[4:7] => hi;
+            }
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i => split()@ready_valid => declare lo: wire[4], declare hi: wire[4];
+                lo => o[4:7];
+                hi => o[0:3];
+            }
+        """.trimIndent())
+
+        assertIs<BuilderDiagnosticKind.ImplicitJoin>(diagnostics.single().kind)
+    }
+
+    @Test
+    fun `make_pair joins two channels into one`() {
+        compilesCleanly(
+            """
+                @ready_valid function rv() a: wire[8], b: wire[4] => o: pair(wire[8], wire[4]) {
+                    a, b => make_pair(wire[8], wire[4])@ready_valid => o;
+                }
+            """.trimIndent(),
+            Analyzer.Options(includeStdLib = true),
+        )
     }
 
     // ---- islands and arguments ----

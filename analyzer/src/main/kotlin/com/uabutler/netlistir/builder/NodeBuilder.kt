@@ -10,6 +10,8 @@ import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
 import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.PredefinedFunction
+import com.uabutler.netlistir.util.IslandControlFunction
+import com.uabutler.netlistir.util.LazyForkFunction
 import com.uabutler.netlistir.util.ValidDelayFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.PredefinedFunctionNames
@@ -125,96 +127,197 @@ class NodeBuilder(
     val islands = mutableListOf<Pair<Module.Invocation, SourceSpan>>()
 
     fun buildNodesIntoModule() {
+        diagnosticsBeforeBuild = diagnosticsCollector.diagnostics().size
         validateInputCount()
         buildInputNodes()
         buildOutputNodes()
         buildHandshakePorts()
         buildBodyNodes()
-        wireValidChannels()
+        wireChannels()
         validateWiresConnected()
-        validateNoImplicitForks()
     }
 
     /*
-     * Layer-3 `valid` plumbing for a @valid body (type-system.md §5). A *channel* is an output group of an
-     * input port or a call; it has one `valid` source. A *sink* is a call's input or an output port; it has
-     * one `valid` input. During the build, each call records which of its groups are sinks and sources (see
-     * invokeFunction); once the body is built, wireValidChannels traces every sink back to the channel(s)
-     * feeding it and wires the sink's `valid` from that channel's. A sink fed by more than one channel is a
-     * join written as plain wiring - illegal in @valid, which may only join inside an island.
+     * Layer-3 handshake plumbing for a protocol'd body (type-system.md §5). A *channel* is an output group
+     * of an input port or a call: it drives one `valid` and, under @ready_valid, listens to one `ready`. A
+     * *sink* is a call's input or an output port: it takes a `valid` and, under @ready_valid, drives a
+     * `ready`. During the build each call records which of its groups are sinks and sources (see
+     * recordChannels); once the body is built, wireChannels inserts each island's control, traces every
+     * sink back to the channel(s) feeding it through declared nodes, and wires the handshake:
+     *
+     * - a sink fed by more than one channel is a join written as plain wiring, which only an island may do;
+     * - under @ready_valid a channel must reach exactly one sink: more is an implicit fork (forks must be
+     *   explicit), none leaves its `ready` undriven. Under @valid there is no `ready`, so a channel may
+     *   reach any number of sinks, including none.
      */
 
-    private data class ValidSink(val groups: List<InputWireVectorGroup>, val valid: InputWire, val description: String)
+    private var diagnosticsBeforeBuild = 0
 
-    /** The `valid` of every channel, by the output group carrying its data. */
-    private val validSources = mutableMapOf<OutputWireVectorGroup, OutputWire>()
-    private val validSinks = mutableListOf<ValidSink>()
+    private class ChannelSource(val description: String, val span: SourceSpan, val valid: OutputWire, val ready: InputWire?)
+    private class ChannelSink(val groups: List<InputWireVectorGroup>, val valids: List<InputWire>, val ready: OutputWire?, val description: String)
 
-    // An island's input and output groups, with its call site - wired through a ValidDelayFunction.
-    private data class ValidIsland(val inputs: List<InputWireVectorGroup>, val outputs: List<OutputWireVectorGroup>, val span: SourceSpan)
-    private val validIslands = mutableListOf<ValidIsland>()
+    /** Every channel's handshake, by the output group carrying its data. */
+    private val channelSources = mutableMapOf<OutputWireVectorGroup, ChannelSource>()
+    private val channelSinks = mutableListOf<ChannelSink>()
 
-    // The function's own `valid` ports: under @valid, one per data port, named by HandshakePorts.valid.
+    // An island's data groups and call site. `calleeValids` is set for a @valid callee inside @ready_valid
+    // (coercion C): the callee's own valid ports, by data group name.
+    private class ChannelIsland(
+        val inputs: List<InputWireVectorGroup>,
+        val outputs: List<OutputWireVectorGroup>,
+        val span: SourceSpan,
+        val calleeValids: Map<String, WireVectorGroup<*>>? = null,
+    )
+    private val channelIslands = mutableListOf<ChannelIsland>()
+
+    // fork_lazy calls: the input group and the branch groups.
+    private class LazyFork(val input: InputWireVectorGroup, val branches: List<OutputWireVectorGroup>, val span: SourceSpan)
+    private val lazyForks = mutableListOf<LazyFork>()
+
+    // The single wire of a one-bit control port, by IO index.
+    private fun inputBit(node: Node, index: Int): InputWire = node.inputWireVectorGroups[index].wires().single()
+    private fun outputBit(node: Node, index: Int): OutputWire = node.outputWireVectorGroups[index].wires().single()
+
+    // The function's own handshake ports (HandshakePorts), created in the same order as its signature.
     private fun buildHandshakePorts() {
-        if (protocol != Protocol.VALID) return
+        if (protocol == Protocol.PURE) return
+        val readyValid = protocol == Protocol.READY_VALID
+
+        fun inputPort(name: String, span: SourceSpan) =
+            createInputNode(name) { node -> listOf(buildOutputWireVectorGroups(WireInterfaceStructure, node)) }.also { nodeSpans[it] = span }
+        fun outputPort(name: String, span: SourceSpan) =
+            createOutputNode(name) { node -> listOf(buildInputWireVectorGroups(WireInterfaceStructure, node)) }.also { nodeSpans[it] = span }
+
+        val inputValids = inputAstNodes.associate { it.identifier.value to inputPort(HandshakePorts.valid(it.identifier.value), it.span) }
+        val outputValids = outputAstNodes.associate { it.identifier.value to outputPort(HandshakePorts.valid(it.identifier.value), it.span) }
+        val outputReadys = if (readyValid) outputAstNodes.associate { it.identifier.value to inputPort(HandshakePorts.ready(it.identifier.value), it.span) } else emptyMap()
+        val inputReadys = if (readyValid) inputAstNodes.associate { it.identifier.value to outputPort(HandshakePorts.ready(it.identifier.value), it.span) } else emptyMap()
 
         inputAstNodes.forEach { astNode ->
-            val dataPort = module.getInputNode(astNode.identifier.value)
-            val validPort = createInputNode(HandshakePorts.valid(astNode.identifier.value)) { node ->
-                listOf(buildOutputWireVectorGroups(WireInterfaceStructure, node))
-            }
-            nodeSpans[validPort] = astNode.span
-            validSources[dataPort.outputWireVectorGroups.single()] = validPort.outputWires().single()
+            val name = astNode.identifier.value
+            channelSources[module.getInputNode(name).outputWireVectorGroups.single()] = ChannelSource(
+                description = name,
+                span = astNode.span,
+                valid = inputValids.getValue(name).outputWires().single(),
+                ready = inputReadys[name]?.inputWires()?.single(),
+            )
         }
-
         outputAstNodes.forEach { astNode ->
-            val dataPort = module.getOutputNode(astNode.identifier.value)
-            val validPort = createOutputNode(HandshakePorts.valid(astNode.identifier.value)) { node ->
-                listOf(buildInputWireVectorGroups(WireInterfaceStructure, node))
-            }
-            nodeSpans[validPort] = astNode.span
-            validSinks += ValidSink(dataPort.inputWireVectorGroups, validPort.inputWires().single(), "output '${astNode.identifier.value}'")
+            val name = astNode.identifier.value
+            channelSinks += ChannelSink(
+                groups = module.getOutputNode(name).inputWireVectorGroups,
+                valids = listOf(outputValids.getValue(name).inputWires().single()),
+                ready = outputReadys[name]?.outputWires()?.single(),
+                description = "output '$name'",
+            )
         }
     }
 
-    private fun wireValidChannels() {
-        if (protocol != Protocol.VALID) return
+    private fun wireChannels() {
+        if (protocol == Protocol.PURE) return
 
-        // Each island's valid passes through a ValidDelayFunction - depth 0 until retiming sets it. An island
-        // with no inputs (a constant) is always valid.
-        validIslands.forEach { island ->
-            // More than one input is a join, already reported by validateNoJoin - nothing to wire.
-            if (island.inputs.size > 1) return@forEach
-
-            val delay = createHandshakeNode(ValidDelayFunction(depth = 0), island.span)
-            island.outputs.forEach { validSources[it] = delay.outputWires().single() }
-
-            when {
-                island.inputs.isEmpty() -> {
-                    val one = createHandshakeNode(LiteralFunction(1, BigInteger.ONE), island.span)
-                    module.connect(delay.inputWires().single(), one.outputWires().single())
-                }
-                else -> validSinks += ValidSink(island.inputs, delay.inputWires().single(), "an island's input")
+        channelIslands.forEach { island ->
+            when (protocol) {
+                Protocol.VALID -> wireValidIsland(island)
+                else -> wireReadyValidIsland(island)
+            }
+        }
+        lazyForks.forEach { fork ->
+            val control = createHandshakeNode(LazyForkFunction(fork.branches.size), fork.span)
+            channelSinks += ChannelSink(listOf(fork.input), listOf(inputBit(control, 0)), outputBit(control, 0), "the input of fork_lazy")
+            fork.branches.forEachIndexed { k, branch ->
+                channelSources[branch] = ChannelSource(describe(branch), fork.span, outputBit(control, 1 + k), inputBit(control, 1 + k))
             }
         }
 
-        validSinks.forEach { sink ->
+        val consumers = mutableMapOf<ChannelSource, MutableList<ChannelSink>>()
+        val joined = mutableSetOf<ChannelSource>() // already reported as part of a join: not also "unconsumed"
+        channelSinks.forEach { sink ->
             val sources = sink.groups
                 .flatMap { it.wires() }
                 .mapNotNull { sourceChannelOf(it) }
-                .mapNotNull { validSources[it] }
-                .distinct()
+                .mapNotNull { channelSources[it] }
+                .distinctBy { it.valid } // one island's outputs share a valid under @valid: not a join
 
             when {
-                sources.size == 1 -> module.connect(sink.valid, sources.single())
-                sources.size > 1 -> diagnosticsCollector.reportError(
-                    BuilderDiagnosticKind.ImplicitJoin(functionName, sink.description, sources.size),
-                    nodeSpans[sink.groups.first().parentNode] ?: functionDefinitionAstNode.span,
-                )
+                sources.size > 1 -> {
+                    diagnosticsCollector.reportError(
+                        BuilderDiagnosticKind.ImplicitJoin(functionName, sink.description, sources.size),
+                        nodeSpans[sink.groups.first().parentNode] ?: functionDefinitionAstNode.span,
+                    )
+                    joined += sources
+                }
+                sources.size == 1 -> {
+                    sink.valids.forEach { module.connect(it as InputWire, sources.single().valid) }
+                    consumers.getOrPut(sources.single()) { mutableListOf() } += sink
+                }
                 // No source: the data itself is undriven, which validateWiresConnected reports.
             }
         }
+
+        if (protocol != Protocol.READY_VALID) return
+        // A call already reported as illegal records no sinks, so its input channels would look unconsumed.
+        val hasEarlierErrors = diagnosticsCollector.diagnostics().size > diagnosticsBeforeBuild
+        channelSources.values.distinct().filter { it !in joined }.forEach { source ->
+            val sinks = consumers[source].orEmpty()
+            when (sinks.size) {
+                0 -> if (!hasEarlierErrors) diagnosticsCollector.reportError(BuilderDiagnosticKind.UnconsumedChannel(functionName, source.description), source.span)
+                1 -> module.connect(source.ready!!, sinks.single().ready!!)
+                else -> diagnosticsCollector.reportError(
+                    BuilderDiagnosticKind.ImplicitFork(functionName, source.description, sinks.size), source.span,
+                )
+            }
+        }
     }
+
+    // A @valid island's valid passes through a ValidDelayFunction - depth 0 until retiming sets it. An
+    // island with no inputs (a constant) is always valid.
+    private fun wireValidIsland(island: ChannelIsland) {
+        // More than one input is a join, already reported by validateNoJoin - nothing to wire.
+        if (island.inputs.size > 1) return
+
+        val delay = createHandshakeNode(ValidDelayFunction(depth = 0), island.span)
+        val valid = delay.outputWires().single()
+        island.outputs.forEach { channelSources[it] = ChannelSource(describe(it), island.span, valid, ready = null) }
+
+        if (island.inputs.isEmpty()) {
+            val one = createHandshakeNode(LiteralFunction(1, BigInteger.ONE), island.span)
+            module.connect(delay.inputWires().single(), one.outputWires().single())
+        } else {
+            channelSinks += ChannelSink(island.inputs, listOf(delay.inputWires().single()), ready = null, description = "an island's input")
+        }
+    }
+
+    // A @ready_valid island's control (IslandControlFunction): a join over its inputs, an eager fork over its
+    // outputs. For a @valid callee (coercion C) the callee's own valids also see the input's valid, and the
+    // control learns which outputs it produced from the callee's output valids.
+    private fun wireReadyValidIsland(island: ChannelIsland) {
+        val function = IslandControlFunction(island.inputs.size, island.outputs.size, producedByCallee = island.calleeValids != null)
+        val control = createHandshakeNode(function, island.span)
+
+        island.inputs.forEachIndexed { i, input ->
+            val calleeValid = island.calleeValids?.get(HandshakePorts.valid(input.identifier))?.wires()?.single()
+            channelSinks += ChannelSink(
+                groups = listOf(input),
+                valids = listOfNotNull(inputBit(control, function.inValid(i)), calleeValid as InputWire?),
+                ready = outputBit(control, function.inReady(i)),
+                description = "an island's input",
+            )
+        }
+        island.outputs.forEachIndexed { o, output ->
+            island.calleeValids?.let { valids ->
+                module.connect(inputBit(control, function.produced(o)), valids.getValue(HandshakePorts.valid(output.identifier)).wires().single() as OutputWire)
+            }
+            channelSources[output] = ChannelSource(
+                description = describe(output),
+                span = island.span,
+                valid = outputBit(control, function.outValid(o)),
+                ready = inputBit(control, function.outReady(o)),
+            )
+        }
+    }
+
+    private fun describe(group: OutputWireVectorGroup) = "${group.parentNode.name()}.${group.identifier}"
 
     // The channel (output group) driving this wire, looking back through declared nodes, which are just
     // names for wires; null if the wire is undriven.
@@ -248,46 +351,6 @@ class NodeBuilder(
         }
     }
 
-    /*
-     * In a @ready_valid body every fork must be explicit (fork_eager / fork_lazy). A channel is an output
-     * group of an input port or a call; its consumers are the calls and output ports its wires reach,
-     * looking straight through declared nodes, which are just names for wires. More than one consumer is
-     * an implicit fork.
-     */
-    private fun validateNoImplicitForks() {
-        if (protocol != Protocol.READY_VALID) return
-
-        val channels = module.getNodes().flatMap { node ->
-            val isChannelSource = node is InputNode ||
-                (node is BodyNode && (node !is PassThroughNode || node in loweredCallOutputs))
-            if (isChannelSource) node.outputWireVectorGroups else emptyList()
-        }
-
-        channels.forEach { channel ->
-            val consumers = mutableSetOf<Node>()
-            val pending = ArrayDeque<OutputWire>(channel.wires())
-            val visited = mutableSetOf<PassThroughNode>()
-            while (pending.isNotEmpty()) {
-                module.getConnectionsForOutputWire(pending.removeFirst()).forEach { connection ->
-                    val consumer = connection.sink.parentWireVector.parentGroup.parentNode
-                    if (consumer is PassThroughNode && consumer !in loweredCallInputs) {
-                        if (visited.add(consumer)) consumer.outputWireVectorGroups.forEach { pending.addAll(it.wires()) }
-                    } else {
-                        consumers += consumer
-                    }
-                }
-            }
-
-            if (consumers.size > 1) {
-                val source = channel.parentNode
-                val name = if (source is InputNode) source.name() else "${source.name()}.${channel.identifier}"
-                diagnosticsCollector.reportError(
-                    BuilderDiagnosticKind.ImplicitFork(functionName, name, consumers.size),
-                    nodeSpans[source] ?: functionDefinitionAstNode.span,
-                )
-            }
-        }
-    }
 
     // A module's own input ports are driven by the caller, so only OutputNodes and body nodes
     // (whose input wires all need a source from within this module) can be undriven.
@@ -295,11 +358,16 @@ class NodeBuilder(
         // Handshake ports are wired by the compiler, never by the user, so an undriven one is only ever a
         // consequence of an error already reported (an illegal call, undriven data). Report them only if
         // nothing else has been - then it would be a compiler bug, better surfaced than left to crash later.
-        val skipHandshakePorts = diagnosticsCollector.diagnostics().isNotEmpty()
         fun isHandshakePort(node: Node, group: InputWireVectorGroup) =
             HandshakePorts.isHandshakePort(group.identifier) ||
                 (node is OutputNode && HandshakePorts.isHandshakePort(node.name())) ||
-                (node is PredefinedFunctionNode && node.predefinedFunction is ValidDelayFunction)
+                (node is PredefinedFunctionNode && node.predefinedFunction.let {
+                    it is ValidDelayFunction || it is IslandControlFunction || it is LazyForkFunction
+                })
+        fun isUndriven(group: InputWireVectorGroup) = group.wires().any { module.getConnectionForInputWireOrNull(it) == null }
+        val skipHandshakePorts = diagnosticsCollector.diagnostics().isNotEmpty() || module.getNodes().any { node ->
+            node.inputWireVectorGroups.any { !isHandshakePort(node, it) && isUndriven(it) }
+        }
 
         module.getNodes().forEach { node ->
             val undrivenGroup = node.inputWireVectorGroups.firstOrNull { group ->
@@ -812,41 +880,58 @@ class NodeBuilder(
                 val (outputs, outputHandshake) = node.outputWireVectorGroups.partition { !HandshakePorts.isHandshakePort(it.identifier) }
 
                 validateNoJoin(invocation, inputs.size, callSiteSpan)
-                recordValidChannels(invocation, isIsland, inputs, outputs, callSiteSpan) { group, handshake ->
-                    (inputHandshake + outputHandshake).single { it.identifier == HandshakePorts.valid(group) }.let(handshake)
-                }
+                recordChannels(invocation, isIsland, inputs, outputs, callSiteSpan, (inputHandshake + outputHandshake).associateBy { it.identifier })
                 return IOGroups.fromWireVectorGroups(inputs = inputs, outputs = outputs)
             }
         }
 
         validateNoJoin(invocation, lowered.inputs.size, callSiteSpan)
-        recordValidChannels(invocation, isIsland, lowered.inputs, lowered.outputs, callSiteSpan) { _, _ -> }
+        recordChannels(invocation, isIsland, lowered.inputs, lowered.outputs, callSiteSpan, handshake = emptyMap())
         loweredCalls[invocationName] = lowered
         loweredCallInputs += lowered.inputs.map { it.parentNode }
         loweredCallOutputs += lowered.outputs.map { it.parentNode }
         return IOGroups.fromWireVectorGroups(inputs = lowered.inputs, outputs = lowered.outputs)
     }
 
-    // Records a call's part in a @valid body's channels: an island's groups go through one ValidDelayFunction;
-    // a @valid callee's data groups each pair with their own `valid` port.
-    private fun recordValidChannels(
+    /*
+     * Records a call's part in a protocol'd body's channels: an island's groups are wired through its
+     * control; a callee with this function's own protocol pairs each data group with its handshake ports
+     * (`handshake`, by name); fork_eager is the identity island and fork_lazy has its own control.
+     */
+    private fun recordChannels(
         invocation: Module.Invocation,
         isIsland: Boolean,
         inputs: List<InputWireVectorGroup>,
         outputs: List<OutputWireVectorGroup>,
         callSiteSpan: SourceSpan,
-        withHandshakeGroup: (String, (WireVectorGroup<*>) -> Unit) -> Unit,
+        handshake: Map<String, WireVectorGroup<*>>,
     ) {
-        if (protocol != Protocol.VALID) return
+        if (protocol == Protocol.PURE) return
+        val calleeName = invocation.gaplFunctionName
+        val calleeProtocol = programContext.protocolOf(calleeName)
 
-        if (isIsland) {
-            validIslands += ValidIsland(inputs, outputs, callSiteSpan)
-        } else if (programContext.protocolOf(invocation.gaplFunctionName) == Protocol.VALID) {
-            inputs.forEach { group ->
-                withHandshakeGroup(group.identifier) { validSinks += ValidSink(listOf(group), it.wires().single() as InputWire, "an input of '${invocation.gaplFunctionName}'") }
-            }
-            outputs.forEach { group ->
-                withHandshakeGroup(group.identifier) { validSources[group] = it.wires().single() as OutputWire }
+        when {
+            isIsland -> channelIslands += ChannelIsland(inputs, outputs, callSiteSpan, calleeValids = handshake.takeIf { calleeProtocol == Protocol.VALID })
+            calleeProtocol != protocol -> {} // an illegal call, already reported
+            PredefinedFunctionNames.from(calleeName) == PredefinedFunctionNames.FORK_EAGER -> channelIslands += ChannelIsland(inputs, outputs, callSiteSpan)
+            PredefinedFunctionNames.from(calleeName) == PredefinedFunctionNames.FORK_LAZY -> lazyForks += LazyFork(inputs.single(), outputs, callSiteSpan)
+            else -> {
+                inputs.forEach { group ->
+                    channelSinks += ChannelSink(
+                        groups = listOf(group),
+                        valids = listOf(handshake.getValue(HandshakePorts.valid(group.identifier)).wires().single() as InputWire),
+                        ready = handshake[HandshakePorts.ready(group.identifier)]?.wires()?.single() as OutputWire?,
+                        description = "an input of '$calleeName'",
+                    )
+                }
+                outputs.forEach { group ->
+                    channelSources[group] = ChannelSource(
+                        description = describe(group),
+                        span = callSiteSpan,
+                        valid = handshake.getValue(HandshakePorts.valid(group.identifier)).wires().single() as OutputWire,
+                        ready = handshake[HandshakePorts.ready(group.identifier)]?.wires()?.single() as InputWire?,
+                    )
+                }
             }
         }
     }
@@ -859,14 +944,6 @@ class NodeBuilder(
     private fun validateCallProtocol(invocation: Module.Invocation, callSiteSpan: SourceSpan, coercion: ProtocolAnnotationNode?): Boolean {
         val calleeName = invocation.gaplFunctionName
         val calleeProtocol = programContext.protocolOf(calleeName)
-
-        if (protocol == Protocol.READY_VALID && calleeProtocol == Protocol.VALID) {
-            diagnosticsCollector.reportError(
-                BuilderDiagnosticKind.NotYetSupported("calling a @valid function from @ready_valid (coercion C) arrives in stage 2c"),
-                callSiteSpan,
-            )
-            return false
-        }
 
         when {
             calleeProtocol > protocol -> diagnosticsCollector.reportError(
@@ -886,6 +963,8 @@ class NodeBuilder(
                 islands += invocation to callSiteSpan
                 return true
             }
+            // A @valid island inside @ready_valid (coercion C).
+            else -> return true
         }
         return false
     }

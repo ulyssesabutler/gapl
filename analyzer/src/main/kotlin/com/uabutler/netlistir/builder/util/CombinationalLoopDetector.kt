@@ -8,6 +8,7 @@ import com.uabutler.netlistir.netlist.MutableModule
 import com.uabutler.netlistir.netlist.Node
 import com.uabutler.netlistir.netlist.OutputWireVectorGroup
 import com.uabutler.netlistir.netlist.WireVectorGroup
+import com.uabutler.netlistir.netlist.PredefinedFunctionNode
 import com.uabutler.netlistir.util.InvocationGraph
 import com.uabutler.netlistir.util.graph.NetlistLeisersonCircuitConverter
 import com.uabutler.util.graph.UnweightedGraph
@@ -146,12 +147,17 @@ private fun buildLocalEdges(
     // reach every output port of that same node at zero weight - calls are handled separately below
     // via port-level summaries specifically because that blanket assumption would be wrong for them
     // (a callee's own register can disconnect some or all input/output port pairs).
+    // A handshake primitive declares its paths instead (PredefinedFunction.combinationalPaths): it carries
+    // valid forward and ready back through one node, so all-to-all would invent loops between islands.
     val intraNodeEdges = module.getNodes()
         .filterNot { NetlistLeisersonCircuitConverter.isRegisterNode(it) }
         .filterNot { it is ModuleInvocationNode }
         .flatMap { node ->
-            node.inputWireVectorGroups.flatMap { input ->
-                node.outputWireVectorGroups.map { output -> EdgeSpec(source = input, sink = output, info = LocalHop(node)) }
+            val declaredPaths = (node as? PredefinedFunctionNode)?.predefinedFunction?.combinationalPaths
+            node.inputWireVectorGroups.withIndex().flatMap { (inputIndex, input) ->
+                node.outputWireVectorGroups.withIndex()
+                    .filter { (outputIndex, _) -> declaredPaths == null || outputIndex in declaredPaths[inputIndex].orEmpty() }
+                    .map { (_, output) -> EdgeSpec(source = input, sink = output, info = LocalHop(node)) }
             }
         }
 

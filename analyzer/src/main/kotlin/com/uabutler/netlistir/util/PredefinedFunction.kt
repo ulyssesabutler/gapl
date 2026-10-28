@@ -14,6 +14,14 @@ sealed class PredefinedFunction(
     val outputs: List<IO>,
 ) {
 
+    /**
+     * Which outputs each input reaches combinationally, by IO index - or null, meaning every input
+     * reaches every output, which is true of every pure operator. The handshake primitives at the end of
+     * this file override it: they carry `valid` forward and `ready` back through one node, and hold state,
+     * so treating them as all-to-all would invent combinational loops between connected islands.
+     */
+    open val combinationalPaths: Map<Int, Set<Int>>? get() = null
+
     data class IO(
         val name: String,
         val structure: InterfaceStructure,
@@ -299,4 +307,60 @@ data class ValidDelayFunction(
 ): PredefinedFunction(
     inputs = listOf(IO("valid_in", wire())),
     outputs = listOf(IO("valid_out", wire())),
-)
+) {
+    // A delayed valid passes through registers, so only depth 0 is a combinational path.
+    override val combinationalPaths get() = if (depth == 0) mapOf(0 to setOf(0)) else emptyMap()
+}
+
+/**
+ * A @ready_valid island's control (type-system.md §5, "2c design"), for an island over a @pure callee
+ * (coercion B), over a @valid callee (coercion C, whose own output valids arrive as `produced`), and - as
+ * the identity island with one input - fork_eager. Inputs, in order: `in_valid` per input channel,
+ * `out_ready` per output channel, then (C only) `produced` per output. Outputs: `in_ready` per input, then
+ * `out_valid` per output. Holds one done bit per output (none with a single output), recording which
+ * outputs already took the current item; all inputs are consumed together once every produced output has.
+ */
+data class IslandControlFunction(
+    val inputCount: Int,
+    val outputCount: Int,
+    val producedByCallee: Boolean,
+): PredefinedFunction(
+    inputs = List(inputCount) { IO("in_valid_$it", wire()) } +
+        List(outputCount) { IO("out_ready_$it", wire()) } +
+        (if (producedByCallee) List(outputCount) { IO("produced_$it", wire()) } else emptyList()),
+    outputs = List(inputCount) { IO("in_ready_$it", wire()) } + List(outputCount) { IO("out_valid_$it", wire()) },
+) {
+    fun inValid(i: Int) = i
+    fun outReady(o: Int) = inputCount + o
+    fun produced(o: Int) = inputCount + outputCount + o
+    fun inReady(i: Int) = i
+    fun outValid(o: Int) = inputCount + o
+
+    // Never out_ready -> out_valid: an output's valid depends on ready only through its done bit.
+    override val combinationalPaths: Map<Int, Set<Int>> get() {
+        val allInReady = (0 until inputCount).map(::inReady).toSet()
+        val allOutValid = (0 until outputCount).map(::outValid).toSet()
+        return buildMap {
+            (0 until inputCount).forEach { put(inValid(it), allInReady + if (producedByCallee) emptySet() else allOutValid) }
+            (0 until outputCount).forEach { put(outReady(it), allInReady) }
+            if (producedByCallee) (0 until outputCount).forEach { put(produced(it), allInReady + outValid(it)) }
+        }
+    }
+}
+
+/**
+ * fork_lazy: offers the item to every branch only once all of them are ready. Inputs: `in_valid`, then
+ * `out_ready` per branch. Outputs: `in_ready`, then `out_valid` per branch. No state - and its valids
+ * depend on the other branches' readys, so a lazy fork whose branches rejoin is a real combinational loop.
+ */
+data class LazyForkFunction(
+    val branchCount: Int,
+): PredefinedFunction(
+    inputs = listOf(IO("in_valid", wire())) + List(branchCount) { IO("out_ready_$it", wire()) },
+    outputs = listOf(IO("in_ready", wire())) + List(branchCount) { IO("out_valid_$it", wire()) },
+) {
+    override val combinationalPaths: Map<Int, Set<Int>> get() = buildMap {
+        put(0, (1..branchCount).toSet())
+        (0 until branchCount).forEach { j -> put(1 + j, setOf(0) + (0 until branchCount).filter { it != j }.map { 1 + it }) }
+    }
+}

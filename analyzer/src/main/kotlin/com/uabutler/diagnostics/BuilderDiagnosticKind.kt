@@ -197,8 +197,9 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             "only an island may join (do the combining inside a @pure function and call it as an island)"
     }
 
-    data class NotYetSupported(val feature: String) : BuilderDiagnosticKind {
-        override val message get() = "Not yet supported: $feature"
+    data class UnconsumedChannel(val functionName: String, val channel: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "Channel '$channel' in @ready_valid function '$functionName' is never consumed - its ready would be left undriven"
     }
 
     data class ProtocolFunctionArgument(val functionName: String, val protocol: Protocol) : BuilderDiagnosticKind {
