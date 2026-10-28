@@ -2,9 +2,13 @@ package com.uabutler.netlistir.builder.util
 
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.ProgramNode
+import com.uabutler.ast.node.functions.circuits.MemberAccessOperationNode
+import com.uabutler.ast.node.functions.circuits.SingleArrayAccessOperationNode
 import com.uabutler.ast.node.interfaces.*
+import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.util.PredefinedFunctionNames
 
 class ProgramContext(program: ProgramNode) {
 
@@ -21,13 +25,18 @@ class ProgramContext(program: ProgramNode) {
         .associateBy { it.identifier }
      */
 
-    private fun buildDefinedInterface(
+    private data class DefinitionInContext(
+        val definition: InterfaceDefinitionNode,
+        val interfaceValues: Map<String, InterfaceStructure>,
+        val parameterValues: Map<String, ParameterValue<*>>,
+    )
+
+    private fun definitionInContext(
         node: InterfaceExpressionNode,
         definedInterfaceIdentifier: String,
-
         genericInterfaceValues: List<InterfaceStructure>,
         genericParameterValues: List<ParameterValue<*>>,
-    ): InterfaceStructure {
+    ): DefinitionInContext {
         val interfaceDefinition = try {
             interfaceDefinitions[definedInterfaceIdentifier]!!.node
         } catch (_: NullPointerException) {
@@ -39,6 +48,36 @@ class ProgramContext(program: ProgramNode) {
             GenericValueMatcher.getInterfaceValues(interfaceDefinition.genericInterfaces, genericInterfaceValues)
         val parameterValues =
             GenericValueMatcher.getParameterValues(interfaceDefinition.genericParameters, genericParameterValues)
+
+        return DefinitionInContext(interfaceDefinition, interfaceValues, parameterValues)
+    }
+
+    private fun definitionInContext(
+        node: DefinedInterfaceExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, ParameterValue<*>>,
+    ) = definitionInContext(
+        node = node,
+        definedInterfaceIdentifier = node.interfaceIdentifier.value,
+        genericInterfaceValues = node.genericInterfaces.map {
+            buildInterfaceWithContext(
+                node = it.value,
+                interfaceValuesContext = interfaceValuesContext,
+                parameterValuesContext = parameterValuesContext,
+            )
+        },
+        genericParameterValues = node.genericParameters.map { ParameterValue.fromNode(it, this, interfaceValuesContext, parameterValuesContext) },
+    )
+
+    private fun buildDefinedInterface(
+        node: InterfaceExpressionNode,
+        definedInterfaceIdentifier: String,
+
+        genericInterfaceValues: List<InterfaceStructure>,
+        genericParameterValues: List<ParameterValue<*>>,
+    ): InterfaceStructure {
+        val (interfaceDefinition, interfaceValues, parameterValues) =
+            definitionInContext(node, definedInterfaceIdentifier, genericInterfaceValues, genericParameterValues)
 
         return when (interfaceDefinition) {
             is AliasInterfaceDefinitionNode -> buildInterfaceWithContext(
@@ -62,8 +101,97 @@ class ProgramContext(program: ProgramNode) {
 
                 RecordInterfaceStructure(ports)
             }
+            is ViewInterfaceDefinitionNode -> buildViewLayout(interfaceDefinition, interfaceValues, parameterValues).structure
         }
         // TODO: Validation, types and number
+    }
+
+    private fun buildViewLayout(
+        view: ViewInterfaceDefinitionNode,
+        interfaceValues: Map<String, InterfaceStructure>,
+        parameterValues: Map<String, ParameterValue<*>>,
+    ): ViewLayout {
+        val viewName = view.identifier.value
+        val base = buildInterfaceWithContext(view.base, interfaceValues, parameterValues)
+
+        val fields = linkedMapOf<String, InterfaceStructure>()
+        val baseBits = mutableListOf<Int>()
+        val claimedBy = mutableMapOf<Int, String>()
+
+        view.fields.forEach { field ->
+            val fieldName = field.identifier.value
+            fun invalid(reason: String): Nothing =
+                throw BuilderDiagnosticException(BuilderDiagnosticKind.InvalidViewFieldPath(viewName, fieldName, reason), field.span)
+            fun evaluate(expression: StaticExpressionNode) =
+                StaticExpressionEvaluator.evaluateStaticExpressionWithContext(expression, parameterValues).intValueExact()
+
+            if (fieldName in fields) invalid("the view already has a field named '$fieldName'")
+
+            // Walk the path in source order to find the field's type, collecting the same
+            // (members, indices, range) decomposition a circuit reference's projection uses.
+            var current = base
+            val members = mutableListOf<String>()
+            val indices = mutableListOf<Int>()
+
+            field.singleAccesses.forEach { access ->
+                when (access) {
+                    is MemberAccessOperationNode -> {
+                        val member = access.memberIdentifier.value
+                        val record = current as? RecordInterfaceStructure
+                            ?: invalid("'.$member' is applied to something that is not a record")
+                        current = record.ports[member] ?: invalid("there is no member '$member'")
+                        members += member
+                    }
+                    is SingleArrayAccessOperationNode -> {
+                        val vector = current as? VectorInterfaceStructure
+                            ?: invalid("an index is applied to something that is not a vector")
+                        val index = evaluate(access.index)
+                        if (index !in 0 until vector.size) invalid("index $index is out of range for a vector of size ${vector.size}")
+                        current = vector.vectoredInterface
+                        indices += index
+                    }
+                }
+            }
+
+            val range = field.multipleAccess?.let { slice ->
+                val vector = current as? VectorInterfaceStructure
+                    ?: invalid("a slice is applied to something that is not a vector")
+                val start = evaluate(slice.startIndex)
+                val end = evaluate(slice.endIndex)
+                if (start < 0 || end >= vector.size || start > end) {
+                    invalid("slice [$start:$end] is out of range for a vector of size ${vector.size}")
+                }
+                current = VectorInterfaceStructure(vector.vectoredInterface, end - start + 1)
+                start..end
+            }
+
+            val bits = ViewLayout.selectedBits(base, members, indices, range)
+            bits.forEach { bit ->
+                claimedBy.put(bit, fieldName)?.let { earlier ->
+                    throw BuilderDiagnosticException(BuilderDiagnosticKind.OverlappingViewFields(viewName, earlier, fieldName), field.span)
+                }
+            }
+
+            fields[fieldName] = current
+            baseBits += bits
+        }
+
+        return ViewLayout(base, RecordInterfaceStructure(fields), baseBits)
+    }
+
+    /** The layout of the view an interface expression names, following aliases, or null if it isn't one. */
+    private fun viewLayoutOf(
+        node: InterfaceExpressionNode,
+        interfaceValuesContext: Map<String, InterfaceStructure>,
+        parameterValuesContext: Map<String, ParameterValue<*>>,
+    ): ViewLayout? {
+        if (node !is DefinedInterfaceExpressionNode) return null
+        val (definition, interfaceValues, parameterValues) = definitionInContext(node, interfaceValuesContext, parameterValuesContext)
+        return when (definition) {
+            is ViewInterfaceDefinitionNode -> buildViewLayout(definition, interfaceValues, parameterValues)
+            is AliasInterfaceDefinitionNode -> viewLayoutOf(definition.aliasedInterface, interfaceValues, parameterValues)
+            is RecordInterfaceDefinitionNode -> null
+        }
     }
 
     fun buildInterfaceWithContext(
@@ -136,8 +264,37 @@ class ProgramContext(program: ProgramNode) {
             )
         }
 
+        val functionName = node.definitionIdentifier.value
+        fun invalid(reason: String): Nothing =
+            throw BuilderDiagnosticException(BuilderDiagnosticKind.InvalidViewConversion(functionName, reason), node.span)
+
+        when (PredefinedFunctionNames.from(functionName)) {
+            PredefinedFunctionNames.PROJECT, PredefinedFunctionNames.OVERLAY -> {
+                if (interfaces.size != 2 || parameterValues.isNotEmpty()) {
+                    invalid("expected exactly two interfaces, (base, view), and no parameters")
+                }
+                val layout = viewLayoutOf(node.genericInterfaces[1].value, interfaceValuesContext, parameterValuesContext)
+                    ?: invalid("its second interface must name a view")
+                // Structural, not nominal: generic parameters have lost their names by now, and nominal
+                // interface checking is deferred (type-system.md §10 item 18).
+                if (layout.base != interfaces[0]) invalid("the view's base does not match the first interface")
+
+                return Module.Invocation(
+                    gaplFunctionName = functionName,
+                    interfaces = interfaces,
+                    parameters = ViewLayout.encode(layout.baseBits),
+                )
+            }
+            PredefinedFunctionNames.ZEROS -> {
+                if (interfaces.size != 1 || parameterValues.isNotEmpty()) {
+                    invalid("expected exactly one interface and no parameters")
+                }
+            }
+            else -> {}
+        }
+
         return Module.Invocation(
-            gaplFunctionName = node.definitionIdentifier.value,
+            gaplFunctionName = functionName,
             interfaces = interfaces,
             parameters = parameterValues,
         )

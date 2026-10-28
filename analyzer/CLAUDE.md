@@ -219,6 +219,17 @@ specially with no declaration site). `netlistir/util/PredefinedFunction.kt` is t
 realization of each primitive, one sealed subtype per operation, dispatched from a `Module.Invocation`
 via `PredefinedFunction.search()`.
 
+**Views and their conversions are the exception.** A `view` (an `interfaceDefinition` alternative,
+design in `brainstorming/claude/type-system.md` §3) lowers in `ProgramContext` to an ordinary
+`RecordInterfaceStructure`, so nothing past the builder ever sees one. Its three conversions
+(`project`, `overlay`, `zeros`) are listed in `PredefinedFunctionNames` for name resolution but have
+**no `PredefinedFunction` subtype**: `NodeBuilder.invokeFunction` lowers each to plain wiring between
+anonymous `PassThroughNode`s, so `compiler`, `simengine` and retiming need no changes for them. The
+one non-obvious part: `project`/`overlay`'s view-to-base bit mapping (`ViewLayout`) travels as the
+invocation's integer parameters. That's what keeps two same-shaped views at different offsets from
+memoizing into one `Module.Invocation`, and what lets `project(t, v)` be passed to a higher-order
+function like `vector_map` and still know its mapping.
+
 ## Known gotchas
 
 - **Reference equality, not structural equality, for `Node`/`Wire` and anything keyed by them.**

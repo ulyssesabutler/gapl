@@ -7,8 +7,9 @@ import org.antlr.v4.kotlinruntime.Token
 
 fun Token.toIdentifierNode() = IdentifierNode(SourceSpan.of(this), this.text!!)
 
-// interfaceDefinition is not a labeled-alternative rule, so both branches share one context
-// type with two nullable sub-rule accessors instead of distinct generated subclasses.
+// interfaceDefinition is not a labeled-alternative rule, so all branches share one context
+// type with nullable sub-rule accessors instead of distinct generated subclasses.
 val CSTParser.InterfaceDefinitionContext.declaredIdentifierToken: Token
     get() = aliasInterfaceDefinition()?.declaredIdentifer
-        ?: recordInterfaceDefinition()!!.declaredIdentifer!!
+        ?: recordInterfaceDefinition()?.declaredIdentifer
+        ?: viewInterfaceDefinition()!!.declaredIdentifer!!

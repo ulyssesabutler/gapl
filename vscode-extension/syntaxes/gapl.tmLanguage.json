@@ -32,11 +32,11 @@
         },
         {
           "name": "storage.type.gapl",
-          "match": "\\b(interface|function|wire|integer)\\b"
+          "match": "\\b(interface|view|function|wire|integer)\\b"
         },
         {
           "name": "keyword.other.gapl",
-          "match": "\\b(declare|in|out|inout)\\b"
+          "match": "\\b(declare|in|out|inout|of)\\b"
         }
       ]
     },

@@ -18,6 +18,8 @@ In: 'in';
 Out: 'out';
 Inout: 'inout';
 Integer: 'integer';
+View: 'view';
+Of: 'of';
 
 // Punctuation
 ParenL: '(';
@@ -131,7 +133,18 @@ recordInterfaceDefinition:
     CurlyL portDefinition* CurlyR
 ;
 
-interfaceDefinition: aliasInterfaceDefinition | recordInterfaceDefinition;
+// A view names bit ranges of a base interface. Each field's path is an accessor chain from the
+// (implicit) base value, so a record member is written `.data[0:47]` and a vector base starts `[0]`.
+viewFieldDefinition: declaredIdentifier=Id Colon accessor+ SemiColon;
+
+viewInterfaceDefinition:
+    View declaredIdentifer=Id
+    parameterDefinitionList?
+    Of base=expression
+    CurlyL viewFieldDefinition* CurlyR
+;
+
+interfaceDefinition: aliasInterfaceDefinition | recordInterfaceDefinition | viewInterfaceDefinition;
 
 functionIO: declaredIdentifier=Id Colon interfaceType=expression;
 // TODO: Add null

@@ -7,8 +7,10 @@ import com.uabutler.diagnostics.DiagnosticsCollector
 import com.uabutler.diagnostics.SourceSpan
 import com.uabutler.netlistir.builder.util.*
 import com.uabutler.netlistir.netlist.*
+import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.PredefinedFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
+import com.uabutler.util.PredefinedFunctionNames
 import java.math.BigInteger
 
 class NodeBuilder(
@@ -442,12 +444,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
+                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
             }
 
             is DeclaredGenericFunctionCircuitExpressionNode -> {
@@ -462,12 +459,7 @@ class NodeBuilder(
                     )
                 }
 
-                val node = createNodeFromFunctionInvocation(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
+                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
             }
 
             is AnonymousFunctionCircuitExpressionNode -> {
@@ -477,12 +469,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
+                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
             }
 
             is AnonymousGenericFunctionCircuitExpressionNode -> {
@@ -497,27 +484,22 @@ class NodeBuilder(
                     )
                 }
 
-                val node = createNodeFromFunctionInvocation(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
-
-                IOGroups.fromWireVectorGroups(
-                    inputs = node.inputWireVectorGroups,
-                    outputs = node.outputWireVectorGroups,
-                )
+                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
             }
 
             is ReferenceCircuitExpressionNode -> {
-                val referencedNode = try {
-                    netlistNodes[nodeExpression.identifier.value]!!
-                } catch (_: NullPointerException) {
-                    throw BuilderDiagnosticException(
-                        BuilderDiagnosticKind.UnableToFindCircuitNode(nodeExpression.identifier.value),
+                val name = nodeExpression.identifier.value
+                val (inputWireVectorGroups, outputWireVectorGroups) = netlistNodes[name]
+                    ?.let { it.inputWireVectorGroups to it.outputWireVectorGroups }
+                    ?: loweredConversions[name]?.let { it.inputs to it.outputs }
+                    ?: throw BuilderDiagnosticException(
+                        BuilderDiagnosticKind.UnableToFindCircuitNode(name),
                         nodeExpression.span,
                     )
-                }
 
                 val projectionInformation = getProjectionValues(nodeExpression.singleAccesses, nodeExpression.multipleAccess)
-                val inputWireVectorGroup = referencedNode.inputWireVectorGroups.firstOrNull()
-                val outputWireVectorGroup = referencedNode.outputWireVectorGroups.firstOrNull()
+                val inputWireVectorGroup = inputWireVectorGroups.firstOrNull()
+                val outputWireVectorGroup = outputWireVectorGroups.firstOrNull()
 
                 IOGroups(
                     inputs = inputWireVectorGroup?.let { listOf(getInputWireVectorGroupProjection(it, projectionInformation)) } ?: emptyList(),
@@ -610,6 +592,100 @@ class NodeBuilder(
             indices = projection.indices,
             range = projection.range
         )
+    }
+
+    /**
+     * The boundary of a lowered view conversion: no single netlist node has these groups, since
+     * project/overlay change structure and a PassThroughNode must keep it. Kept by name so a declared
+     * conversion (`declare p: project(t, v)`) can still be referenced like any other node.
+     */
+    private data class LoweredConversion(
+        val inputs: List<InputWireVectorGroup>,
+        val outputs: List<OutputWireVectorGroup>,
+    )
+
+    private val loweredConversions = mutableMapOf<String, LoweredConversion>()
+
+    private fun invokeFunction(
+        invocationName: String,
+        invocation: Module.Invocation,
+        callSiteSpan: SourceSpan,
+    ): IOGroups {
+        val lowered = when (PredefinedFunctionNames.from(invocation.gaplFunctionName)) {
+            PredefinedFunctionNames.PROJECT -> lowerProject(invocation, callSiteSpan)
+            PredefinedFunctionNames.OVERLAY -> lowerOverlay(invocation, callSiteSpan)
+            PredefinedFunctionNames.ZEROS -> lowerZeros(invocation, callSiteSpan)
+            else -> {
+                val node = createNodeFromFunctionInvocation(invocationName, invocation, callSiteSpan)
+                return IOGroups.fromWireVectorGroups(
+                    inputs = node.inputWireVectorGroups,
+                    outputs = node.outputWireVectorGroups,
+                )
+            }
+        }
+
+        loweredConversions[invocationName] = lowered
+        return IOGroups.fromWireVectorGroups(inputs = lowered.inputs, outputs = lowered.outputs)
+    }
+
+    // An anonymous PassThroughNode of one structure - the building block view conversions lower to.
+    private fun conversionPassThrough(structure: InterfaceStructure, callSiteSpan: SourceSpan) = createPassThroughNode(
+        identifier = AnonymousIdentifierGenerator.genIdentifier(),
+        inputWireVectorGroupsBuilder = { node -> listOf(buildInputWireVectorGroups(structure, node)) },
+        outputWireVectorGroupsBuilder = { node -> listOf(buildOutputWireVectorGroups(structure, node)) },
+    ).also { nodeSpans[it] = callSiteSpan }
+
+    // project(t, v): view bit i is driven by base bit baseBits[i]. See ViewLayout for the numbering.
+    private fun lowerProject(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+        val baseBits = ViewLayout.decode(invocation.parameters)
+        val base = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
+        val view = conversionPassThrough(invocation.interfaces[1], callSiteSpan)
+
+        val baseWires = base.outputWireVectorGroups.single().wires()
+        view.inputWireVectorGroups.single().wires().forEachIndexed { index, viewWire ->
+            module.connect(viewWire, baseWires[baseBits[index]])
+        }
+
+        return LoweredConversion(base.inputWireVectorGroups, view.outputWireVectorGroups)
+    }
+
+    // overlay(t, v): each base bit the view names comes from the view, every other bit from the base.
+    private fun lowerOverlay(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+        val viewBitForBaseBit = ViewLayout.decode(invocation.parameters)
+            .withIndex()
+            .associate { (viewBit, baseBit) -> baseBit to viewBit }
+        val base = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
+        val view = conversionPassThrough(invocation.interfaces[1], callSiteSpan)
+        val result = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
+
+        val baseWires = base.outputWireVectorGroups.single().wires()
+        val viewWires = view.outputWireVectorGroups.single().wires()
+        result.inputWireVectorGroups.single().wires().forEachIndexed { index, resultWire ->
+            val viewBit = viewBitForBaseBit[index]
+            module.connect(resultWire, if (viewBit != null) viewWires[viewBit] else baseWires[index])
+        }
+
+        return LoweredConversion(base.inputWireVectorGroups + view.inputWireVectorGroups, result.outputWireVectorGroups)
+    }
+
+    // zeros(T): a T driven entirely by one all-zero literal.
+    private fun lowerZeros(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+        val result = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
+        val resultWires = result.inputWireVectorGroups.single().wires()
+
+        val literalFunction = LiteralFunction(resultWires.size, BigInteger.ZERO)
+        val literal = createPredefinedFunctionNode(
+            identifier = AnonymousIdentifierGenerator.genIdentifier(),
+            inputWireVectorGroupsBuilder = { node -> literalFunction.inputs.map { it.toInputWireVectorGroup(node) } },
+            outputWireVectorGroupsBuilder = { node -> literalFunction.outputs.map { it.toOutputWireVectorGroup(node) } },
+            predefinedFunction = literalFunction,
+        ).also { nodeSpans[it] = callSiteSpan }
+
+        literal.outputWireVectorGroups.single().wires().zip(resultWires).forEach { (literalWire, resultWire) ->
+            module.connect(resultWire, literalWire)
+        }
+
+        return LoweredConversion(emptyList(), result.outputWireVectorGroups)
     }
 
     private fun createNodeFromFunctionInvocation(

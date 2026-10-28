@@ -398,6 +398,30 @@ lowering the builder cannot tell a view from a record. Because views compose, th
 port types: a record containing an `eth_hdr` is barred too. (Deferred past stage 1 along with the
 boundary keyword; see the rules above.)
 
+### Implementation notes (2026-10, branch `views`)
+
+Stage 1 is implemented as designed, with three details the design left open settled as follows:
+
+- **A slice must be the last accessor in a path** (`.data[0:47]`, not `[0:3].x`) — the rule circuit
+  references already follow, which the wire-projection machinery depends on. Reported by the resolver.
+- **`project`/`overlay` check the base structurally, not by name.** Generic parameters have lost their
+  names by the time the builder runs, and nominal checking is deferred (§10 item 18).
+- **Path, range and overlap checks run when a view is *used*, not when it is parsed**, since a
+  parameterized view's bounds are unknown until instantiation. An unused, broken view reports nothing.
+
+How it is built is recorded in `analyzer/CLAUDE.md` ("Views and their conversions are the exception"):
+views lower to records in `ProgramContext`; the conversions lower to plain wiring in `NodeBuilder`; the
+bit mapping travels as integer parameters on the invocation. Nothing past the netlist builder changed.
+
+**Regression result.** `gapl-example` output is byte-identical to the baseline (`fdd2489`), and so is
+every `verilator-test` output *except* `aes/register-minimization`. That one differs only in register
+placement (488 registers either way) and passes its Verilator simulation. It is a determinism wrinkle,
+not a behaviour change: unretimed, the branch is byte-identical and stable, but with
+`minimal-register` retiming it produced a different (equally optimal) placement on each of three runs,
+while the baseline produced the same placement on all five. So retiming's output depends on something
+the change perturbed — most likely iteration or input order reaching the OR-Tools solver — and
+byte-identical output is not a usable bar for retimed designs. Not investigated further.
+
 ### Still open for stage 1
 - ~~**Overlapping fields.**~~ **Decided 2026-10: fields within one view may not overlap.** Overlapping
   interpretations (a byte and its two nibbles) are written as separate views of the same base; project

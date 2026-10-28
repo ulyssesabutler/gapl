@@ -1,0 +1,21 @@
+interface beat { data: wire[16]; keep: wire[2]; }
+
+// Deliberately scattered: a low slice, a high slice, and a single bit of a second member.
+view hdr of beat { lo: .data[0:3]; hi: .data[12:15]; k: .keep[1]; }
+
+function test() i: beat, nib: wire[4], pair: beat[2] => h: hdr, o: beat, z: beat, hs: hdr[2] {
+    i => project(beat, hdr) => h;
+
+    // Rewrite lo, keep the view's other fields, and pass every bit the view doesn't name through.
+    i => project(beat, hdr) => declare p: hdr;
+    declare edited: hdr;
+    nib => edited.lo;
+    p.hi => edited.hi;
+    p.k => edited.k;
+    i, edited => overlay(beat, hdr) => o;
+
+    zeros(beat) => z;
+
+    // project passed to a higher-order stdlib function, so its bit mapping travels as parameters.
+    pair => vector_map(beat, hdr, 2, project(beat, hdr)) => hs;
+}

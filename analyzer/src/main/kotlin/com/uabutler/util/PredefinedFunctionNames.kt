@@ -25,6 +25,12 @@ enum class PredefinedFunctionNames(val gaplName: String) {
     MUX("mux"),
     DEMUX("demux"),
     PRIORITY("priority"),
+
+    // View conversions. Unlike the primitives above these never become netlist nodes of their own:
+    // NodeBuilder lowers each one to plain wiring between pass-through nodes.
+    PROJECT("project"),
+    OVERLAY("overlay"),
+    ZEROS("zeros"),
     ;
 
     companion object {

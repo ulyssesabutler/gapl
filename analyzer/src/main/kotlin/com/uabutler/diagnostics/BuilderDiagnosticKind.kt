@@ -113,4 +113,18 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             "Recursive function invocation involving: ${involvedFunctions.joinToString(", ")} " +
             "(a function cannot invoke itself, directly or indirectly, without changing its generic parameters - this would produce an infinitely large circuit)"
     }
+
+    data class InvalidViewFieldPath(val viewName: String, val fieldName: String, val reason: String) : BuilderDiagnosticKind {
+        override val message get() = "Field '$fieldName' of view '$viewName' does not name bits of its base: $reason"
+    }
+
+    data class OverlappingViewFields(val viewName: String, val firstField: String, val secondField: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "Fields '$firstField' and '$secondField' of view '$viewName' overlap - fields within one view must name disjoint bits " +
+            "(write overlapping interpretations as separate views of the same base)"
+    }
+
+    data class InvalidViewConversion(val conversion: String, val reason: String) : BuilderDiagnosticKind {
+        override val message get() = "Invalid use of '$conversion': $reason"
+    }
 }

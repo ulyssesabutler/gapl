@@ -86,7 +86,8 @@ object Analyzer {
             when (token.type) {
                 CSTLexer.Tokens.Interface, CSTLexer.Tokens.Wire, CSTLexer.Tokens.Function, CSTLexer.Tokens.Declare,
                 CSTLexer.Tokens.If, CSTLexer.Tokens.Else, CSTLexer.Tokens.Null, CSTLexer.Tokens.True, CSTLexer.Tokens.False,
-                CSTLexer.Tokens.In, CSTLexer.Tokens.Out, CSTLexer.Tokens.Inout, CSTLexer.Tokens.Integer ->
+                CSTLexer.Tokens.In, CSTLexer.Tokens.Out, CSTLexer.Tokens.Inout, CSTLexer.Tokens.Integer,
+                CSTLexer.Tokens.View, CSTLexer.Tokens.Of ->
                     listOf(SemanticToken(SourceSpan.of(token), SemanticTokenKind.KEYWORD))
 
                 CSTLexer.Tokens.Add, CSTLexer.Tokens.Subtract, CSTLexer.Tokens.Multiply, CSTLexer.Tokens.Divide,

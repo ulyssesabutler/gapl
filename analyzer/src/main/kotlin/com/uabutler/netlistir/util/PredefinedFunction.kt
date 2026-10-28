@@ -101,6 +101,10 @@ sealed class PredefinedFunction(
 
                     PriorityFunction(conditionalCount, inputStructure)
                 }
+                PredefinedFunctionNames.PROJECT, PredefinedFunctionNames.OVERLAY, PredefinedFunctionNames.ZEROS ->
+                    throw IllegalStateException(
+                        "${invocation.gaplFunctionName} is lowered to wiring by NodeBuilder and should never reach PredefinedFunction.search - this is a compiler bug"
+                    )
                 null -> null
             }
         }

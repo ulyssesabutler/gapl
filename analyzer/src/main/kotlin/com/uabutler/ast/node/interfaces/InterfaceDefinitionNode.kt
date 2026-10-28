@@ -28,3 +28,16 @@ data class RecordInterfaceDefinitionNode(
     val inherits: List<DefinedInterfaceExpressionNode>, // TODO: We should also support identifier expressions
     val ports: List<RecordInterfacePortNode>,
 ): InterfaceDefinitionNode
+
+/**
+ * A named selection of a base interface's bits. Lowers to an ordinary record of its fields (see
+ * ProgramContext); the base is consulted only by the `project`/`overlay` conversions.
+ */
+data class ViewInterfaceDefinitionNode(
+    override val span: SourceSpan,
+    override val identifier: IdentifierNode,
+    override val genericInterfaces: List<GenericInterfaceDefinitionNode>,
+    override val genericParameters: List<GenericParameterDefinitionNode>,
+    val base: InterfaceExpressionNode,
+    val fields: List<ViewFieldNode>,
+): InterfaceDefinitionNode
