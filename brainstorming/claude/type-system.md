@@ -1281,6 +1281,38 @@ formerly listed here, turned out to need no mechanism — see "State scoping" in
 
 ### Fork and join
 
+**Where forks and joins may happen (decided 2026-09, recorded 2026-10).** Proposed on 2026-09-17
+alongside `@valid`'s readmission; only the `@valid` half was recorded at the time.
+
+| protocol | fork | join |
+|---|---|---|
+| `@dataflow` | ordinary fanout | ordinary wiring and gates |
+| `@valid` | implicit and free — there is no `ready` | ✗ — only inside an island |
+| `@ready_valid` | **explicit only:** `fork_eager()` / `fork_lazy()` | **only at an island** (coercion B) |
+
+- **Joins happen only at islands**, and islands are explicit coercions, so there is nothing to infer. This
+  makes the "channel-merge summary" in "Islands" above unnecessary. Passing several channels into a
+  `@ready_valid` callee is not a join — the channels just connect, and the callee deals with them.
+- **No `join()` function.** The island *is* the explicit join (see the `join`/`zip` bullet below). The
+  `single` equivalent of `zip` — wait for one item from each input, emit a pair — is a coercion of a
+  pure-wiring packing function, so it needs a stdlib function, not a primitive:
+  `x, y => make_pair(t, u)@ready_valid => p`, where `make_pair` is `@dataflow a: T, b: U => o: pair(T, U)`.
+  Its contract, |a| = |b| = |o|, is automatic for `single`. Other ways of combining `single`s — first
+  arrival, arbitration, round-robin — depend on arrival order rather than values, and belong to §6's
+  `merge`/`select` family in layer 2.
+- **Multi-output islands are allowed, and their outputs behave as an eager fork**: one done bit per
+  output, and the island advances once every output has been taken or is empty. Symmetric with the
+  input side: an island's input is a join and its output is a fork, and both are explicit because the
+  coercion is. (A stricter rule — coerced callees must have exactly one output — was considered and not
+  adopted.) §10 item 8's concern, outputs at genuinely different *rates*, cannot arise with `single`
+  ports, since each output emits once per `fire`; it returns with layer 2 alongside
+  `header-parser-sketch.md` finding 6.
+- **`fork_lazy` can deadlock when its branches rejoin with unequal latency**: the short branch reaches the
+  join first, the join cannot fire without the long branch's item, so the short branch never becomes
+  ready — and a lazy fork will not deliver to the long branch until it does. `fork_eager` cannot
+  deadlock this way. Because joins only happen at islands, reconvergence is visible to the compiler, so
+  a `fork_lazy` whose branches meet at a join could be rejected; that check is deferred.
+
 - **Lazy vs. eager is a fork distinction, not a join one.** A lazy fork asserts valid only when all
   consumers are ready (cheap, couples consumers, deadlocks on unequal-latency diamonds); an eager fork
   stores one copy and tracks *n* done-bits so consumers take independently.
