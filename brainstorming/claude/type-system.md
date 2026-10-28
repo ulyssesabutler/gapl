@@ -1031,6 +1031,35 @@ function g()@ready_valid i1: wire, i2: wire => o: wire {
 }
 ```
 
+> **Syntax settled (2026-10)** — the example above is the older illustrative form. Decided:
+>
+> ```text
+> function f() i1: wire, i2: wire => o: wire { ... }      // unannotated = @dataflow
+>
+> @ready_valid function g() i1: wire, i2: wire => o: wire {
+>     i1, i2 => f()@ready_valid => o;   // an island, with a join before it
+> }
+> ```
+>
+> - **`@` + name, not keywords.** A new `@` token followed by an ordinary identifier; the resolver
+>   accepts `dataflow`, `valid`, `ready_valid`. `valid` cannot be reserved — the stdlib already has an
+>   interface `valid(T)` (`StandardLibrary.kt:45`) and it is a common field name — and nothing else
+>   gets reserved either, so the set can grow without touching the lexer.
+> - **On a definition, the annotation leads**, decorator-style. **No annotation means `@dataflow`**, so
+>   every existing function keeps its meaning and layer 3 stays purely additive. ("Every function carries
+>   a protocol" below still holds; the unannotated case simply carries `@dataflow`.)
+> - **At a call site, an annotation marks an island and nothing else.** It always names the *caller's*
+>   protocol, since a coercion converts the callee into it — so it carries no new information, and its
+>   whole job is to make the island visible. It is **required** when the callee's protocol is below the
+>   caller's, an **error** when they are equal (there is no island), and an **error** if it names anything
+>   but the caller's protocol. Every `@` at a call site is an island, and every island has one. It
+>   attaches to the call; the resolver rejects it anywhere a call is not being made.
+> - **Function-typed parameters are `@dataflow` only, for stage 2.** `operation: I => O` carries no
+>   protocol, so passing a protocol'd function as an argument is an error. Combinators over protocol'd
+>   operations belong with layer 2's combinators; if needed later, the parameter type extends to
+>   `(I => O)@valid`.
+> - **Out of scope until 2b:** how `valid`/`ready` are named as Verilog ports.
+
 - **Coercion is mandatory where protocols differ.** `i1, i2 => f() => o;` is a type error. **That error
   is the entire enforcement mechanism** — without it, islands get created invisibly and their cost
   becomes unreadable again.
