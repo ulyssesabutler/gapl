@@ -250,8 +250,8 @@ body streams past really does cost N× the flip-flops if each variant gets its o
   `keep`, which is never meaningful.
 - **Widening (view → base) is always explicit, and always says where the missing bits come from.** Two
   forms:
-  - **fill** — the gaps take a stated value, e.g. `fill(eth_hdr, t, 0)`. `left_pad` in the stdlib is the
-    existing idiom (`literal(padding, 0) => o[original:original + padding - 1]`).
+  - **fill** — the gaps take a stated value. (Not a primitive of its own: see "Conversions" below, where
+    fill is `overlay` onto `zeros(T)`.)
   - **overlay** — the gaps take their values from a base value **the user supplies**:
     `base, h => overlay(t, eth_hdr) => o`. This is in-place modification (rewrite the TTL, pass the rest
     through), and it is expected to be the most common widening in the applications.
@@ -260,8 +260,14 @@ body streams past really does cost N× the flip-flops if each variant gets its o
   "Why overlay takes the base explicitly" below.
 - **No don't-care fill in stage 1.** Under this model nothing needs one — every widening states its
   source — so stage 1 needs no X semantics in `simengine` or the IR.
-- **External (hardware) ports may not be view-typed.** The port list has to match the bus exactly. A
-  boundary keyword marks these (§4); stage 1 can use the top-level function's ports as a stand-in.
+- **External (hardware) ports may not be view-typed** — **but not enforced in stage 1** (decided
+  2026-10). The compiler has no notion of a top-level function: `ModuleBuilder.buildAllModules` builds
+  every concrete function as a module, and external Verilog picks one by name (`gapl_wrapper.v`
+  instantiates `packet_body_processor`). "Every concrete function" would ban ordinary helpers. And the
+  ban's original reason — undriven bits reaching a real bus — cannot arise under view types, since a
+  view-typed port is a fully driven record port; what remains, "the port list must match the bus", already
+  fails at Verilog elaboration against the wrapper. The ban arrives with the boundary keyword (§4), when
+  the compiler first learns which ports are external.
 
 **Undriven wires are a hard error today, at bit granularity** — `NodeBuilder.validateWiresConnected`
 (`analyzer/.../netlistir/builder/NodeBuilder.kt:121-147`) reports `UndrivenOutputPort` if *any single
@@ -387,9 +393,10 @@ machinery:
   built it is a record. Only the resolver and the two conversion primitives know the difference, which
   keeps stage 1 small.
 
-**The one exception is the top-level port ban**, which must be checked in the resolver, since after
+**The one exception is the external-port ban**, which must be checked in the resolver, since after
 lowering the builder cannot tell a view from a record. Because views compose, the check looks *inside*
-port types: a record containing an `eth_hdr` is barred too.
+port types: a record containing an `eth_hdr` is barred too. (Deferred past stage 1 along with the
+boundary keyword; see the rules above.)
 
 ### Still open for stage 1
 - ~~**Overlapping fields.**~~ **Decided 2026-10: fields within one view may not overlap.** Overlapping
