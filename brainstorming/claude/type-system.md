@@ -208,9 +208,14 @@ fields, and converting a base value to it is a projection.
 ```text
 interface axi_beat { data: wire[256]; keep: boolean[32]; }
 
-view eth_hdr  of axi_beat { dst: data[0:47]; src: data[48:95]; ethertype: data[96:111]; }
-view ipv4_hdr of axi_beat { version: data[0:3]; ihl: data[4:7]; /* ... */ }
+view eth_hdr  of axi_beat { dst: .data[0:47]; src: .data[48:95]; ethertype: .data[96:111]; }
+view ipv4_hdr of axi_beat { ihl: .data[0:3]; version: .data[4:7]; /* ... */ }
 ```
+
+(Corrected 2026-10: an earlier version had `version: data[0:3]; ihl: data[4:7]`. `version` is the *high*
+nibble of byte 0, which on AXI is bits 4–7 — an instance of the bit-order trap in §10 item 20. The
+offsets here are still positions in AXI numbering, so multi-byte fields like `ethertype` read
+byte-swapped.)
 
 **Views cost nothing.** `data[0:47]` is the same 48 wires under another name — the IR already models
 this as `WireVector.Projection` rather than a copy, and in Verilog it is a slice of the same net. No
@@ -378,10 +383,10 @@ program:        (interfaceDefinition | functionDefinition | viewDefinition)+;
   overlay-ability an invisible property of the definition, erroring far from its cause — or letting one
   field win in `overlay`, which silently discards a write. With the rule, every view supports both
   directions, and the check is a bit-range comparison at the definition site.
-- **Byte order.** On AXI, byte 0 is `tdata[7:0]`, so `ethertype: data[96:111]` reads byte-swapped
-  relative to the protocol (`0x0800` as `0x0008`). Reordering wires is free, so a field could declare
-  its byte order; otherwise every comparison with a protocol constant is a trap.
-- **Non-adjacent fields** (one field joined from several slices) — free, but extra syntax.
+- ~~**Byte and bit order.**~~ **Deferred 2026-10, as beyond the scope of views** — see §10 item 20.
+  Stage-1 view paths index the base in plain GAPL numbering, and swaps stay explicit as today.
+- ~~**Non-adjacent fields**~~ — deferred with byte order: their motivating case (IPv4's fragment offset)
+  is a bit-order artifact, contiguous in network numbering.
 - **Field types** (`dst: mac_addr` rather than `wire[48]`) — touches the deferred nominal checking.
 - **Parameterized views** (`view hdr(n: integer) of beat(n)`), with slice bounds as static expressions.
 - **Width-only checking** (§10 item 18, deferred) means `eth_hdr` connects to any 112-bit value; the
@@ -2044,6 +2049,20 @@ Ordered roughly by how much they block.
     as opt-in, never drop. Also open: whether the compiler should warn when a `seq` consumer ignores
     truncation. See "`last` returns the FSM to its initial state" in §4, and `header-parser-sketch.md`
     finding 4.
+20. **Byte and bit order of network fields.** *Deferred 2026-10, as beyond the scope of views.* AXI puts
+    byte 0 at `tdata[7:0]`; network fields are most-significant-byte first. Two consequences: multi-byte
+    fields read byte-swapped (`ethertype` `0x0800` as `0x0008`), and sub-byte fields sit in surprising
+    places — IPv4's `version` is the high nibble of byte 0 (AXI bits 4–7), and its 13-bit fragment offset
+    is AXI bits 48–52 plus 56–63, **not a contiguous slice at all**. Not a views problem: existing code
+    already swaps by hand (`netfpga/src/cms/processor.gapl:233` `reverse_endianess`, applied 16 times;
+    `crc32`'s `vector_chunk` + `reverse(wire[8], 32)`). Options considered: (a) explicit swaps, the
+    status quo, which leaves the fragment offset inexpressible as one field; (b) a per-field byte-order
+    mark, which fixes byte swapping but not sub-byte layout; (c) a "network" bit numbering in which
+    bit 0 is the MSB of byte 0, as in RFC diagrams, so every header field is a contiguous slice with
+    offsets copied from the spec — the compiler maps network bit *k* to `8·(k/8) + 7 − k%8`, a free,
+    invertible permutation. (c) fixes both and was the lean; it needs a marker scoped to byte-multiple
+    `wire[N]` paths (`.data`, not `.keep`). Adding it later is non-breaking if plain numbering stays the
+    default.
 
 ---
 
