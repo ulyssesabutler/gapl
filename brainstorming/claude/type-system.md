@@ -198,6 +198,40 @@ from building it:
 `i__024__024valid`. Tested by a `sim-test` and a `verilator-test` fixture, both `valid-channels`; every
 pre-existing output is byte-identical.
 
+**2c design (decided 2026-10, before implementation).**
+
+- **The per-instance `enable` moves to 2d.** Nothing in 2c needs freezing: islands are register-free
+  (2a), `@valid` callees only route channels and call islands so are combinational too, and the only
+  state is the done bits, which the handshake drives rather than freezes. Freezing is first needed when
+  retiming puts pipeline registers inside islands.
+- **Handshake primitives declare their combinational paths.** The loop check (and, in 2d, retiming's
+  graph converter) assumed every primitive connects all inputs to all outputs combinationally — true of
+  every pure operator, false of handshake control, which carries `valid` forward and `ready` back
+  through one node and holds state. Treated as all-to-all, two connected islands form a *false* loop
+  (island 1 `valid` → island 2 `ready` → island 1 `valid`), since `valid` never depends on `ready` except
+  through a done bit. So `PredefinedFunction` gains declared paths, defaulting to all-to-all. Rejected:
+  splitting control into direction-pure nodes with done bits as ordinary `register`s — retiming would
+  then move the done bits, which reset to 0, so moving one across logic changes behaviour; keeping them
+  inside an opaque primitive is the pinning topic 6 chose this design for.
+- **Two new primitives** (one-bit control only; data still flows through wiring and the callee):
+  - `IslandControlFunction(n inputs, m outputs)` — a `@ready_valid` island's control, for coercion B
+    (`@pure` callee), coercion C (`@valid` callee, whose own output `valid`s arrive as `produced`) and,
+    as the identity island with one input, `fork_eager`. `all_valid = ∧ in_valid` (1 if none);
+    `produced_o` = `all_valid` (B) or the callee's `valid` (C); `out_valid_o = produced_o && !done_o`;
+    `taken_o = out_valid_o && out_ready_o`; `fire = all_valid && ∧_o(done_o || taken_o || !produced_o)`;
+    every `in_ready_i = fire` (the join); `done_o ← fire ? 0 : done_o || taken_o`. Declared paths:
+    `in_valid → out_valid`, `in_valid → in_ready`, `out_ready → in_ready`, `produced → out_valid`,
+    `produced → in_ready` — **not** `out_ready → out_valid`, which only goes through `done`. With one
+    output the done bit is never set and lowering drops it.
+  - `LazyForkFunction(n)` — `out_valid_k = in_valid && ∧_{j≠k} out_ready_j`, `in_ready = ∧ out_ready`; no
+    state. Its declared paths include `out_ready → out_valid`, which is what a lazy fork is — so one whose
+    branches rejoin at a join is a genuine combinational `valid`/`ready` loop, and the existing loop check
+    reports the deadlock hazard for free.
+- **An unconsumed channel is an error in `@ready_valid`**, following the undriven-wire precedent: its
+  `ready` would have nothing to drive it. In `@valid` there is no `ready`, so an unused result (one output
+  of a two-output island, say) dangles nothing and stays legal. Considered and not taken: tying the
+  `ready` to 1, consuming and dropping the item.
+
 ---
 
 ## 2. The three layers
