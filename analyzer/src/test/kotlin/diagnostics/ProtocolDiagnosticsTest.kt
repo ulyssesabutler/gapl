@@ -31,7 +31,7 @@ class ProtocolDiagnosticsTest {
         assertNotNull(result.modules)
     }
 
-    // A combinational @dataflow helper with one input, and one with two.
+    // A combinational @pure helper with one input, and one with two.
     private val helpers = """
         function inc() i: wire[8] => o: wire[8] {
             i, literal(8, 1) => add(8) => o;
@@ -61,7 +61,7 @@ class ProtocolDiagnosticsTest {
     }
 
     @Test
-    fun `an unannotated function is @dataflow and calls @dataflow functions without annotation`() {
+    fun `an unannotated function is @pure and calls @pure functions without annotation`() {
         compilesCleanly("""
             $helpers
 
@@ -153,7 +153,7 @@ class ProtocolDiagnosticsTest {
         """.trimIndent())
 
         val kind = assertIs<BuilderDiagnosticKind.IllegalProtocolCall>(diagnostics.single().kind)
-        assertEquals(Protocol.DATAFLOW, kind.functionProtocol)
+        assertEquals(Protocol.PURE, kind.functionProtocol)
         assertEquals(Protocol.VALID, kind.calleeProtocol)
     }
 
@@ -191,7 +191,7 @@ class ProtocolDiagnosticsTest {
             $helpers
 
             function d() i: wire[8] => o: wire[8] {
-                i => inc()@dataflow => o;
+                i => inc()@pure => o;
             }
         """.trimIndent())
 
@@ -294,7 +294,7 @@ class ProtocolDiagnosticsTest {
     }
 
     @Test
-    fun `only @dataflow functions can be passed as arguments`() {
+    fun `only @pure functions can be passed as arguments`() {
         val diagnostics = compileFullExpectingDiagnostics(
             """
                 function inc() i: wire[8] => o: wire[8] {

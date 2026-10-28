@@ -144,7 +144,7 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
     ) : BuilderDiagnosticKind {
         override val message get() =
             "$functionProtocol function '$functionName' cannot call $calleeProtocol function '$calleeName' - " +
-            "a callee's protocol must be at or below its caller's (@dataflow < @valid < @ready_valid)"
+            "a callee's protocol must be at or below its caller's (@pure < @valid < @ready_valid)"
     }
 
     data class MissingCoercion(
@@ -182,7 +182,7 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
     data class JoinInValidFunction(val functionName: String, val calleeName: String, val inputCount: Int) : BuilderDiagnosticKind {
         override val message get() =
             "'$calleeName' takes $inputCount input channels, which is a join - not allowed inside @valid function '$functionName' " +
-            "(put the fork-and-join inside a single-input @dataflow island)"
+            "(put the fork-and-join inside a single-input @pure island)"
     }
 
     data class ImplicitFork(val functionName: String, val channel: String, val consumerCount: Int) : BuilderDiagnosticKind {
@@ -193,7 +193,7 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
 
     data class ProtocolFunctionArgument(val functionName: String, val protocol: Protocol) : BuilderDiagnosticKind {
         override val message get() =
-            "Only @dataflow functions can be passed as arguments, but '$functionName' is $protocol"
+            "Only @pure functions can be passed as arguments, but '$functionName' is $protocol"
     }
 
     data class IslandContainsRegister(val calleeName: String, val registerFunctionName: String) : BuilderDiagnosticKind {

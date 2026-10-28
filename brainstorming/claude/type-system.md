@@ -20,7 +20,7 @@ roadmap). Read this one first.
 > the *largest* single win — the roughly 5× from packet-level pipelining — is **not** among them: it
 > comes from deleting `axis_mutual_exclusion`, which needs only per-lifecycle `scan` reset from layer 2.
 >
-> **Correction (2026-10):** "needs only layer 2" predates the rule that `@dataflow` means every port is
+> **Correction (2026-10):** "needs only layer 2" predates the rule that `@pure` means every port is
 > `single` (§5). A function with a `stream` port must be `@valid` or `@ready_valid`, so layer 2's streams
 > need layer 3 underneath them. That is why layer 3 is built first — see "Build order" in §1.
 
@@ -94,7 +94,7 @@ only its interface types?** If yes, the semantics are right. If no, the types ar
 4. **Temporal compatibility is checked, not assumed.** Today only connection *shape* is checked.
 5. **Flow control specified once, not per module.**
 6. **Protocols are user-definable**, not a fixed builtin menu. (Standing item in `future-work.md`.)
-   **Deferred 2026-09** — the set is closed at `@dataflow` and `@ready_valid` for now; see §5.
+   **Deferred 2026-09** — the set is closed at `@pure` and `@ready_valid` for now; see §5.
 7. **No silent hardware.** Whatever the compiler generates from a type should be predictable and its
    cost reportable. This is a *constraint on* goal 5, and the goal most in tension with the rest.
 
@@ -127,7 +127,7 @@ within each stage.)
    post-retiming delay pass (§5). Independent of views; they share only the grammar. Useful on its own
    for block-at-a-time kernels such as AES-CTR, though not yet for packet kernels.
 3. **Layer 2** — datatypes, lifecycles, `last` and the branch tag, combinators (§4, §6). Must follow
-   layer 3: `@dataflow` means every port is `single`, so a `stream` port needs `@valid` or
+   layer 3: `@pure` means every port is `single`, so a `stream` port needs `@valid` or
    `@ready_valid` underneath it. Nothing built in stage 2 should need redoing, since a `single` port
    is the one-beat case of a datatype. This is the stage that delivers the ~5× from deleting
    `axis_mutual_exclusion`, and lifts the six restrictions listed at the top of this document.
@@ -140,7 +140,7 @@ Stages 1 and 2 are independent and could run in either order; this is the chosen
 
 | substage | scope | tested by |
 |---|---|---|
-| **2a — describe & check** | annotation grammar (unannotated = `@dataflow`); the coercion matrix, mandatory coercion, no join in `@valid`, `@valid` ≤ 1 input port, no implicit fork in `@ready_valid`, islands register-free (transitively). **No codegen change.** | analyzer diagnostics tests; byte-identical regression output |
+| **2a — describe & check** | annotation grammar (unannotated = `@pure`); the coercion matrix, mandatory coercion, no join in `@valid`, `@valid` ≤ 1 input port, no implicit fork in `@ready_valid`, islands register-free (transitively). **No codegen change.** | analyzer diagnostics tests; byte-identical regression output |
 | **2b — `@valid` end to end, unretimed** | `valid` wires on ports; coercion A at latency 0 (`valid` passes through); implicit forks; `valid` ports in Verilog and `simgen` | `sim-test` fixtures with gapped input; Verilator on unretimed output |
 | **2c — `@ready_valid` end to end, unretimed** | `ready` wires; coercions B and C (joins; freezing via a per-instance `enable`); multi-output islands with done bits; `fork_eager`/`fork_lazy`; `make_pair` | `sim-test` with randomised backpressure, checking nothing is lost or duplicated; Verilator |
 | **2d — retiming** | islands survive flattening as boundaries; post-retiming `valid` delay lines shifting on the island enable | Verilator on retimed variants of the 2b/2c fixtures |
@@ -148,7 +148,7 @@ Stages 1 and 2 are independent and could run in either order; this is the chosen
 
 2a first because it changes no hardware and settles syntax before anything depends on it; 2b before 2c
 because `@valid` has no `ready` and no freezing, so it exercises the wire representation and port
-conventions alone; retiming late because islands have latency 0 before it (§6, "`@dataflow` is
+conventions alone; retiming late because islands have latency 0 before it (§6, "`@pure` is
 combinational"), so 2b and 2c are complete without it. 2e needs only 2b and may move ahead of 2c.
 
 **Today `enable` is wired straight through** — every instance receives its parent's `enable`
@@ -167,7 +167,7 @@ contains):
 - per function — a `@valid` function with more than one input port; an implicit fork in a
   `@ready_valid` body (a channel reaching more than one call or output port, looking through declared
   nodes);
-- per program, after the build loop (`ModuleBuilder.validateIslandsRegisterFree`) — a `@dataflow` island
+- per program, after the build loop (`ModuleBuilder.validateIslandsRegisterFree`) — a `@pure` island
   containing a register anywhere beneath it;
 - per argument (`ProgramContext`) — a protocol'd function passed as a function-typed argument.
 
@@ -628,7 +628,7 @@ Under an implicit outer stream there is nowhere to attach the longer scope. Cons
 - `scan` works over both. That gives CMS's persistent sketch a real type: a `scan` over an infinite
   stream, replacing today's raw `register(sketch4(16))` at `netfpga/src/cms/processor.gapl:29`.
 - **`single` over an infinite lifetime lowers to a sticky latch** — it participates in the join until it
-  first arrives, then latches and drops out, behaving as `@dataflow` from then on. Under `@ready_valid`
+  first arrives, then latches and drops out, behaving as `@pure` from then on. Under `@ready_valid`
   the consumer simply stalls until configured, so there is no ordering obligation to check.
 - **The invocation boundary is the outermost bounded lifecycle.** This answers `protocols.md`'s
   "who controls the FSM, i1 or i2?" A top-level module whose streams are all infinite is a standing
@@ -962,20 +962,20 @@ Three protocols. (This section originally opened "Two protocols only"; `@valid` 
 
 | | producer may stall | consumer may stall | may join |
 |---|---|---|---|
-| `@dataflow` | no | no | n/a — no extent |
+| `@pure` | no | no | n/a — no extent |
 | `@valid` | yes | no | **no** |
 | `@ready_valid` | yes | yes | yes |
 
 Cells of a 2×2 defined by **who may stall**. The remaining cell (consumer-only) is degenerate: a
 producer that can never stall means data is always available, so the consumer gates its own state and
-uses `@dataflow`.
+uses `@pure`.
 
 **Three protocols, and they correspond exactly to §2's three regimes** — which is the strongest
 argument that this is the right number:
 
 | §2 regime | protocol |
 |---|---|
-| static extent, no backpressure — "the FSM evaporates at compile time" | `@dataflow` |
+| static extent, no backpressure — "the FSM evaporates at compile time" | `@pure` |
 | data-dependent extent, no backpressure — "real FSM register, no handshake" | `@valid` |
 | data-dependent extent, backpressure — "FSM + handshake + buffers" | `@ready_valid` |
 
@@ -984,7 +984,7 @@ With only two protocols, one regime had no name.
 ### `@valid` — dropped, then readmitted with a rule
 
 **Readmitted 2026-09, under one restriction: a `@valid` function may fork but may not join.** To fork
-*and* join you create an island, exactly as with `@dataflow`. The original rejection (preserved below,
+*and* join you create an island, exactly as with `@pure`. The original rejection (preserved below,
 because its analysis is what the restriction is answering) held that "every one of its correctness
 properties is an unchecked obligation." The restriction changes the status of three of the four:
 
@@ -1013,7 +1013,7 @@ the user*; this is *expose it with the dangerous compositions forbidden*.
 protocol checks, and both need only protocol-per-function and datatype-per-channel, which are known after
 resolution — so it can run early with a diagnostic pointing at the offending call. The rule: *inside a
 `@valid` function's body, no call may take more than one input channel.* Fork-and-join is not banned
-outright; it goes **inside a single-input `@dataflow` island**, where there is no handshake at all, so
+outright; it goes **inside a single-input `@pure` island**, where there is no handshake at all, so
 forking and recombining are ordinary wires and gates rather than a join in the handshake sense. The
 island's boundary has one input and no join.
 
@@ -1028,7 +1028,7 @@ efficiency from `@ready_valid` automatically — less urgent once you can simply
 speaks. It is excluded from the surface language because **every one of its correctness properties is an
 unchecked obligation**: init before stream, equal-latency forks, at most one stream input, nothing
 downstream ever stalls. None is checkable without static latency analysis, and the failure mode is
-silently dropped data. `@dataflow` and `@ready_valid` are each safe by construction.
+silently dropped data. `@pure` and `@ready_valid` are each safe by construction.
 
 It survives in the NetFPGA boundary wrapper, written once, where the "downstream never stalls"
 assumption is stated in one place rather than implied everywhere.
@@ -1045,7 +1045,7 @@ language.
 ### The annotation goes on the function; call sites coerce
 
 ```text
-function f()@dataflow    i1: wire, i2: wire => o: wire { ... }
+function f()@pure    i1: wire, i2: wire => o: wire { ... }
 
 function g()@ready_valid i1: wire, i2: wire => o: wire {
     i1, i2 => f()@ready_valid => o;   // coercion: an island, with a join before it
@@ -1055,7 +1055,7 @@ function g()@ready_valid i1: wire, i2: wire => o: wire {
 > **Syntax settled (2026-10)** — the example above is the older illustrative form. Decided:
 >
 > ```text
-> function f() i1: wire, i2: wire => o: wire { ... }      // unannotated = @dataflow
+> function f() i1: wire, i2: wire => o: wire { ... }      // unannotated = @pure
 >
 > @ready_valid function g() i1: wire, i2: wire => o: wire {
 >     i1, i2 => f()@ready_valid => o;   // an island, with a join before it
@@ -1063,50 +1063,59 @@ function g()@ready_valid i1: wire, i2: wire => o: wire {
 > ```
 >
 > - **`@` + name, not keywords.** A new `@` token followed by an ordinary identifier; the resolver
->   accepts `dataflow`, `valid`, `ready_valid`. `valid` cannot be reserved — the stdlib already has an
+>   accepts `pure`, `valid`, `ready_valid`. `valid` cannot be reserved — the stdlib already has an
 >   interface `valid(T)` (`StandardLibrary.kt:45`) and it is a common field name — and nothing else
 >   gets reserved either, so the set can grow without touching the lexer.
-> - **On a definition, the annotation leads**, decorator-style. **No annotation means `@dataflow`**, so
+> - **On a definition, the annotation leads**, decorator-style. **No annotation means `@pure`**, so
 >   every existing function keeps its meaning and layer 3 stays purely additive. ("Every function carries
->   a protocol" below still holds; the unannotated case simply carries `@dataflow`.)
+>   a protocol" below still holds; the unannotated case simply carries `@pure`.)
 > - **At a call site, an annotation marks an island and nothing else.** It always names the *caller's*
 >   protocol, since a coercion converts the callee into it — so it carries no new information, and its
 >   whole job is to make the island visible. It is **required** when the callee's protocol is below the
 >   caller's, an **error** when they are equal (there is no island), and an **error** if it names anything
 >   but the caller's protocol. Every `@` at a call site is an island, and every island has one. It
 >   attaches to the call; the resolver rejects it anywhere a call is not being made.
-> - **Function-typed parameters are `@dataflow` only, for stage 2.** `operation: I => O` carries no
+> - **Function-typed parameters are `@pure` only, for stage 2.** `operation: I => O` carries no
 >   protocol, so passing a protocol'd function as an argument is an error. Combinators over protocol'd
 >   operations belong with layer 2's combinators; if needed later, the parameter type extends to
 >   `(I => O)@valid`.
 > - **Out of scope until 2b:** how `valid`/`ready` are named as Verilog ports.
+>
+> **Renamed `@dataflow` → `@pure` (2026-10).** Everything in this document, including text written
+> before the rename, now says `@pure`. The reason: once layer 2 forbids explicit registers in user code
+> (§6, "`@pure` is combinational"), every user function in this protocol is a pure function of its inputs
+> each cycle. Considered and not taken: `@lockstep` (names the timing property — every port advances
+> every cycle — and has no exceptions) and `@bare` (names it by its handshake wires, matching `@valid` /
+> `@ready_valid`). Known exceptions to the literal reading, all temporary or internal: the `register`
+> primitive and the stdlib lifecycle FSM are `@pure` but stateful, and until layer 2 so is existing user
+> code that still uses `register`.
 
 - **Coercion is mandatory where protocols differ.** `i1, i2 => f() => o;` is a type error. **That error
   is the entire enforcement mechanism** — without it, islands get created invisibly and their cost
   becomes unreadable again.
-- **Upgrade only.** `@dataflow => @ready_valid` is always sound. The reverse requires proving the
+- **Upgrade only.** `@pure => @ready_valid` is always sound. The reverse requires proving the
   function never stalls, so it is illegal.
-- One definition, many protocols: `add` is written once as `@dataflow` and instantiated as
-  `add()@dataflow` in a datapath or `add()@ready_valid` at a boundary. This is layer-3 swappability
+- One definition, many protocols: `add` is written once as `@pure` and instantiated as
+  `add()@pure` in a datapath or `add()@ready_valid` at a boundary. This is layer-3 swappability
   realized syntactically.
 
 ### The coercion matrix (decided 2026-10)
 
-The protocols are totally ordered by what they tolerate — `@dataflow` (no gaps, no stalls) < `@valid`
+The protocols are totally ordered by what they tolerate — `@pure` (no gaps, no stalls) < `@valid`
 (gaps) < `@ready_valid` (gaps and stalls) — and **a call is legal exactly when the callee's protocol is
 at or below the caller's.** This generalises "upgrade only" to all three. A callee can always be *made*
 to tolerate more, by freezing it; nothing can make a callee *produce* less — gaps cannot be hidden from a
 consumer that assumes none, and stalls cannot be absorbed by a consumer that cannot stall.
 
-| caller ↓ / callee → | `@dataflow` | `@valid` | `@ready_valid` |
+| caller ↓ / callee → | `@pure` | `@valid` | `@ready_valid` |
 |---|---|---|---|
-| **`@dataflow`** | — | ✗ gaps would read as data | ✗ |
+| **`@pure`** | — | ✗ gaps would read as data | ✗ |
 | **`@valid`** | ✓ A | — | ✗ its stalls would drop data |
 | **`@ready_valid`** | ✓ B | ✓ C | — |
 
-- **A — `@dataflow` in `@valid`.** The island runs every cycle and `valid_out = delay(valid_in,
+- **A — `@pure` in `@valid`.** The island runs every cycle and `valid_out = delay(valid_in,
   latency)`. The no-join rule limits the callee to one input channel.
-- **B — `@dataflow` in `@ready_valid`.** The island below: a join over the input `valid`s, the island
+- **B — `@pure` in `@ready_valid`.** The island below: a join over the input `valid`s, the island
   frozen while its output is stalled, and `valid` carried through a delay line frozen the same way.
 - **C — `@valid` in `@ready_valid`.** Freeze the callee while its output is stalled, so it never needs to
   stall itself; `valid` comes from the callee, and `ready_in` is the same not-stalled signal.
@@ -1116,7 +1125,7 @@ consumer that assumes none, and stalls cannot be absorbed by a consumer that can
 `@ready_valid`, its own `ready`); a function with several input ports joins them when it fires. Already
 implied by the island example below, which joins `f`'s two ports, and by `@valid`'s "at most one stream
 input" rule — so **a `@valid` function has at most one input port**. A multi-operand computation in a
-`@valid` context bundles its operands into one record, or happens inside a `@dataflow` island (which is
+`@valid` context bundles its operands into one record, or happens inside a `@pure` island (which is
 where fork-and-join goes anyway).
 
 **Per-port protocol overrides are rejected, not merely deferred** (clarified 2026-09; an earlier draft
@@ -1124,7 +1133,7 @@ of this section said both that "mixed protocols across ports are fine and common
 were "not supported yet," which contradicted itself).
 
 The motivating case was a configuration value alongside a stream — seemingly a port that wants
-`@dataflow` while its neighbour wants `@ready_valid`. Supporting that introduced problems of its own,
+`@pure` while its neighbour wants `@ready_valid`. Supporting that introduced problems of its own,
 and the case turns out to be served by **lifecycle choice instead of protocol choice**: a configuration
 value that persists for the life of the application is a `single` over an `infinite` lifetime, which §4
 already lowers to a sticky latch — it participates in the join until it first arrives, then latches and
@@ -1135,16 +1144,16 @@ in layer 2.
 
 **Every function carries a protocol.** There is no unannotated state.
 
-**Every existing GAPL function is already `@dataflow`**, and this is not a coincidence to be checked
+**Every existing GAPL function is already `@pure`**, and this is not a coincidence to be checked
 case by case — existing code uses bare interfaces throughout, bare interfaces are implicitly `single`
-(§4), and `@dataflow` requires exactly that every port be `single` (§6). So **layer 3 is purely
+(§4), and `@pure` requires exactly that every port be `single` (§6). So **layer 3 is purely
 additive: no existing program changes meaning.** That is worth protecting as the design proceeds.
 
 **`oneach` is transparent.** It emits no hardware of its own, and it inherits the protocol of the
 function it wraps — which has temporal extent and is therefore `@ready_valid`.
 
-**The protocol set is closed: `@dataflow`, `@valid` and `@ready_valid`, hardcoded.** (Originally written
-as just `@dataflow` and `@ready_valid`, before `@valid` was readmitted.) This **defers goal 6** from
+**The protocol set is closed: `@pure`, `@valid` and `@ready_valid`, hardcoded.** (Originally written
+as just `@pure` and `@ready_valid`, before `@valid` was readmitted.) This **defers goal 6** from
 §1 ("protocols are user-definable, not a fixed builtin menu"), which is also a standing item in
 `brainstorming/future-work.md` as "how to allow the user to define arbitrary handshakes." Recorded as a
 deliberate deferral rather than left to silently contradict the goal list.
@@ -1160,7 +1169,7 @@ A coercion site is an **island**: a region that freezes as a unit. The boundary 
 which matters because the out-coercion needs uniform latency across all paths — and
 `MinimalRegisterSolver`'s `VirtualIONode` constraint already gives exactly that per module.
 
-**So creating an island means writing a `@dataflow` function and promoting it inside a `@ready_valid`
+**So creating an island means writing a `@pure` function and promoting it inside a `@ready_valid`
 one** (confirmed 2026-09). There is no separate island-declaration mechanism; function boundaries are
 the only boundaries.
 
@@ -1170,9 +1179,9 @@ and doubles as the foreign-IP escape hatch §6 requires. An island marks a *prot
 is an internal concern. The two coincide at the top-level module, which is both, but they answer
 different questions and merging them would be confusing later.
 
-- **In-coercion** (`@ready_valid → @dataflow`) is the **join**: `fire = (∧ valid_i) && ready_out`,
+- **In-coercion** (`@ready_valid → @pure`) is the **join**: `fire = (∧ valid_i) && ready_out`,
   `ready_i = fire`. Its arity is the coerced function's input port count — visible in the signature.
-- **Out-coercion** (`@dataflow → @ready_valid`) is `valid_out = delay(fire, latency)`, plus
+- **Out-coercion** (`@pure → @ready_valid`) is `valid_out = delay(fire, latency)`, plus
   `enable = fire` on every register in the island.
 
   > **Corrected (2026-10): the enable is `ready_out || !valid_out`, not `fire`.** `fire` requires a *new*
@@ -1186,7 +1195,7 @@ different questions and merging them would be confusing later.
   > taking `∧ valid_i` in. With latency 0 there are no registers, and this reduces to the join alone.
   > The same enable freezes a `@valid` callee in coercion C.
 
-**Islands are rate-preserving by construction, and this enforces itself.** A `@dataflow` function cannot
+**Islands are rate-preserving by construction, and this enforces itself.** A `@pure` function cannot
 contain a `fold` or `regroup`, because those are lifecycle-aware and need a handshake. So
 `valid_out = delay(fire, latency)` is always correct without a separate check.
 
@@ -1215,7 +1224,7 @@ summaries.
   pipeline, so the `VirtualIONode` lag constraint keeps them aligned with the data they qualify.
 
   > **The stated reason is retired (2026-09); the conclusion is weaker than it looks.** Retiming happens
-  > *inside* islands, islands are `@dataflow` and therefore have no `valid`/`last` at all, and the
+  > *inside* islands, islands are `@pure` and therefore have no `valid`/`last` at all, and the
   > out-coercion **synthesises** `valid_out = delay(fire, latency)` from the island's known latency. So
   > nothing travels through retimed logic needing alignment, and "materialize early to stay aligned" is
   > not a requirement. The hand-written precedent is `cms/processor.gapl:53-55`, which delays
@@ -1230,7 +1239,7 @@ summaries.
   > conflating them causes confusion. The **wrapper's** enable (`processor_controller`) is one signal
   > for the entire kernel, hand-written, and is the thing this design deletes — it is why
   > `axis_mutual_exclusion` has to serialize packets around the kernel. The **island** enable is
-  > compiler-generated per `@dataflow` function. Same mechanism, radically different granularity; the
+  > compiler-generated per `@pure` function. Same mechanism, radically different granularity; the
   > second is what replaces the first.
 
 - **Elastic buffers as the *general* retiming primitive: considered and deferred (2026-09).** The
@@ -1317,12 +1326,12 @@ both **muxes on the register's input**, so the register stays ordinary and its o
 *don't retime me* — and because the FSM is a function, that pinning is expressible per-module rather
 than per-register.
 
-Note a stateful function is still `@dataflow`: the rule is that every *port* is `single`, which says
+Note a stateful function is still `@pure`: the rule is that every *port* is `single`, which says
 nothing about registers inside.
 
 > **Narrowed (2026-10).** True of the stdlib lifecycle FSM, which is plumbing the compiler places inside
 > protocol'd functions and is never coerced into an island. For user code the rule is now stronger:
-> **`@dataflow` functions are combinational** — see "`@dataflow` is combinational" in §6.
+> **`@pure` functions are combinational** — see "`@pure` is combinational" in §6.
 
 **`fire` is §2's layer-2/layer-3 interface, not a channel wire.** It is one AND gate computed locally at
 each consumer — `fire = valid` under `@valid`, `fire = valid && ready` under `@ready_valid`. Feeding the
@@ -1356,7 +1365,7 @@ alongside `@valid`'s readmission; only the `@valid` half was recorded at the tim
 
 | protocol | fork | join |
 |---|---|---|
-| `@dataflow` | ordinary fanout | ordinary wiring and gates |
+| `@pure` | ordinary fanout | ordinary wiring and gates |
 | `@valid` | implicit and free — there is no `ready` | ✗ — only inside an island |
 | `@ready_valid` | **explicit only:** `fork_eager()` / `fork_lazy()` | **only at an island** (coercion B) |
 
@@ -1366,7 +1375,7 @@ alongside `@valid`'s readmission; only the `@valid` half was recorded at the tim
 - **No `join()` function.** The island *is* the explicit join (see the `join`/`zip` bullet below). The
   `single` equivalent of `zip` — wait for one item from each input, emit a pair — is a coercion of a
   pure-wiring packing function, so it needs a stdlib function, not a primitive:
-  `x, y => make_pair(t, u)@ready_valid => p`, where `make_pair` is `@dataflow a: T, b: U => o: pair(T, U)`.
+  `x, y => make_pair(t, u)@ready_valid => p`, where `make_pair` is `@pure a: T, b: U => o: pair(T, U)`.
   Its contract, |a| = |b| = |o|, is automatic for `single`. Other ways of combining `single`s — first
   arrival, arbitration, round-robin — depend on arrival order rather than values, and belong to §6's
   `merge`/`select` family in layer 2.
@@ -1424,13 +1433,13 @@ Four requirements before restricting it:
 Deferred but eventually needed: a time-multiplexing combinator with an explicit initiation interval,
 which is where resource sharing gets recovered.
 
-### `@dataflow` is combinational (decided 2026-10)
+### `@pure` is combinational (decided 2026-10)
 
-The restriction above, stated as the rule it amounts to: **`@dataflow` functions are combinational.
+The restriction above, stated as the rule it amounts to: **`@pure` functions are combinational.
 Registers exist only inside the stdlib (combinators, the lifecycle FSM) and inside protocol'd
 primitives.** All pipelining comes from retiming — already true of MD5, which has no `register` at all.
 
-**Why it matters for layer 3:** it settles what an island's latency is. An island — a `@dataflow`
+**Why it matters for layer 3:** it settles what an island's latency is. An island — a `@pure`
 function coerced into `@valid` or `@ready_valid` — has latency **0 before retiming**, which is what
 `simengine` sees, and afterwards exactly what retiming created; starting from zero on every path, that is
 well-defined per input–output pair, and the post-retiming delay pass reads it off. No uniformity check,
@@ -1440,7 +1449,7 @@ silently; the second violates goal 7.)
 **Enforcement is staged.** The full rule lands with layer 2, in the same change as `scan`, which is what
 replaces the registers in today's application code. Until then — i.e. in stage 2 — only the narrower
 consequence is checked: **a function coerced into an island must be register-free**, transitively.
-Register-using code keeps working exactly as today while everything around it stays `@dataflow`.
+Register-using code keeps working exactly as today while everything around it stays `@pure`.
 
 **Every current use of a register has a home** (checked 2026-10, when asked whether anything would block
 enforcement — nothing does, but three homes are undesigned):
@@ -1458,7 +1467,7 @@ enforcement — nothing does, but three homes are undesigned):
 
 Two of these fit the rule without special cases. **Hard macros** have real fixed latency, so they are
 naturally `@valid`/`@ready_valid` primitives with a declared latency — and the coercion matrix (§5)
-already forbids calling one from `@dataflow`. **Every-clock state** has a plausible answer: a zero-input,
+already forbids calling one from `@pure`. **Every-clock state** has a plausible answer: a zero-input,
 always-valid source with a `standing_scan` over it is a counter that advances every cycle. The subtlety is
 that inside a `@ready_valid` island a downstream stall would freeze it, and a refill timer must keep
 counting through stalls — so it has to live where nothing stalls, in `@valid` or as its own island.
@@ -1494,10 +1503,10 @@ scan_with_tail(T, U, S: interface,
   draft claimed rate-*reducing* combinators "force at least `@valid`-like intermittency, hence
   `@ready_valid`" — the conclusion is usually right but the reason was wrong, corrected 2026-09.
 
-  **`@dataflow` requires every port to be `single`** (bare interfaces being implicitly `single`, §4).
+  **`@pure` requires every port to be `single`** (bare interfaces being implicitly `single`, §4).
   The interlock with layer 2 is then exact:
 
-  - `@dataflow` ⟹ no temporal extent ⟹ no layer-2 state to protect ⟹ `fire` is trivial.
+  - `@pure` ⟹ no temporal extent ⟹ no layer-2 state to protect ⟹ `fire` is trivial.
   - extent ⟹ a layer-2 FSM exists ⟹ its state must not advance on a non-beat cycle ⟹ `fire` is
     required ⟹ a handshake is required.
 
@@ -1505,20 +1514,20 @@ scan_with_tail(T, U, S: interface,
   it survives only in the hand-written wrapper, where the kernel takes `enable` and no `ready`.
 
   **The implication runs one way only.** Extent forces `@ready_valid`; an all-`single` signature does
-  *not* force `@dataflow`, since a single-beat function containing a buffer may legitimately not be
+  *not* force `@pure`, since a single-beat function containing a buffer may legitimately not be
   ready — §5's own `function g()@ready_valid i1: wire, i2: wire => o: wire` is the example. So this is a
-  legality constraint on `@dataflow`, not a derivation of the protocol.
+  legality constraint on `@pure`, not a derivation of the protocol.
 
   **Consequently the fold family is two functions with a space/time conversion between them**, not a
-  spectrum of protocols. The `@dataflow` fold is the *vector* fold — `fold() i: single(T),
+  spectrum of protocols. The `@pure` fold is the *vector* fold — `fold() i: single(T),
   v: single(U[s]) => o: single(T)`, everything present at once, which is the stdlib's existing
   `combinational_vector_fold`. Anything with temporal extent, `repeat(T, n)` included, is
   `@ready_valid`. You reach the first from the second by converting time into space, which is a
   `regroup`-shaped operation — Aetherling's space-time types (§9), here as a conversion step rather
   than a third protocol.
 
-  This also keeps §5's islands argument intact: a `@dataflow` function cannot contain a stream `fold` or
-  `regroup`, because those require extent on a port and a `@dataflow` function has none. It may contain
+  This also keeps §5's islands argument intact: a `@pure` function cannot contain a stream `fold` or
+  `regroup`, because those require extent on a port and a `@pure` function has none. It may contain
   a vector fold, which preserves the rate trivially.
 - **A combinator's function parameter may not stall — in v1.** Lifecycle position reaches such
   functions as *data*, via the stdlib's existing `last(T)` and `valid(U)` record interfaces, never as
@@ -1526,13 +1535,13 @@ scan_with_tail(T, U, S: interface,
   a rate contract at all: if `scan`'s `step` could stall, `|o| = |i|` stops holding.
 
   **Corrected (2026-09).** An earlier draft of this document stated the rule as "every function
-  parameter is pure `@dataflow`," which bundled two claims and justified only one. *Must not stall* is
+  parameter is pure `@pure`," which bundled two claims and justified only one. *Must not stall* is
   justified as above. *Must be beat-level rather than lifecycle-level* is not justified anywhere, and it
   is already false of this design — `oneach(f)` takes `f: stream(T) => stream(U)`, a whole pipeline.
   Nothing requires a combinator's function parameter to be beat-level.
 
   Moreover the surviving half is the same v1 simplification as "`map` requires a combinational `op`":
-  non-stalling is only needed to keep a combinator usable in a `@dataflow` context, since under
+  non-stalling is only needed to keep a combinator usable in a `@pure` context, since under
   `@ready_valid` a stalling step merely propagates backpressure and slows the combinator down. **The two
   restrictions should lift together when layer 3 lands.**
 - **`map` requires a combinational `op`** — **as a v1 simplification, not a permanent rule.** Non-zero
@@ -1615,7 +1624,7 @@ stdlib-restricted, so every lifecycle-scoped register lives inside a stdlib comb
 is applied to one specific channel, whose lifecycle FSM provides `first`; and lifecycle reset is an
 init-select mux driven by `first`. So an accumulator's reset is wired to the FSM of the channel its
 combinator consumes, and *that* is its scope. A standing scan over `infinite(T)` connects to an FSM
-whose `first` fires once, at hardware reset. Pipeline registers inside `@dataflow` islands get no
+whose `first` fires once, at hardware reset. Pipeline registers inside `@pure` islands get no
 lifecycle reset, correctly, since they hold in-flight data. The answer is always unambiguous because of
 §4's rule that two bounded `stream` inputs to one function is a type error — a combinator has at most
 one bounded-lifecycle input. Under nesting, an outer combinator's effective `fire` is "an inner
@@ -1781,8 +1790,8 @@ Recorded so they are not re-derived.
 |---|---|
 | Implicit lifting of `f: T => U` to any lifecycle | Unsound for non-zero-latency `f`, and silently inserts control-delay registers. Replaced by explicit `map` with a combinational-only `op`. |
 | Leaves declared `single(T) => single(U)` | Rewrites every signature; mislabels functions like `left_rotate` that are called from inside other pure functions. Dissolved by bare-means-single. |
-| Higher-order wrapper for the `@dataflow → @ready_valid` coercion | Arity problem (one variant per shape), forces restructuring into a function purely to mark a boundary, and still does not expose the buffering knob. Replaced by call-site coercion. |
-| Inferring islands by transitive `@dataflow` connectivity + LSP inlay hints for visibility | Developers do not read warnings; a cost with throughput consequences must be visible in the source. Replaced by mandatory call-site coercion. |
+| Higher-order wrapper for the `@pure → @ready_valid` coercion | Arity problem (one variant per shape), forces restructuring into a function purely to mark a boundary, and still does not expose the buffering knob. Replaced by call-site coercion. |
+| Inferring islands by transitive `@pure` connectivity + LSP inlay hints for visibility | Developers do not read warnings; a cost with throughput consequences must be visible in the source. Replaced by mandatory call-site coercion. |
 | `lazy_join` / `eager_join` as separate primitives | Lazy/eager is a *fork* distinction. "Eager join" is `join ∘ fifo-per-input`. |
 | ~~`@valid` as a surface protocol~~ | **Reversed 2026-09.** Rejected because every safety property was an unchecked obligation with silent data loss as the failure mode — but restricting it to *fork, never join* turns three of the four obligations into rules or checkable conditions. See §5. |
 | Padding produces `seq { message; footer }` | Wrong for MD5 — padding starts mid-beat, output blocks are homogeneous, only the *count* is data-dependent. |
@@ -2209,7 +2218,7 @@ Ordered roughly by how much they block.
    budget a good error message.
 10. **Time-multiplexing combinator** with an explicit initiation interval. Everything currently unrolls
     spatially; this is where resource sharing gets recovered.
-11. **The `@ready_valid` → `@valid`/`@dataflow` downgrade pass** (§5). Without it, the first end-to-end
+11. **The `@ready_valid` → `@valid`/`@pure` downgrade pass** (§5). Without it, the first end-to-end
     comparison against hand-written Verilog will look bad for a non-fundamental reason.
     **Downgraded in urgency (2026-09):** `@valid` is now a surface protocol, so its efficiency can be
     written directly rather than recovered automatically. The pass remains desirable — the compiler

@@ -81,7 +81,7 @@ Two consequences: `fold` requires a *bounded* stream (an `infinite` one never re
 fold over it never emits — a type error), while `scan` works over both. That gives CMS's persistent
 sketch a real type: a `scan` over an infinite stream. And `single` over an infinite lifetime lowers to
 a **sticky latch** — it participates in the join until it first arrives, then latches and drops out,
-behaving as `@dataflow` from then on.
+behaving as `@pure` from then on.
 
 ## Layer 3 — **NEW**
 
@@ -89,7 +89,7 @@ Two protocols only.
 
 | | producer may stall | consumer may stall |
 |---|---|---|
-| `@dataflow` | no | no |
+| `@pure` | no | no |
 | `@ready_valid` | yes | yes |
 
 `@valid` (producer-only stalling) is deliberately excluded from the surface language: every one of its
@@ -100,7 +100,7 @@ degenerate.
 **The annotation goes on the function, and a call site may coerce.**
 
 ```text
-function f()@dataflow    i1: wire, i2: wire => o: wire { ... }
+function f()@pure    i1: wire, i2: wire => o: wire { ... }
 
 function g()@ready_valid i1: wire, i2: wire => o: wire {
     i1, i2 => f()@ready_valid => o;   // coercion: this becomes an island, with a join before it
@@ -112,10 +112,10 @@ Rules:
 - **Coercion is mandatory where protocols differ.** `i1, i2 => f() => o;` is a type error. That error
   is the entire enforcement mechanism — without it, islands get created invisibly and their cost
   becomes unreadable again.
-- **Upgrade only.** `@dataflow => @ready_valid` is always sound. The reverse requires proving the
+- **Upgrade only.** `@pure => @ready_valid` is always sound. The reverse requires proving the
   function never stalls, so it's illegal.
-- One definition, many protocols: `add` is written once as `@dataflow` and instantiated as
-  `add()@dataflow` inside a datapath or `add()@ready_valid` at a boundary.
+- One definition, many protocols: `add` is written once as `@pure` and instantiated as
+  `add()@pure` inside a datapath or `add()@ready_valid` at a boundary.
 
 ## Islands
 
@@ -123,12 +123,12 @@ A coercion site is an **island**: a region that freezes as a unit. Its boundary 
 which matters because the out-coercion needs uniform latency across all paths, and
 `MinimalRegisterSolver`'s `VirtualIONode` lag constraint already gives exactly that per module.
 
-- **In-coercion** (`@ready_valid → @dataflow`) is the **join**: `fire = (∧ valid_i) && ready_out`,
+- **In-coercion** (`@ready_valid → @pure`) is the **join**: `fire = (∧ valid_i) && ready_out`,
   `ready_i = fire`. Its arity is the coerced function's input port count — visible in the signature.
-- **Out-coercion** (`@dataflow → @ready_valid`) is `valid_out = delay(fire, latency)`, plus
+- **Out-coercion** (`@pure → @ready_valid`) is `valid_out = delay(fire, latency)`, plus
   `enable = fire` on every register in the island.
 
-**Islands are rate-preserving by construction**, and this enforces itself: a `@dataflow` function
+**Islands are rate-preserving by construction**, and this enforces itself: a `@pure` function
 cannot contain a `fold` or a `regroup`, because those are lifecycle-aware and need a handshake. So
 `valid_out = delay(fire, latency)` is always correct without a separate check.
 
@@ -171,7 +171,7 @@ function scan_with_tail(T: interface, U: interface, S: interface,
     i: stream(T) => o: stream(U)
 ```
 
-Every function parameter is **pure `@dataflow`** — none sees `valid`, `ready`, or `enable`. Lifecycle
+Every function parameter is **pure `@pure`** — none sees `valid`, `ready`, or `enable`. Lifecycle
 position reaches them as *data*, via the stdlib's existing `last(T)` and `valid(U)` record interfaces,
 never as control. That's the whole ergonomic bet.
 
@@ -208,13 +208,13 @@ function md5_core()@ready_valid i: md5_blocks => o: md5_digest
       => o;
 }
 
-function md5_step()@dataflow i: md5_block, s: md5_state => o: md5_state
+function md5_step()@pure i: md5_block, s: md5_state => o: md5_state
 {
     i        => md5_hash_block_from_input() => declare block: md5_input_block;
     block, s => md5_hash_block()            => o;
 }
 
-function md5_initial_state()@dataflow null => o: md5_state
+function md5_initial_state()@pure null => o: md5_state
 {
     literal(32, 1732584193) => o.a;
     literal(32, 4023233417) => o.b;
@@ -222,7 +222,7 @@ function md5_initial_state()@dataflow null => o: md5_state
     literal(32, 271733878)  => o.d;
 }
 
-function md5_digest_to_axi()@dataflow i: md5_digest => o: axi_beat
+function md5_digest_to_axi()@pure i: md5_digest => o: axi_beat
 {
     i               => o.data[128:255];
     literal(128, 0) => o.data[0:127];
@@ -230,14 +230,14 @@ function md5_digest_to_axi()@dataflow i: md5_digest => o: axi_beat
 }
 ```
 
-Note the calls *inside* `md5_step` carry no annotation — both callees are `@dataflow`, so protocols
+Note the calls *inside* `md5_step` carry no annotation — both callees are `@pure`, so protocols
 match and no coercion is needed. That's the common case, and it's why the mandatory-coercion rule
 costs almost nothing in practice.
 
 **Everything from `md5_hash_block` down is reused verbatim** — `md5_hash_block_from_iteration`,
 `md5_iteration`, `k_table`, `left_rotate_for_iteration`, `left_rotate_by`, `reverse_endianess`,
 `add_words`, `md5_hash_block_from_input`, `md5_hash_output_from_state`. Not one line changes. They just
-need `@dataflow` on their signatures.
+need `@pure` on their signatures.
 
 `md5_hash_block(i: md5_input_block, input_state: md5_state) => output_state: md5_state` was already a
 fold step function, feed-forward and all. The only casualty is `md5_single_round_hash`, whose sole job
@@ -275,7 +275,7 @@ function md5_pad()@ready_valid i: md5_stream => o: md5_blocks
       => o;
 }
 
-function md5_pad_step()@dataflow
+function md5_pad_step()@pure
     b: last(md5_beat), count: wire[64] => block: md5_block, next: wire[64]
 {
     // b.last distinguishes the final beat; b.value.keep gives the byte count.
@@ -284,16 +284,16 @@ function md5_pad_step()@dataflow
     //            (keep_bytes <= 55) place next in bytes 56..63.
 }
 
-function md5_pad_tail()@dataflow count: wire[64] => extra: valid(md5_block)
+function md5_pad_tail()@pure count: wire[64] => extra: valid(md5_block)
 {
     // extra.valid = (count % 512) >= 448   — no room for 0x80 + length
     // extra.value = zeros with count in the final 8 bytes
 }
 
-function md5_zero_count()@dataflow null => o: wire[64] { literal(64, 0) => o; }
+function md5_zero_count()@pure null => o: wire[64] { literal(64, 0) => o; }
 ```
 
-Three function parameters, all pure, all `@dataflow`, and both `last(T)` and `valid(U)` already exist
+Three function parameters, all pure, all `@pure`, and both `last(T)` and `valid(U)` already exist
 in `StandardLibrary.kt`. **This closes the epilogue gap.**
 
 ## Hand typecheck

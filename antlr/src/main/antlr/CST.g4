@@ -102,7 +102,7 @@ circuitExpression: circuitGroupExpression (Connector circuitGroupExpression)*;
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
 // A protocol annotation (type-system.md §5). On a function definition it names the function's protocol
-// (none means @dataflow); on a call it marks an island - a coercion into the caller's protocol.
+// (none means @pure); on a call it marks an island - a coercion into the caller's protocol.
 protocolAnnotation: At protocol=Id;
 
 circuitNodeExpression:

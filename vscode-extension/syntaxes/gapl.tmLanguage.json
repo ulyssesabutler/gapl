@@ -40,7 +40,7 @@
         },
         {
           "name": "storage.modifier.gapl",
-          "match": "@(dataflow|valid|ready_valid)\\b"
+          "match": "@(pure|valid|ready_valid)\\b"
         }
       ]
     },

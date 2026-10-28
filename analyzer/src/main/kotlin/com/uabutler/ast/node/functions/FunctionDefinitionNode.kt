@@ -16,6 +16,6 @@ data class FunctionDefinitionNode(
     val inputFunctionIO: List<FunctionIONode>,
     val outputFunctionIO: List<FunctionIONode>,
     val statements: List<CircuitStatementNode>,
-    // Unannotated functions are @dataflow, so every existing program keeps its meaning.
-    val protocol: Protocol = Protocol.DATAFLOW,
+    // Unannotated functions are @pure, so every existing program keeps its meaning.
+    val protocol: Protocol = Protocol.PURE,
 ): GAPLNode

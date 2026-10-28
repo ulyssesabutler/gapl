@@ -70,7 +70,7 @@ class FunctionDefinitionScope(
         semanticTokens.record(identifier.span, SemanticTokenKind.FUNCTION)
         val protocol = functionDefinition.protocolAnnotation()
             ?.let { ProtocolAnnotationScope(this, it).ast()?.protocol }
-            ?: Protocol.DATAFLOW
+            ?: Protocol.PURE
 
         return FunctionDefinitionNode(
             span = span,

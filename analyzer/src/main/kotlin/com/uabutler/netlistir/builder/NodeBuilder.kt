@@ -117,7 +117,7 @@ class NodeBuilder(
     private val protocol = functionDefinitionAstNode.protocol
 
     /**
-     * Every island this function creates - a call coercing a @dataflow callee into this function's
+     * Every island this function creates - a call coercing a @pure callee into this function's
      * protocol - with its call site. Islands must be register-free, which can only be checked once the
      * callee (and everything it calls) is built, so ModuleBuilder checks these after the build loop.
      */
@@ -728,8 +728,8 @@ class NodeBuilder(
             coercion.protocol != protocol -> diagnosticsCollector.reportError(
                 BuilderDiagnosticKind.CoercionProtocolMismatch(functionName, protocol, coercion.protocol), coercion.span,
             )
-            // A @dataflow island must be register-free; checked once its callee is built (see `islands`).
-            calleeProtocol == Protocol.DATAFLOW -> islands += invocation to callSiteSpan
+            // A @pure island must be register-free; checked once its callee is built (see `islands`).
+            calleeProtocol == Protocol.PURE -> islands += invocation to callSiteSpan
         }
     }
 

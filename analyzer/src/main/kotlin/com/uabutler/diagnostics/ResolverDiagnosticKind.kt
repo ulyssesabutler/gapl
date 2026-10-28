@@ -85,7 +85,7 @@ sealed interface ResolverDiagnosticKind : DiagnosticKind {
     }
 
     data class UnknownProtocol(val name: String) : ResolverDiagnosticKind {
-        override val message get() = "Unknown protocol '@$name' (expected @dataflow, @valid or @ready_valid)"
+        override val message get() = "Unknown protocol '@$name' (expected @pure, @valid or @ready_valid)"
     }
 
     data object ProtocolAnnotationOnNonCall : ResolverDiagnosticKind {

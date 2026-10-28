@@ -163,7 +163,7 @@ class ModuleBuilder(
     }
 
     /*
-     * An island must be combinational: @dataflow is combinational (type-system.md §6), and before layer 2
+     * An island must be combinational: @pure is combinational (type-system.md §6), and before layer 2
      * that is enforced only where it matters, on islands. So an island's callee may not contain a register,
      * directly or anywhere in what it calls. A callee that failed to build is skipped - it already has a
      * diagnostic of its own.

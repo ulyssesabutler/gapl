@@ -21,11 +21,11 @@ class ProgramContext(program: ProgramNode) {
 
     private val functionProtocols = program.functions.associate { it.identifier.value to it.protocol }
 
-    /** A function's layer-3 protocol. Primitives are @dataflow, except the explicit forks, which only make sense in @ready_valid. */
+    /** A function's layer-3 protocol. Primitives are @pure, except the explicit forks, which only make sense in @ready_valid. */
     fun protocolOf(functionName: String): Protocol = functionProtocols[functionName]
         ?: when (PredefinedFunctionNames.from(functionName)) {
             PredefinedFunctionNames.FORK_EAGER, PredefinedFunctionNames.FORK_LAZY -> Protocol.READY_VALID
-            else -> Protocol.DATAFLOW
+            else -> Protocol.PURE
         }
 
     /* TODO: We should eventually use this for validation
@@ -280,11 +280,11 @@ class ProgramContext(program: ProgramNode) {
         fun invalid(reason: String): Nothing =
             throw BuilderDiagnosticException(BuilderDiagnosticKind.InvalidViewConversion(functionName, reason), node.span)
 
-        // Function-typed parameters are @dataflow (type-system.md §5), so only @dataflow functions may be passed.
+        // Function-typed parameters are @pure (type-system.md §5), so only @pure functions may be passed.
         node.genericParameters.filterIsInstance<FunctionInstantiationGenericParameterValueNode>().forEach { argument ->
             val argumentName = argument.instantiation.definitionIdentifier.value
             val argumentProtocol = protocolOf(argumentName)
-            if (argumentProtocol != Protocol.DATAFLOW) {
+            if (argumentProtocol != Protocol.PURE) {
                 throw BuilderDiagnosticException(
                     BuilderDiagnosticKind.ProtocolFunctionArgument(argumentName, argumentProtocol),
                     argument.span,
