@@ -916,7 +916,8 @@ silent conversion of a value at a connection.
 
 ## 5. Layer 3 — timing discipline (new)
 
-Two protocols only.
+Three protocols. (This section originally opened "Two protocols only"; `@valid` was readmitted in
+2026-09 — see below.)
 
 | | producer may stall | consumer may stall | may join |
 |---|---|---|---|
@@ -1019,6 +1020,35 @@ function g()@ready_valid i1: wire, i2: wire => o: wire {
   `add()@dataflow` in a datapath or `add()@ready_valid` at a boundary. This is layer-3 swappability
   realized syntactically.
 
+### The coercion matrix (decided 2026-10)
+
+The protocols are totally ordered by what they tolerate — `@dataflow` (no gaps, no stalls) < `@valid`
+(gaps) < `@ready_valid` (gaps and stalls) — and **a call is legal exactly when the callee's protocol is
+at or below the caller's.** This generalises "upgrade only" to all three. A callee can always be *made*
+to tolerate more, by freezing it; nothing can make a callee *produce* less — gaps cannot be hidden from a
+consumer that assumes none, and stalls cannot be absorbed by a consumer that cannot stall.
+
+| caller ↓ / callee → | `@dataflow` | `@valid` | `@ready_valid` |
+|---|---|---|---|
+| **`@dataflow`** | — | ✗ gaps would read as data | ✗ |
+| **`@valid`** | ✓ A | — | ✗ its stalls would drop data |
+| **`@ready_valid`** | ✓ B | ✓ C | — |
+
+- **A — `@dataflow` in `@valid`.** The island runs every cycle and `valid_out = delay(valid_in,
+  latency)`. The no-join rule limits the callee to one input channel.
+- **B — `@dataflow` in `@ready_valid`.** The island below: a join over the input `valid`s, the island
+  frozen while its output is stalled, and `valid` carried through a delay line frozen the same way.
+- **C — `@valid` in `@ready_valid`.** Freeze the callee while its output is stalled, so it never needs to
+  stall itself; `valid` comes from the callee, and `ready_in` is the same not-stalled signal.
+- **Zero-input callees** (constants, `zeros`): `valid = 1`, no join.
+
+**A port is a channel.** Each input port of a protocol'd function carries its own `valid` (and, under
+`@ready_valid`, its own `ready`); a function with several input ports joins them when it fires. Already
+implied by the island example below, which joins `f`'s two ports, and by `@valid`'s "at most one stream
+input" rule — so **a `@valid` function has at most one input port**. A multi-operand computation in a
+`@valid` context bundles its operands into one record, or happens inside a `@dataflow` island (which is
+where fork-and-join goes anyway).
+
 **Per-port protocol overrides are rejected, not merely deferred** (clarified 2026-09; an earlier draft
 of this section said both that "mixed protocols across ports are fine and common" and that overrides
 were "not supported yet," which contradicted itself).
@@ -1043,7 +1073,8 @@ additive: no existing program changes meaning.** That is worth protecting as the
 **`oneach` is transparent.** It emits no hardware of its own, and it inherits the protocol of the
 function it wraps — which has temporal extent and is therefore `@ready_valid`.
 
-**The protocol set is closed: `@dataflow` and `@ready_valid`, hardcoded.** This **defers goal 6** from
+**The protocol set is closed: `@dataflow`, `@valid` and `@ready_valid`, hardcoded.** (Originally written
+as just `@dataflow` and `@ready_valid`, before `@valid` was readmitted.) This **defers goal 6** from
 §1 ("protocols are user-definable, not a fixed builtin menu"), which is also a standing item in
 `brainstorming/future-work.md` as "how to allow the user to define arbitrary handshakes." Recorded as a
 deliberate deferral rather than left to silently contradict the goal list.
