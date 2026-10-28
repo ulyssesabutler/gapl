@@ -1346,6 +1346,45 @@ the difference, which is §2's swappability claim made concrete.
 | the out-coercion delay — `valid_out = delay(fire, latency)` | stdlib function, parameterised by depth |
 | `enable` threading | **already exists** — see §8; every generated module has the port and every register is already gated |
 
+> **Superseded (2026-10): the plumbing is first-class compiler primitives, lowered late — not stdlib
+> functions.** Decided as stage 2's topic 6. Three options were weighed:
+>
+> - **(a) new compiler primitives** (join, `fork_eager`, `fork_lazy`, the `valid` delay line, the
+>   island enable) as `PredefinedFunction` kinds;
+> - **(b) a raw handshake syntax** ("Tier 4", §6) so the plumbing is readable stdlib GAPL — costly:
+>   `ready` flows backwards, so a body would drive a wire on an *input* port; `valid` collides with the
+>   stdlib `valid(T)` record's field; and a join over *n* separate channels needs variable arity;
+> - **(c) gates built in `NodeBuilder`** from existing primitives, like views.
+>
+> **Chosen: (a), with a late lowering step.** The primitives stay first-class through the transformer
+> pipeline, retiming included. One function in `analyzer` expands them into ordinary gates and
+> registers; the compiler calls it just before Verilog emission, and `simengine` calls it when loading a
+> design — so neither needs per-primitive support. Only what runs before lowering must know them:
+> retiming and its delay model, and `ConstantSimplifier`. Cost: roughly (c) plus a fifth, since the
+> expansion is the code (c) would have written anyway.
+>
+> Why not (c): the switch is one-way. Going (a) → (c) means calling the lowering earlier; going (c) → (a)
+> means rebuilding the plumbing, since nothing marks which `and` is a join or which register is a done
+> bit. And first-class plumbing pays off later, in a problem already on the books — **retiming erases
+> register identity** (§8, §10 item 6). Done bits and `valid` delay lines are control state; as opaque
+> primitives retiming cannot shuffle them like datapath registers, which is the pinning they need. A
+> C-slow pass needs the same distinction (a `valid` delay line deepens ×*C*, done bits get one copy per
+> slot), and so do several planned channel-level passes: the `fork_lazy` reconvergence check, the
+> downgrade pass (§10 item 11), deadlock diagnostics (§10 item 9), elastic buffer insertion.
+>
+> **Still no separate layer-3 IR.** A channel-level graph (islands as nodes holding today's netlist,
+> channels as edges) is what those passes want, but with first-class primitives it can be *derived* from
+> the existing IR when a pass needs it — islands are call nodes, plumbing primitives are identifiable,
+> channels are their ports — the same move `CombinationalLoopDetector` makes for port summaries. Build a
+> separate IR only once a pass needs one.
+>
+> **`valid` and `ready` are ordinary extra IR ports** on protocol'd functions: per channel `i`, an input
+> `valid` under `@valid`, plus an output `ready` (it flows backwards) under `@ready_valid`. Retiming,
+> `simengine`, Verilog emission and `simgen` already handle extra ports. In Verilog they are named
+> `i$$valid` / `i$$ready`: record fields are joined with `$`, so `i$valid` would collide with a port
+> `i: valid(T)`, and since GAPL identifiers cannot contain `$`, a doubled separator can never collide
+> with anything a user writes.
+
 **Ordering: FSM early, coercion delay late.** The lifecycle FSM derives from the datatype and is fully
 known at netlist-build time. The out-coercion's delay depth is the island's *latency*, which **retiming
 determines** — an island may be combinational before retiming and *k* stages after. So the coercion
