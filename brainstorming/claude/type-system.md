@@ -136,6 +136,26 @@ within each stage.)
 
 Stages 1 and 2 are independent and could run in either order; this is the chosen one.
 
+**Stage 2 is itself staged** (decided 2026-10), so each part is testable on its own:
+
+| substage | scope | tested by |
+|---|---|---|
+| **2a — describe & check** | annotation grammar (unannotated = `@dataflow`); the coercion matrix, mandatory coercion, no join in `@valid`, `@valid` ≤ 1 input port, no implicit fork in `@ready_valid`, islands register-free (transitively). **No codegen change.** | analyzer diagnostics tests; byte-identical regression output |
+| **2b — `@valid` end to end, unretimed** | `valid` wires on ports; coercion A at latency 0 (`valid` passes through); implicit forks; `valid` ports in Verilog and `simgen` | `sim-test` fixtures with gapped input; Verilator on unretimed output |
+| **2c — `@ready_valid` end to end, unretimed** | `ready` wires; coercions B and C (joins; freezing via a per-instance `enable`); multi-output islands with done bits; `fork_eager`/`fork_lazy`; `make_pair` | `sim-test` with randomised backpressure, checking nothing is lost or duplicated; Verilator |
+| **2d — retiming** | islands survive flattening as boundaries; post-retiming `valid` delay lines shifting on the island enable | Verilator on retimed variants of the 2b/2c fixtures |
+| **2e — NetFPGA integration** | a real kernel (AES-CTR or single-block MD5) as `@valid`; `processor_controller` removed from the wrapper | `netfpga:sim-kernel-test` and `kernel-test` vectors |
+
+2a first because it changes no hardware and settles syntax before anything depends on it; 2b before 2c
+because `@valid` has no `ready` and no freezing, so it exercises the wire representation and port
+conventions alone; retiming late because islands have latency 0 before it (§6, "`@dataflow` is
+combinational"), so 2b and 2c are complete without it. 2e needs only 2b and may move ahead of 2c.
+
+**Today `enable` is wired straight through** — every instance receives its parent's `enable`
+(`compiler/.../verilogir/module/statement/Statement.kt:60`) and `simengine` does not model `enable` at
+all. Freezing an island therefore needs an IR notion of a per-instance `enable` source, its Verilog
+emission, and `simengine` support; that is 2c's largest piece.
+
 ---
 
 ## 2. The three layers
