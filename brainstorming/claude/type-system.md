@@ -1250,6 +1250,10 @@ than per-register.
 Note a stateful function is still `@dataflow`: the rule is that every *port* is `single`, which says
 nothing about registers inside.
 
+> **Narrowed (2026-10).** True of the stdlib lifecycle FSM, which is plumbing the compiler places inside
+> protocol'd functions and is never coerced into an island. For user code the rule is now stronger:
+> **`@dataflow` functions are combinational** — see "`@dataflow` is combinational" in §6.
+
 **`fire` is §2's layer-2/layer-3 interface, not a channel wire.** It is one AND gate computed locally at
 each consumer — `fire = valid` under `@valid`, `fire = valid && ready` under `@ready_valid`. Feeding the
 FSM `fire` is what makes the same stdlib function work under both protocols with nothing parameterising
@@ -1317,6 +1321,45 @@ Four requirements before restricting it:
 
 Deferred but eventually needed: a time-multiplexing combinator with an explicit initiation interval,
 which is where resource sharing gets recovered.
+
+### `@dataflow` is combinational (decided 2026-10)
+
+The restriction above, stated as the rule it amounts to: **`@dataflow` functions are combinational.
+Registers exist only inside the stdlib (combinators, the lifecycle FSM) and inside protocol'd
+primitives.** All pipelining comes from retiming — already true of MD5, which has no `register` at all.
+
+**Why it matters for layer 3:** it settles what an island's latency is. An island — a `@dataflow`
+function coerced into `@valid` or `@ready_valid` — has latency **0 before retiming**, which is what
+`simengine` sees, and afterwards exactly what retiming created; starting from zero on every path, that is
+well-defined per input–output pair, and the post-retiming delay pass reads it off. No uniformity check,
+no padding. (The alternatives were to reject unequal path latencies with a diagnostic, or to pad them
+silently; the second violates goal 7.)
+
+**Enforcement is staged.** The full rule lands with layer 2, in the same change as `scan`, which is what
+replaces the registers in today's application code. Until then — i.e. in stage 2 — only the narrower
+consequence is checked: **a function coerced into an island must be register-free**, transitively.
+Register-using code keeps working exactly as today while everything around it stays `@dataflow`.
+
+**Every current use of a register has a home** (checked 2026-10, when asked whether anything would block
+enforcement — nothing does, but three homes are undesigned):
+
+| need | eventual home | designed? |
+|---|---|---|
+| state within a lifecycle (CMS, regex, `email-with-opt`, `count-min`) | `scan` / `fold` | yes — layer 2 |
+| state across lifecycles (HyperLogLog) | `standing_scan` | yes — layer 2 |
+| hand-aligned control delay (`cms/processor.gapl:53-55`) | layer 3's generated coercions | yes — stage 2 |
+| pipelining for timing | retiming | already the case |
+| large random-access state | a memory primitive (prerequisite 3 above) | **no** |
+| fixed-latency hard macros (BRAM, DSP, vendor IP) | escape-hatch primitives (prerequisite 4) | **no** |
+| state advancing every clock, not every beat (token-bucket refill) | — | **no** (`applications.md`) |
+| iterative datapaths (one AES round per cycle) | time-multiplexing combinator (§10 item 10) | deferred; everything unrolls today |
+
+Two of these fit the rule without special cases. **Hard macros** have real fixed latency, so they are
+naturally `@valid`/`@ready_valid` primitives with a declared latency — and the coercion matrix (§5)
+already forbids calling one from `@dataflow`. **Every-clock state** has a plausible answer: a zero-input,
+always-valid source with a `standing_scan` over it is a counter that advances every cycle. The subtlety is
+that inside a `@ready_valid` island a downstream stall would freeze it, and a refill timer must keep
+counting through stalls — so it has to live where nothing stalls, in `@valid` or as its own island.
 
 **Structuring *enables* the optimization you most need.** C-slow retiming — the fix for the fold-loop
 problem below — is only safe if the compiler can prove successive iterations are independent. With state

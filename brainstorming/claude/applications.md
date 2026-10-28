@@ -222,6 +222,9 @@ Roughly 40 lines. The smallest possible demonstration that cross-lifecycle state
 >   `fire`, and a cycle carrying no beat does not fire — but the refill must happen on every clock
 >   regardless of data flow. That is state advancing on *cycles* rather than *beats*, which is arguably
 >   a layer-3 concern, and the design does not yet address it. Unresolved.
+>   *Plausible answer (2026-10):* a `standing_scan` over a zero-input, always-valid source counts every
+>   cycle — but it must sit where nothing stalls (`@valid`, or its own island), since a `@ready_valid`
+>   stall would freeze the timer. See "`@dataflow` is combinational" in `type-system.md` §6.
 
 ### 7. HyperLogLog
 
