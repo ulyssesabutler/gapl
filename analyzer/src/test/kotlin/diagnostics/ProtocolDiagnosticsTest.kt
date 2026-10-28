@@ -55,9 +55,26 @@ class ProtocolDiagnosticsTest {
 
             @ready_valid function rv() a: wire[8], b: wire[8] => o: wire[8] {
                 a, b => sum()@ready_valid => declare s: wire[8];
-                s => v()@ready_valid => o;
+                s => inc()@ready_valid => o;
             }
         """.trimIndent())
+    }
+
+    @Test
+    fun `calling a @valid function from @ready_valid waits for stage 2c`() {
+        val diagnostics = compileFullExpectingDiagnostics("""
+            $helpers
+
+            @valid function v() i: wire[8] => o: wire[8] {
+                i => inc()@valid => o;
+            }
+
+            @ready_valid function rv() i: wire[8] => o: wire[8] {
+                i => v()@ready_valid => o;
+            }
+        """.trimIndent())
+
+        assertIs<BuilderDiagnosticKind.NotYetSupported>(diagnostics.single().kind)
     }
 
     @Test
@@ -225,6 +242,76 @@ class ProtocolDiagnosticsTest {
 
         val kind = assertIs<BuilderDiagnosticKind.JoinInValidFunction>(diagnostics.single().kind)
         assertEquals("sum", kind.calleeName)
+    }
+
+    @Test
+    fun `a @valid function gets a valid port per data port`() {
+        val result = Analyzer.analyzeFull("""
+            $helpers
+
+            @valid function v() i: wire[8] => o: wire[8], p: wire[8] {
+                i => inc()@valid => o;
+                i => inc()@valid => p;
+            }
+        """.trimIndent(), defaultOptions)
+
+        assertEquals(emptyList(), result.diagnostics.map { it.message })
+        val module = result.modules!!.single { it.invocation.gaplFunctionName == "v" }
+        assertEquals(listOf("i", "i$\$valid"), module.getInputNodes().map { it.name() })
+        assertEquals(listOf("o", "p", "o$\$valid", "p$\$valid"), module.getOutputNodes().map { it.name() })
+    }
+
+    @Test
+    fun `a sink built from two channels is a join, through an output port or a declared node`() {
+        val viaOutput = compileFullExpectingDiagnostics("""
+            interface pair { a: wire[8]; b: wire[8]; }
+            $helpers
+
+            @valid function v() i: pair => o: pair {
+                i.a => inc()@valid => declare x: wire[8];
+                i.b => inc()@valid => declare y: wire[8];
+                x => o.a;
+                y => o.b;
+            }
+        """.trimIndent())
+        val join = assertIs<BuilderDiagnosticKind.ImplicitJoin>(viaOutput.single().kind)
+        assertEquals(2, join.channelCount)
+
+        // Assembling d from two channels is only a join once something consumes both parts of it.
+        val viaDeclaredNode = compileFullExpectingDiagnostics("""
+            interface pair { a: wire[8]; b: wire[8]; }
+            $helpers
+
+            function total() p: pair => o: wire[8] {
+                p.a, p.b => add(8) => o;
+            }
+
+            @valid function v() i: pair => o: wire[8] {
+                i.a => inc()@valid => declare x: wire[8];
+                i.b => inc()@valid => declare y: wire[8];
+                declare d: pair;
+                x => d.a;
+                y => d.b;
+                d => total()@valid => o;
+            }
+        """.trimIndent())
+        assertIs<BuilderDiagnosticKind.ImplicitJoin>(viaDeclaredNode.single().kind)
+    }
+
+    @Test
+    fun `outputs of one island share a valid, so recombining them is not a join`() {
+        compilesCleanly("""
+            function split() i: wire[8] => lo: wire[4], hi: wire[4] {
+                i[0:3] => lo;
+                i[4:7] => hi;
+            }
+
+            @valid function v() i: wire[8] => o: wire[8] {
+                i => split()@valid => declare lo: wire[4], declare hi: wire[4];
+                lo => o[4:7];
+                hi => o[0:3];
+            }
+        """.trimIndent())
     }
 
     // ---- @ready_valid ----

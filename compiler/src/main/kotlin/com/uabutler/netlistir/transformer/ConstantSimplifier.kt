@@ -32,6 +32,7 @@ import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
 import com.uabutler.netlistir.util.UnaryFunction
+import com.uabutler.netlistir.util.ValidDelayFunction
 import java.math.BigInteger
 
 object ConstantSimplifier: Transformer {
@@ -131,6 +132,7 @@ object ConstantSimplifier: Transformer {
                 }
                 is RegisterFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
                 is IntegerRegisterFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
+                is ValidDelayFunction -> return inputWiresToBitArray(node.inputWireVectorGroups[0].wires())
                 is MuxFunction -> TODO("dont wanna")
                 is DemuxFunction -> TODO("dont wanna")
                 is PriorityFunction -> TODO("dont wanna")

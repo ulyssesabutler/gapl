@@ -1,0 +1,25 @@
+interface pair { a: wire[8]; b: wire[8]; }
+
+function inc() i: wire[8] => o: wire[8] {
+    i, literal(8, 1) => add(8) => o;
+}
+
+function split() p: pair => a: wire[8], b: wire[8] {
+    p.a => a;
+    p.b => b;
+}
+
+@valid function stage() i: wire[8] => o: wire[8] {
+    i => inc()@valid => o;
+}
+
+// Exercises every way a @valid body routes `valid` in stage 2b: a multi-output island (its outputs
+// share one valid), an implicit fork (x feeds two consumers), a nested @valid call, and a constant
+// island (always valid).
+@valid function test() p: pair => a: wire[8], b: wire[8], c: wire[8], d: wire[8] {
+    p => split()@valid => declare x: wire[8], declare y: wire[8];
+    x => stage() => a;
+    x => inc()@valid => d;
+    y => inc()@valid => b;
+    literal(8, 42)@valid => c;
+}

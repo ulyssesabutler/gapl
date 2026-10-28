@@ -11,6 +11,7 @@ import com.uabutler.netlistir.transformer.Retimer
 import com.uabutler.netlistir.transformer.RetimingSolverId
 import com.uabutler.netlistir.transformer.RetimingSolverKind
 import com.uabutler.netlistir.transformer.StandardLibraryFilter
+import com.uabutler.netlistir.util.HandshakeLowering
 import com.uabutler.util.PropagationDelay
 import com.uabutler.util.Logger
 import com.uabutler.verilogir.builder.VerilogBuilder
@@ -188,7 +189,10 @@ object Compiler {
 
         val transformedModules = Logger.run("Transformers", Logger.Level.INFO) { runNetlistTransformers(initialNetlistModules, options) }
 
-        val verilogIrModules = Logger.run("Verilog IR Builder", Logger.Level.INFO) { transformedModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) } }
+        // Last, so handshake primitives stay first-class through every transformer, retiming included.
+        val loweredModules = Logger.run("Handshake Lowering", Logger.Level.INFO) { HandshakeLowering.lower(transformedModules) }
+
+        val verilogIrModules = Logger.run("Verilog IR Builder", Logger.Level.INFO) { loweredModules.map { VerilogBuilder.verilogModuleFromGAPLModule(it) } }
         return Logger.run("Verilog Serializer", Logger.Level.INFO) { verilogIrModules.joinToString("\n") { it.verilogSerialize() } }
     }
 

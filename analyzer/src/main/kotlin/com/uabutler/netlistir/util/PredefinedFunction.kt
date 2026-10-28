@@ -281,3 +281,22 @@ data class LiteralFunction(
     inputs = listOf(),
     outputs = listOf(IO("value", wireVector(size))),
 )
+
+/*
+ * Layer-3 handshake plumbing (type-system.md §5, "the plumbing is first-class compiler primitives,
+ * lowered late"). These are never written by users: NodeBuilder inserts them at islands, they stay
+ * first-class through the transformer pipeline (so retiming cannot mistake them for datapath), and
+ * HandshakeLowering expands them into ordinary gates and registers just before Verilog emission and
+ * when simengine loads a design - so neither of those ever sees one.
+ */
+
+/**
+ * An island's `valid`: its input `valid`, delayed by the island's latency. Before retiming every island
+ * is combinational, so `depth` is 0 (a wire); retiming will set it (stage 2d).
+ */
+data class ValidDelayFunction(
+    val depth: Int,
+): PredefinedFunction(
+    inputs = listOf(IO("valid_in", wire())),
+    outputs = listOf(IO("valid_out", wire())),
+)

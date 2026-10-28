@@ -83,10 +83,13 @@ class ModuleInstantiationTracker(
             )
         }
 
+        val inputWithHandshake = HandshakePorts.withHandshake(input, astNode.protocol)
+        val outputWithHandshake = HandshakePorts.withHandshake(output, astNode.protocol)
+
         val moduleInstantiation = ModuleInstantiation(
             moduleInvocation = instantiationData,
-            input = input,
-            output = output,
+            input = inputWithHandshake,
+            output = outputWithHandshake,
             astNode = astNode,
             genericInterfaceValues = interfaceValues,
             genericParameterValues = parameterValues,

@@ -26,6 +26,7 @@ import com.uabutler.netlistir.util.PriorityFunction
 import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.netlistir.util.RightShiftFunction
 import com.uabutler.netlistir.util.SubtractionFunction
+import com.uabutler.netlistir.util.ValidDelayFunction
 
 /**
  * Pure per-op bit computation: given a [PredefinedFunctionNode] and a way to read its input bits,
@@ -111,6 +112,9 @@ object PredefinedFunctionEvaluator {
 
             is RegisterFunction, is IntegerRegisterFunction ->
                 error("register nodes are handled by ModuleInstance.latchRegisters(), never dispatched to eval")
+
+            is ValidDelayFunction ->
+                error("handshake primitives are expanded by HandshakeLowering in Engine.build, never dispatched to eval")
         }
     }
 }

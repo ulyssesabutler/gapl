@@ -5,6 +5,7 @@ import com.uabutler.netlistir.builder.util.RecordInterfaceStructure
 import com.uabutler.netlistir.builder.util.VectorInterfaceStructure
 import com.uabutler.netlistir.builder.util.flatWidth
 import com.uabutler.netlistir.netlist.Module
+import com.uabutler.netlistir.util.HandshakeLowering
 import com.uabutler.simengine.instance.InstanceBuilder
 import com.uabutler.simengine.instance.ModuleInstance
 import com.uabutler.simengine.plan.PlanCache
@@ -22,7 +23,9 @@ class Engine private constructor(
 ) {
     companion object {
         fun build(modules: List<Module>, topInvocation: Module.Invocation): Engine {
-            val byInvocation = modules.associateBy { it.invocation }
+            // Handshake primitives are expanded to ordinary gates and registers here, so nothing in the
+            // engine ever has to interpret one.
+            val byInvocation = HandshakeLowering.lower(modules).associateBy { it.invocation }
             val topModule = byInvocation[topInvocation]
                 ?: error("Top-level invocation $topInvocation not found among the ${modules.size} supplied modules")
 

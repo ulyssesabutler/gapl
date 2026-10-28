@@ -230,6 +230,16 @@ invocation's integer parameters. That's what keeps two same-shaped views at diff
 memoizing into one `Module.Invocation`, and what lets `project(t, v)` be passed to a higher-order
 function like `vector_map` and still know its mapping.
 
+**Layer-3 handshake plumbing follows the same "keep it out of downstream" pattern, one step later.**
+Protocol'd functions (`@valid` so far) get extra one-bit ports named `i$$valid` (`HandshakePorts`; `$$`
+can't collide with anything a user writes), which every downstream stage carries as ordinary ports.
+`NodeBuilder.wireValidChannels` wires them, and inserts a `ValidDelayFunction` per island. That *is* a
+`PredefinedFunction` subtype, deliberately first-class through the transformer pipeline (so retiming can
+tell control plumbing from datapath), but `netlistir/util/HandshakeLowering` expands it into wires or
+registers after the compiler's transformers and in `simengine`'s `Engine.build`, so Verilog emission and
+the simulator never see one — their `when` branches for it just throw. See
+`brainstorming/claude/type-system.md` §5 for why.
+
 ## Known gotchas
 
 - **Reference equality, not structural equality, for `Node`/`Wire` and anything keyed by them.**

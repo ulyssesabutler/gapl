@@ -191,6 +191,16 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
             "forks must be explicit there: use fork_eager(...) or fork_lazy(...)"
     }
 
+    data class ImplicitJoin(val functionName: String, val sink: String, val channelCount: Int) : BuilderDiagnosticKind {
+        override val message get() =
+            "In '$functionName', $sink is built from $channelCount different channels, which is a join - " +
+            "only an island may join (do the combining inside a @pure function and call it as an island)"
+    }
+
+    data class NotYetSupported(val feature: String) : BuilderDiagnosticKind {
+        override val message get() = "Not yet supported: $feature"
+    }
+
     data class ProtocolFunctionArgument(val functionName: String, val protocol: Protocol) : BuilderDiagnosticKind {
         override val message get() =
             "Only @pure functions can be passed as arguments, but '$functionName' is $protocol"

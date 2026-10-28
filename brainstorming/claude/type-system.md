@@ -177,6 +177,27 @@ Protocol'd functions otherwise compile exactly as before. One consequence of che
 these diagnostics surface from `Analyzer.analyzeFull` (the compiler, tests) but not from the LSP's live
 `analyze`, the same as every other builder diagnostic today.
 
+**2b implemented (2026-10, branch `layer3`).** A `@valid` function gets a one-bit `valid` port per data
+port (`i$$valid`, `o$$valid`; `HandshakePorts`), part of its signature, so every call to it carries them
+too. Users only ever wire data: `NodeBuilder` splits a callee's handshake ports off, and once the body is
+built `wireValidChannels` wires each **sink** (an output port, a `@valid` callee's input, an island's
+input) from the `valid` of the one **channel** feeding it, found by tracing back through declared nodes.
+Each island gets a `ValidDelayFunction(depth = 0)`, fed by a constant 1 if it has no inputs. Two findings
+from building it:
+
+- **Implicit joins through shared sinks** — a sink built from two channels by plain wiring (`x => o.a;
+  y => o.b`) — were missed by 2a, which checked joins only at calls. The sink trace reports them
+  (`ImplicitJoin`). Assembling a declared node from two channels is only a join once something consumes
+  both parts; one island's several outputs share one `valid`, so recombining them is not a join.
+- **Coercion C (a `@valid` callee inside `@ready_valid`) is reported as not yet supported** until 2c,
+  rather than half-wired.
+
+`HandshakeLowering` expands `ValidDelayFunction` (depth 0: a wire; depth *k*: *k* registers, ready for
+2d) after the compiler's transformer pipeline and in `Engine.build`, so Verilog emission and
+`simengine` never see one. `simgen` exposes `i$$valid` as `iValid`, and Verilator renders it
+`i__024__024valid`. Tested by a `sim-test` and a `verilator-test` fixture, both `valid-channels`; every
+pre-existing output is byte-identical.
+
 ---
 
 ## 2. The three layers

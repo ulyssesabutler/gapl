@@ -85,6 +85,13 @@ object WrapperGenerator {
     private fun pascalCase(name: String): String =
         name.split("_").joinToString("") { it.replaceFirstChar(Char::uppercase) }
 
+    // A layer-3 handshake port (`i$$valid`, see analyzer's HandshakePorts) isn't a legal Kotlin name;
+    // expose it as `iValid`. Ordinary port names pass through unchanged.
+    private fun propertyName(portName: String): String {
+        val parts = portName.split("$$")
+        return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercase) }
+    }
+
     private fun resolveShape(shape: PortShape, fieldName: String, enclosing: ClassName): ResolvedShape = when (shape) {
         is PortShape.Leaf -> ResolvedShape(
             typeName = listOfBoolean,
@@ -232,10 +239,10 @@ object WrapperGenerator {
         val nestedTypes = mutableListOf<TypeSpec>()
 
         val inputProperties = inputPorts.map { port ->
-            val resolved = resolveShape(port.shape, port.name, simulatorClassName)
+            val resolved = resolveShape(port.shape, propertyName(port.name), simulatorClassName)
             nestedTypes += resolved.nestedTypes
             val isLeaf = port.shape is PortShape.Leaf
-            PropertySpec.builder(port.name, resolved.typeName)
+            PropertySpec.builder(propertyName(port.name), resolved.typeName)
                 .mutable(true)
                 .initializer(resolved.defaultValue)
                 .setter(
@@ -255,10 +262,10 @@ object WrapperGenerator {
         }
 
         val outputProperties = outputPorts.map { port ->
-            val resolved = resolveShape(port.shape, port.name, simulatorClassName)
+            val resolved = resolveShape(port.shape, propertyName(port.name), simulatorClassName)
             nestedTypes += resolved.nestedTypes
             val isLeaf = port.shape is PortShape.Leaf
-            PropertySpec.builder(port.name, resolved.typeName)
+            PropertySpec.builder(propertyName(port.name), resolved.typeName)
                 .getter(
                     FunSpec.getterBuilder()
                         .apply {
