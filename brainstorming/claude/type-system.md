@@ -372,8 +372,12 @@ program:        (interfaceDefinition | functionDefinition | viewDefinition)+;
 - **Generic binding.** `T: interface` must accept a view, or views cannot pass through `register`,
   `if_else`, `vector_map`. Lowering each view to an ordinary record interface plus conversions makes
   this fall out.
-- **Overlapping fields.** Fine for projection; on widening, two fields covering the same bit are two
-  drivers. Forbid overlap or reject that widening.
+- ~~**Overlapping fields.**~~ **Decided 2026-10: fields within one view may not overlap.** Overlapping
+  interpretations (a byte and its two nibbles) are written as separate views of the same base; project
+  into both. The alternatives were allowing overlap and rejecting `overlay` for such views — which makes
+  overlay-ability an invisible property of the definition, erroring far from its cause — or letting one
+  field win in `overlay`, which silently discards a write. With the rule, every view supports both
+  directions, and the check is a bit-range comparison at the definition site.
 - **Byte order.** On AXI, byte 0 is `tdata[7:0]`, so `ethertype: data[96:111]` reads byte-swapped
   relative to the protocol (`0x0800` as `0x0008`). Reordering wires is free, so a field could declare
   its byte order; otherwise every comparison with a protocol constant is a trap.
