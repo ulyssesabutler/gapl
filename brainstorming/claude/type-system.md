@@ -334,9 +334,41 @@ ordinary calls (`if_else(wire[512])`, `register(T)`).
 - **No fill declared on the view.** The September rules had partial views declare a fill; with `overlay`
   every widening states its source at the use site, so a declared fill has nothing left to do.
 
-### Still open for stage 1
+### Definition syntax (decided 2026-10)
 
-- **View-definition syntax** against `CST.g4` (the `view … of …` form above is illustrative).
+Mirrors `recordInterfaceDefinition`, with `of <base>` added and a **path into the base** in place of each
+field's type. Supersedes the illustrative form at the top of this section.
+
+```text
+view eth_hdr of netfpga_packet_body {
+    dst: .data[0:47];
+    src: .data[48:95];
+    ethertype: .data[96:111];
+}
+view md5_head of md5_input_block { first: [0]; rest: [1:15]; low_byte: [0][0:7]; }
+view hdr(n: integer) of beat(n) { payload: .data[0:n-1]; }
+```
+
+```text
+viewDefinition: View Id parameterDefinitionList? Of base=expression CurlyL viewField* CurlyR;
+viewField:      Id Colon viewPath SemiColon;
+viewPath:       accessor+;
+program:        (interfaceDefinition | functionDefinition | viewDefinition)+;
+```
+
+- **Every path is an accessor chain from an implicit base**, so a record member is written with a leading
+  dot (`.data[0:47]`) and a vector base starts with a bracket (`[0]`). Vector bases are common
+  (`md5_input_block word[16]`, `aes_block aes_block_column[4]`) and have no member names, which is why a
+  path cannot simply be an `expression` (those must start with a name).
+- **The leading dot also settles scoping.** A name after a dot is a member of the base; a name inside
+  brackets is a static expression resolved in the parameter scope. Without it, a base field and a view
+  parameter sharing a name would need a precedence rule.
+- **Field types are inferred from the path** — `.data[0:47]` is `wire[48]`, `[1:15]` is `word[15]`,
+  `.a.b` is whatever `b` is. No annotation in stage 1; `dst: mac_addr` would only mean something under
+  the deferred nominal checking.
+- Two new tokens, `view` and `of`. Views share the interface namespace, since both are types.
+
+### Still open for stage 1
 - **Generic binding.** `T: interface` must accept a view, or views cannot pass through `register`,
   `if_else`, `vector_map`. Lowering each view to an ordinary record interface plus conversions makes
   this fall out.
