@@ -101,7 +101,8 @@ sealed class PredefinedFunction(
 
                     PriorityFunction(conditionalCount, inputStructure)
                 }
-                PredefinedFunctionNames.PROJECT, PredefinedFunctionNames.OVERLAY, PredefinedFunctionNames.ZEROS ->
+                PredefinedFunctionNames.PROJECT, PredefinedFunctionNames.OVERLAY, PredefinedFunctionNames.ZEROS,
+                PredefinedFunctionNames.FORK_EAGER, PredefinedFunctionNames.FORK_LAZY ->
                     throw IllegalStateException(
                         "${invocation.gaplFunctionName} is lowered to wiring by NodeBuilder and should never reach PredefinedFunction.search - this is a compiler bug"
                     )

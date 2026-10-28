@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder
 
+import com.uabutler.ast.node.ProtocolAnnotationNode
 import com.uabutler.ast.node.functions.FunctionDefinitionNode
 import com.uabutler.ast.node.functions.circuits.*
 import com.uabutler.diagnostics.BuilderDiagnosticKind
@@ -11,6 +12,7 @@ import com.uabutler.netlistir.util.LiteralFunction
 import com.uabutler.netlistir.util.PredefinedFunction
 import com.uabutler.util.AnonymousIdentifierGenerator
 import com.uabutler.util.PredefinedFunctionNames
+import com.uabutler.util.Protocol
 import java.math.BigInteger
 
 class NodeBuilder(
@@ -111,11 +113,74 @@ class NodeBuilder(
         structure = structure,
     )
 
+    private val functionName = functionDefinitionAstNode.identifier.value
+    private val protocol = functionDefinitionAstNode.protocol
+
+    /**
+     * Every island this function creates - a call coercing a @dataflow callee into this function's
+     * protocol - with its call site. Islands must be register-free, which can only be checked once the
+     * callee (and everything it calls) is built, so ModuleBuilder checks these after the build loop.
+     */
+    val islands = mutableListOf<Pair<Module.Invocation, SourceSpan>>()
+
     fun buildNodesIntoModule() {
+        validateInputCount()
         buildInputNodes()
         buildOutputNodes()
         buildBodyNodes()
         validateWiresConnected()
+        validateNoImplicitForks()
+    }
+
+    // A @valid function fires on its one input; firing on several would be a join.
+    private fun validateInputCount() {
+        if (protocol == Protocol.VALID && inputAstNodes.size > 1) {
+            diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.ValidFunctionHasMultipleInputs(functionName, inputAstNodes.size),
+                functionDefinitionAstNode.span,
+            )
+        }
+    }
+
+    /*
+     * In a @ready_valid body every fork must be explicit (fork_eager / fork_lazy). A channel is an output
+     * group of an input port or a call; its consumers are the calls and output ports its wires reach,
+     * looking straight through declared nodes, which are just names for wires. More than one consumer is
+     * an implicit fork.
+     */
+    private fun validateNoImplicitForks() {
+        if (protocol != Protocol.READY_VALID) return
+
+        val channels = module.getNodes().flatMap { node ->
+            val isChannelSource = node is InputNode ||
+                (node is BodyNode && (node !is PassThroughNode || node in loweredCallOutputs))
+            if (isChannelSource) node.outputWireVectorGroups else emptyList()
+        }
+
+        channels.forEach { channel ->
+            val consumers = mutableSetOf<Node>()
+            val pending = ArrayDeque<OutputWire>(channel.wires())
+            val visited = mutableSetOf<PassThroughNode>()
+            while (pending.isNotEmpty()) {
+                module.getConnectionsForOutputWire(pending.removeFirst()).forEach { connection ->
+                    val consumer = connection.sink.parentWireVector.parentGroup.parentNode
+                    if (consumer is PassThroughNode && consumer !in loweredCallInputs) {
+                        if (visited.add(consumer)) consumer.outputWireVectorGroups.forEach { pending.addAll(it.wires()) }
+                    } else {
+                        consumers += consumer
+                    }
+                }
+            }
+
+            if (consumers.size > 1) {
+                val source = channel.parentNode
+                val name = if (source is InputNode) source.name() else "${source.name()}.${channel.identifier}"
+                diagnosticsCollector.reportError(
+                    BuilderDiagnosticKind.ImplicitFork(functionName, name, consumers.size),
+                    nodeSpans[source] ?: functionDefinitionAstNode.span,
+                )
+            }
+        }
     }
 
     // A module's own input ports are driven by the caller, so only OutputNodes and body nodes
@@ -444,7 +509,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
+                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span, nodeExpression.instantiation.coercion)
             }
 
             is DeclaredGenericFunctionCircuitExpressionNode -> {
@@ -459,7 +524,7 @@ class NodeBuilder(
                     )
                 }
 
-                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span)
+                invokeFunction(nodeExpression.identifier.value, instantiationData, nodeExpression.span, nodeExpression.coercion)
             }
 
             is AnonymousFunctionCircuitExpressionNode -> {
@@ -469,7 +534,7 @@ class NodeBuilder(
                     parameterValuesContext = parameterValuesContext,
                 )
 
-                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
+                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span, nodeExpression.instantiation.coercion)
             }
 
             is AnonymousGenericFunctionCircuitExpressionNode -> {
@@ -484,14 +549,14 @@ class NodeBuilder(
                     )
                 }
 
-                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span)
+                invokeFunction(AnonymousIdentifierGenerator.genIdentifier(), instantiationData, nodeExpression.span, nodeExpression.coercion)
             }
 
             is ReferenceCircuitExpressionNode -> {
                 val name = nodeExpression.identifier.value
                 val (inputWireVectorGroups, outputWireVectorGroups) = netlistNodes[name]
                     ?.let { it.inputWireVectorGroups to it.outputWireVectorGroups }
-                    ?: loweredConversions[name]?.let { it.inputs to it.outputs }
+                    ?: loweredCalls[name]?.let { it.inputs to it.outputs }
                     ?: throw BuilderDiagnosticException(
                         BuilderDiagnosticKind.UnableToFindCircuitNode(name),
                         nodeExpression.span,
@@ -595,28 +660,38 @@ class NodeBuilder(
     }
 
     /**
-     * The boundary of a lowered view conversion: no single netlist node has these groups, since
-     * project/overlay change structure and a PassThroughNode must keep it. Kept by name so a declared
-     * conversion (`declare p: project(t, v)`) can still be referenced like any other node.
+     * The boundary of a call lowered to wiring (view conversions, explicit forks): no single netlist node
+     * has these groups, since project/overlay change structure and a PassThroughNode must keep it. Kept by
+     * name so a declared call (`declare p: project(t, v)`) can still be referenced like any other node.
      */
-    private data class LoweredConversion(
+    private data class LoweredCall(
         val inputs: List<InputWireVectorGroup>,
         val outputs: List<OutputWireVectorGroup>,
     )
 
-    private val loweredConversions = mutableMapOf<String, LoweredConversion>()
+    private val loweredCalls = mutableMapOf<String, LoweredCall>()
+
+    // The pass-through nodes at a lowered call's boundary. Unlike a declared node, which is just a name for
+    // wires, these stand in for a call - so the implicit-fork check treats them as a consumer and a channel.
+    private val loweredCallInputs = mutableSetOf<Node>()
+    private val loweredCallOutputs = mutableSetOf<Node>()
 
     private fun invokeFunction(
         invocationName: String,
         invocation: Module.Invocation,
         callSiteSpan: SourceSpan,
+        coercion: ProtocolAnnotationNode?,
     ): IOGroups {
+        validateCallProtocol(invocation, callSiteSpan, coercion)
+
         val lowered = when (PredefinedFunctionNames.from(invocation.gaplFunctionName)) {
             PredefinedFunctionNames.PROJECT -> lowerProject(invocation, callSiteSpan)
             PredefinedFunctionNames.OVERLAY -> lowerOverlay(invocation, callSiteSpan)
             PredefinedFunctionNames.ZEROS -> lowerZeros(invocation, callSiteSpan)
+            PredefinedFunctionNames.FORK_EAGER, PredefinedFunctionNames.FORK_LAZY -> lowerFork(invocation, callSiteSpan)
             else -> {
                 val node = createNodeFromFunctionInvocation(invocationName, invocation, callSiteSpan)
+                validateNoJoin(invocation, node.inputWireVectorGroups.size, callSiteSpan)
                 return IOGroups.fromWireVectorGroups(
                     inputs = node.inputWireVectorGroups,
                     outputs = node.outputWireVectorGroups,
@@ -624,11 +699,69 @@ class NodeBuilder(
             }
         }
 
-        loweredConversions[invocationName] = lowered
+        validateNoJoin(invocation, lowered.inputs.size, callSiteSpan)
+        loweredCalls[invocationName] = lowered
+        loweredCallInputs += lowered.inputs.map { it.parentNode }
+        loweredCallOutputs += lowered.outputs.map { it.parentNode }
         return IOGroups.fromWireVectorGroups(inputs = lowered.inputs, outputs = lowered.outputs)
     }
 
-    // An anonymous PassThroughNode of one structure - the building block view conversions lower to.
+    /*
+     * The coercion matrix (type-system.md §5): a callee's protocol must be at or below the caller's. A
+     * callee strictly below is an island, which must be marked with the caller's own protocol; a callee at
+     * the same protocol is not an island, so marking it is an error.
+     */
+    private fun validateCallProtocol(invocation: Module.Invocation, callSiteSpan: SourceSpan, coercion: ProtocolAnnotationNode?) {
+        val calleeName = invocation.gaplFunctionName
+        val calleeProtocol = programContext.protocolOf(calleeName)
+
+        when {
+            calleeProtocol > protocol -> diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.IllegalProtocolCall(functionName, protocol, calleeName, calleeProtocol), callSiteSpan,
+            )
+            calleeProtocol == protocol -> if (coercion != null) diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.UnnecessaryCoercion(functionName, calleeName, protocol), coercion.span,
+            )
+            coercion == null -> diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.MissingCoercion(functionName, protocol, calleeName, calleeProtocol), callSiteSpan,
+            )
+            coercion.protocol != protocol -> diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.CoercionProtocolMismatch(functionName, protocol, coercion.protocol), coercion.span,
+            )
+            // A @dataflow island must be register-free; checked once its callee is built (see `islands`).
+            calleeProtocol == Protocol.DATAFLOW -> islands += invocation to callSiteSpan
+        }
+    }
+
+    // Inside a @valid body no call may take more than one input channel - that would be a join.
+    private fun validateNoJoin(invocation: Module.Invocation, inputCount: Int, callSiteSpan: SourceSpan) {
+        if (protocol == Protocol.VALID && inputCount > 1) {
+            diagnosticsCollector.reportError(
+                BuilderDiagnosticKind.JoinInValidFunction(functionName, invocation.gaplFunctionName, inputCount),
+                callSiteSpan,
+            )
+        }
+    }
+
+    // fork_eager(T, n) / fork_lazy(T, n): n copies of the input. Only the wiring for now - the handshake
+    // that distinguishes eager from lazy arrives with @ready_valid's lowering (stage 2c).
+    private fun lowerFork(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredCall {
+        val structure = invocation.interfaces[0]
+        val branchCount = (invocation.parameters[0] as IntegerParameterValue).value.intValueExact()
+        val source = conversionPassThrough(structure, callSiteSpan)
+        val sourceWires = source.outputWireVectorGroups.single().wires()
+
+        val branches = List(branchCount) { conversionPassThrough(structure, callSiteSpan) }
+        branches.forEach { branch ->
+            branch.inputWireVectorGroups.single().wires().zip(sourceWires).forEach { (branchWire, sourceWire) ->
+                module.connect(branchWire, sourceWire)
+            }
+        }
+
+        return LoweredCall(source.inputWireVectorGroups, branches.flatMap { it.outputWireVectorGroups })
+    }
+
+    // An anonymous PassThroughNode of one structure - the building block lowered calls are made of.
     private fun conversionPassThrough(structure: InterfaceStructure, callSiteSpan: SourceSpan) = createPassThroughNode(
         identifier = AnonymousIdentifierGenerator.genIdentifier(),
         inputWireVectorGroupsBuilder = { node -> listOf(buildInputWireVectorGroups(structure, node)) },
@@ -636,7 +769,7 @@ class NodeBuilder(
     ).also { nodeSpans[it] = callSiteSpan }
 
     // project(t, v): view bit i is driven by base bit baseBits[i]. See ViewLayout for the numbering.
-    private fun lowerProject(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+    private fun lowerProject(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredCall {
         val baseBits = ViewLayout.decode(invocation.parameters)
         val base = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
         val view = conversionPassThrough(invocation.interfaces[1], callSiteSpan)
@@ -646,11 +779,11 @@ class NodeBuilder(
             module.connect(viewWire, baseWires[baseBits[index]])
         }
 
-        return LoweredConversion(base.inputWireVectorGroups, view.outputWireVectorGroups)
+        return LoweredCall(base.inputWireVectorGroups, view.outputWireVectorGroups)
     }
 
     // overlay(t, v): each base bit the view names comes from the view, every other bit from the base.
-    private fun lowerOverlay(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+    private fun lowerOverlay(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredCall {
         val viewBitForBaseBit = ViewLayout.decode(invocation.parameters)
             .withIndex()
             .associate { (viewBit, baseBit) -> baseBit to viewBit }
@@ -665,11 +798,11 @@ class NodeBuilder(
             module.connect(resultWire, if (viewBit != null) viewWires[viewBit] else baseWires[index])
         }
 
-        return LoweredConversion(base.inputWireVectorGroups + view.inputWireVectorGroups, result.outputWireVectorGroups)
+        return LoweredCall(base.inputWireVectorGroups + view.inputWireVectorGroups, result.outputWireVectorGroups)
     }
 
     // zeros(T): a T driven entirely by one all-zero literal.
-    private fun lowerZeros(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredConversion {
+    private fun lowerZeros(invocation: Module.Invocation, callSiteSpan: SourceSpan): LoweredCall {
         val result = conversionPassThrough(invocation.interfaces[0], callSiteSpan)
         val resultWires = result.inputWireVectorGroups.single().wires()
 
@@ -685,7 +818,7 @@ class NodeBuilder(
             module.connect(resultWire, literalWire)
         }
 
-        return LoweredConversion(emptyList(), result.outputWireVectorGroups)
+        return LoweredCall(emptyList(), result.outputWireVectorGroups)
     }
 
     private fun createNodeFromFunctionInvocation(

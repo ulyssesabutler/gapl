@@ -1,5 +1,7 @@
 package com.uabutler.diagnostics
 
+import com.uabutler.util.Protocol
+
 sealed interface BuilderDiagnosticKind : DiagnosticKind {
 
     data class UnableToFindStaticExpressionValue(val identifierText: String) : BuilderDiagnosticKind {
@@ -126,5 +128,77 @@ sealed interface BuilderDiagnosticKind : DiagnosticKind {
 
     data class InvalidViewConversion(val conversion: String, val reason: String) : BuilderDiagnosticKind {
         override val message get() = "Invalid use of '$conversion': $reason"
+    }
+
+    data class InvalidForkCall(val fork: String, val reason: String) : BuilderDiagnosticKind {
+        override val message get() = "Invalid use of '$fork': $reason"
+    }
+
+    // ---- Layer-3 protocol checks (type-system.md §5). Protocols print as "@valid" etc. ----
+
+    data class IllegalProtocolCall(
+        val functionName: String,
+        val functionProtocol: Protocol,
+        val calleeName: String,
+        val calleeProtocol: Protocol,
+    ) : BuilderDiagnosticKind {
+        override val message get() =
+            "$functionProtocol function '$functionName' cannot call $calleeProtocol function '$calleeName' - " +
+            "a callee's protocol must be at or below its caller's (@dataflow < @valid < @ready_valid)"
+    }
+
+    data class MissingCoercion(
+        val functionName: String,
+        val functionProtocol: Protocol,
+        val calleeName: String,
+        val calleeProtocol: Protocol,
+    ) : BuilderDiagnosticKind {
+        override val message get() =
+            "Calling $calleeProtocol function '$calleeName' from $functionProtocol function '$functionName' creates an island, " +
+            "which must be marked: write '$calleeName(...)$functionProtocol'"
+    }
+
+    data class CoercionProtocolMismatch(
+        val functionName: String,
+        val functionProtocol: Protocol,
+        val written: Protocol,
+    ) : BuilderDiagnosticKind {
+        override val message get() =
+            "An island in $functionProtocol function '$functionName' is marked $written - " +
+            "a call-site annotation always names the caller's own protocol, $functionProtocol"
+    }
+
+    data class UnnecessaryCoercion(val functionName: String, val calleeName: String, val protocol: Protocol) : BuilderDiagnosticKind {
+        override val message get() =
+            "'$calleeName' is already $protocol, like '$functionName', so this call is not an island - remove the annotation"
+    }
+
+    data class ValidFunctionHasMultipleInputs(val functionName: String, val inputCount: Int) : BuilderDiagnosticKind {
+        override val message get() =
+            "@valid function '$functionName' has $inputCount input ports - a @valid function may have at most one, " +
+            "since firing on several would be a join (bundle them into one record, or use @ready_valid)"
+    }
+
+    data class JoinInValidFunction(val functionName: String, val calleeName: String, val inputCount: Int) : BuilderDiagnosticKind {
+        override val message get() =
+            "'$calleeName' takes $inputCount input channels, which is a join - not allowed inside @valid function '$functionName' " +
+            "(put the fork-and-join inside a single-input @dataflow island)"
+    }
+
+    data class ImplicitFork(val functionName: String, val channel: String, val consumerCount: Int) : BuilderDiagnosticKind {
+        override val message get() =
+            "Channel '$channel' feeds $consumerCount consumers in @ready_valid function '$functionName' - " +
+            "forks must be explicit there: use fork_eager(...) or fork_lazy(...)"
+    }
+
+    data class ProtocolFunctionArgument(val functionName: String, val protocol: Protocol) : BuilderDiagnosticKind {
+        override val message get() =
+            "Only @dataflow functions can be passed as arguments, but '$functionName' is $protocol"
+    }
+
+    data class IslandContainsRegister(val calleeName: String, val registerFunctionName: String) : BuilderDiagnosticKind {
+        override val message get() =
+            "'$calleeName' cannot be an island because it contains a register (in '$registerFunctionName') - " +
+            "an island must be combinational; pipelining comes from retiming"
     }
 }

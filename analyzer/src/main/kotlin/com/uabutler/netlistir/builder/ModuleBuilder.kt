@@ -11,9 +11,14 @@ import com.uabutler.netlistir.builder.util.ProgramContext
 import com.uabutler.netlistir.builder.util.findCombinationalLoops
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.netlistir.netlist.MutableModule
+import com.uabutler.netlistir.netlist.ModuleInvocationNode
 import com.uabutler.netlistir.netlist.Node
+import com.uabutler.netlistir.netlist.PredefinedFunctionNode
+import com.uabutler.netlistir.util.IntegerRegisterFunction
 import com.uabutler.netlistir.util.InvocationGraph
+import com.uabutler.netlistir.util.RegisterFunction
 import com.uabutler.util.Logger
+import com.uabutler.util.PredefinedFunctionNames
 
 class ModuleBuilder(
     val program: ProgramNode,
@@ -40,6 +45,9 @@ class ModuleBuilder(
     // NodeBuilder has already finished - so spans are pulled out and merged here as each module
     // finishes building, rather than looked up from any single NodeBuilder instance.
     private val nodeSpans = mutableMapOf<Node, SourceSpan>()
+
+    // Every island any function creates, with its call site - see NodeBuilder.islands.
+    private val islands = mutableListOf<Pair<Module.Invocation, SourceSpan>>()
 
     data class Result(
         val modules: List<MutableModule>,
@@ -99,6 +107,8 @@ class ModuleBuilder(
         val modules = moduleInstantiationTracker.getModules()
         Logger.info { "Built module count: ${modules.size}" }
 
+        validateIslandsRegisterFree(modules)
+
         // Profiled (see netfpga-perf-analysis investigation) - the module-build loop above is
         // never the bottleneck (sub-second even on large designs). The Combinational Loop Check
         // below used to be: an earlier version of findCombinationalLoops recursively flattened the
@@ -149,6 +159,47 @@ class ModuleBuilder(
         )
         nodeBuilder.buildNodesIntoModule()
         nodeSpans.putAll(nodeBuilder.nodeSpans)
+        islands.addAll(nodeBuilder.islands)
+    }
+
+    /*
+     * An island must be combinational: @dataflow is combinational (type-system.md §6), and before layer 2
+     * that is enforced only where it matters, on islands. So an island's callee may not contain a register,
+     * directly or anywhere in what it calls. A callee that failed to build is skipped - it already has a
+     * diagnostic of its own.
+     */
+    private fun validateIslandsRegisterFree(modules: List<MutableModule>) {
+        val modulesByInvocation = modules.associateBy { it.invocation }
+        val registerOwners = mutableMapOf<Module.Invocation, String?>()
+
+        // The name of the function holding a register somewhere under this invocation, or null if none does.
+        fun registerOwner(invocation: Module.Invocation): String? {
+            if (invocation in registerOwners) return registerOwners[invocation]
+            registerOwners[invocation] = null // a recursive call is reported separately; don't loop on it
+
+            val owner = when (PredefinedFunctionNames.from(invocation.gaplFunctionName)) {
+                PredefinedFunctionNames.REGISTER, PredefinedFunctionNames.INTEGER_REGISTER -> invocation.gaplFunctionName
+                else -> modulesByInvocation[invocation]?.getBodyNodes()?.firstNotNullOfOrNull { node ->
+                    when (node) {
+                        is PredefinedFunctionNode -> when (node.predefinedFunction) {
+                            is RegisterFunction, is IntegerRegisterFunction -> invocation.gaplFunctionName
+                            else -> null
+                        }
+                        is ModuleInvocationNode -> registerOwner(node.invocation)
+                        else -> null
+                    }
+                }
+            }
+
+            registerOwners[invocation] = owner
+            return owner
+        }
+
+        islands.forEach { (invocation, span) ->
+            registerOwner(invocation)?.let { owner ->
+                diagnosticsCollector.reportError(BuilderDiagnosticKind.IslandContainsRegister(invocation.gaplFunctionName, owner), span)
+            }
+        }
     }
 
     // Returns true if at least one cycle was found (and reported) - the caller uses this to decide

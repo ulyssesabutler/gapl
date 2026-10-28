@@ -3,6 +3,7 @@ package com.uabutler.ast.node.functions.circuits
 import com.uabutler.ast.node.GAPLNode
 import com.uabutler.ast.node.IdentifierNode
 import com.uabutler.ast.node.InstantiationNode
+import com.uabutler.ast.node.ProtocolAnnotationNode
 import com.uabutler.ast.node.functions.interfaces.InterfaceTypeNode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.diagnostics.SourceSpan
@@ -38,6 +39,7 @@ data class DeclaredGenericFunctionCircuitExpressionNode(
     override val span: SourceSpan,
     val identifier: IdentifierNode,
     val functionIdentifier: IdentifierNode,
+    val coercion: ProtocolAnnotationNode? = null,
 ): CircuitNodeExpressionNode
 
 data class AnonymousInterfaceCircuitExpressionNode(
@@ -54,6 +56,7 @@ data class AnonymousFunctionCircuitExpressionNode(
 data class AnonymousGenericFunctionCircuitExpressionNode(
     override val span: SourceSpan,
     val functionIdentifier: IdentifierNode,
+    val coercion: ProtocolAnnotationNode? = null,
 ): CircuitNodeExpressionNode
 
 data class ReferenceCircuitExpressionNode(

@@ -31,6 +31,11 @@ enum class PredefinedFunctionNames(val gaplName: String) {
     PROJECT("project"),
     OVERLAY("overlay"),
     ZEROS("zeros"),
+
+    // Explicit forks for @ready_valid bodies, where an implicit fork is an error (type-system.md §5).
+    // Also lowered to wiring by NodeBuilder; the handshake each one implies is stage 2c's work.
+    FORK_EAGER("fork_eager"),
+    FORK_LAZY("fork_lazy"),
     ;
 
     companion object {

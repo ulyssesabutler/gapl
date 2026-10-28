@@ -83,4 +83,13 @@ sealed interface ResolverDiagnosticKind : DiagnosticKind {
     data object ExpectedInterfaceExpression : ResolverDiagnosticKind {
         override val message get() = "Expected an interface expression"
     }
+
+    data class UnknownProtocol(val name: String) : ResolverDiagnosticKind {
+        override val message get() = "Unknown protocol '@$name' (expected @dataflow, @valid or @ready_valid)"
+    }
+
+    data object ProtocolAnnotationOnNonCall : ResolverDiagnosticKind {
+        override val message get() =
+            "A protocol annotation here must follow a function call - at a call site it marks an island"
+    }
 }

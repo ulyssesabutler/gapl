@@ -47,6 +47,7 @@ LessThanEquals: '<=';
 Connector: '=>';
 Comma: ',';
 Dot: '.';
+At: '@';
 LogicalAnd: '&&';
 LogicalOr: '||';
 
@@ -100,9 +101,13 @@ circuitExpression: circuitGroupExpression (Connector circuitGroupExpression)*;
 
 circuitGroupExpression: circuitNodeExpression (Comma circuitNodeExpression)* Comma?;
 
+// A protocol annotation (type-system.md §5). On a function definition it names the function's protocol
+// (none means @dataflow); on a call it marks an island - a coercion into the caller's protocol.
+protocolAnnotation: At protocol=Id;
+
 circuitNodeExpression:
-      expression #loneCircuitExpression
-    | Declare declaredIdentifier=Id Colon circuitExpressionType #declaredCircuitExpression
+      expression protocolAnnotation? #loneCircuitExpression
+    | Declare declaredIdentifier=Id Colon circuitExpressionType protocolAnnotation? #declaredCircuitExpression
     | ParenL circuitExpression ParenR #parenCircuitExpression
 ;
 
@@ -166,6 +171,7 @@ circuitStatement:
 ;
 
 functionDefinition:
+    protocolAnnotation?
     Function declaredIdentifier=Id
     parameterDefinitionList?
     input=functionIOList Connector output=functionIOList

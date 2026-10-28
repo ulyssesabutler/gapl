@@ -37,6 +37,10 @@
         {
           "name": "keyword.other.gapl",
           "match": "\\b(declare|in|out|inout|of)\\b"
+        },
+        {
+          "name": "storage.modifier.gapl",
+          "match": "@(dataflow|valid|ready_valid)\\b"
         }
       ]
     },

@@ -4,12 +4,21 @@ import com.uabutler.ast.node.functions.AbstractFunctionIONode
 import com.uabutler.ast.node.interfaces.InterfaceExpressionNode
 import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.diagnostics.SourceSpan
+import com.uabutler.util.Protocol
 
 data class InstantiationNode(
     override val span: SourceSpan,
     val definitionIdentifier: IdentifierNode,
     val genericInterfaces: List<GenericInterfaceValueNode>,
     val genericParameters: List<GenericParameterValueNode>,
+    // Set when the call is annotated (`f()@ready_valid`): the call is an island, coercing the callee
+    // into the caller's protocol.
+    val coercion: ProtocolAnnotationNode? = null,
+): GAPLNode
+
+data class ProtocolAnnotationNode(
+    override val span: SourceSpan,
+    val protocol: Protocol,
 ): GAPLNode
 
 data class GenericInterfaceDefinitionNode(

@@ -10,7 +10,9 @@ import com.uabutler.resolver.scope.Scope
 import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.functions.circuits.CircuitStatementScope
 import com.uabutler.resolver.scope.util.GenericParameterDefinitionScope
+import com.uabutler.resolver.scope.util.ProtocolAnnotationScope
 import com.uabutler.resolver.scope.util.toIdentifierNode
+import com.uabutler.util.Protocol
 
 class FunctionDefinitionScope(
     override val parentScope: ProgramScope,
@@ -66,6 +68,9 @@ class FunctionDefinitionScope(
         val definitions = GenericParameterDefinitionScope(this, parameterDefinitions).ast()
         val identifier = functionDefinition.declaredIdentifier!!.toIdentifierNode()
         semanticTokens.record(identifier.span, SemanticTokenKind.FUNCTION)
+        val protocol = functionDefinition.protocolAnnotation()
+            ?.let { ProtocolAnnotationScope(this, it).ast()?.protocol }
+            ?: Protocol.DATAFLOW
 
         return FunctionDefinitionNode(
             span = span,
@@ -75,6 +80,7 @@ class FunctionDefinitionScope(
             inputFunctionIO = inputNodes.map { FunctionIOScope(this, it).ast() },
             outputFunctionIO = outputNodes.map { FunctionIOScope(this, it).ast() },
             statements = functionDefinition.circuitStatement().map { CircuitStatementScope(this, it).ast() },
+            protocol = protocol,
         )
     }
 }

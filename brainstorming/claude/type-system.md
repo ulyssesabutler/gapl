@@ -156,6 +156,27 @@ combinational"), so 2b and 2c are complete without it. 2e needs only 2b and may 
 all. Freezing an island therefore needs an IR notion of a per-instance `enable` source, its Verilog
 emission, and `simengine` support; that is 2c's largest piece.
 
+**2a implemented (2026-10, branch `layer3`).** Grammar: an `@` token and an optional
+`protocolAnnotation` leading a `functionDefinition` and trailing a call (lone or declared). The resolver
+validates protocol names and that a call-site annotation sits on a call; every other check runs in the
+netlist builder, because it needs instantiation-time facts (a callee's port count, what it transitively
+contains):
+
+- per call (`NodeBuilder.validateCallProtocol`) — the coercion matrix; a missing, mismatched or
+  unnecessary island marker; and, in a `@valid` body, a call taking more than one input channel;
+- per function — a `@valid` function with more than one input port; an implicit fork in a
+  `@ready_valid` body (a channel reaching more than one call or output port, looking through declared
+  nodes);
+- per program, after the build loop (`ModuleBuilder.validateIslandsRegisterFree`) — a `@dataflow` island
+  containing a register anywhere beneath it;
+- per argument (`ProgramContext`) — a protocol'd function passed as a function-typed argument.
+
+`fork_eager(T, n)` and `fork_lazy(T, n)` exist as primitives so the implicit-fork check has its escape;
+for now they lower to plain wiring (n copies), and the handshake that distinguishes them arrives in 2c.
+Protocol'd functions otherwise compile exactly as before. One consequence of checking in the builder:
+these diagnostics surface from `Analyzer.analyzeFull` (the compiler, tests) but not from the LSP's live
+`analyze`, the same as every other builder diagnostic today.
+
 ---
 
 ## 2. The three layers

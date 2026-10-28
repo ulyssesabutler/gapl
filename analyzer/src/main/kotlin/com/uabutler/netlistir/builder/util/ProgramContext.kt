@@ -1,5 +1,6 @@
 package com.uabutler.netlistir.builder.util
 
+import com.uabutler.ast.node.FunctionInstantiationGenericParameterValueNode
 import com.uabutler.ast.node.InstantiationNode
 import com.uabutler.ast.node.ProgramNode
 import com.uabutler.ast.node.functions.circuits.MemberAccessOperationNode
@@ -9,12 +10,23 @@ import com.uabutler.ast.node.staticexpressions.StaticExpressionNode
 import com.uabutler.diagnostics.BuilderDiagnosticKind
 import com.uabutler.netlistir.netlist.Module
 import com.uabutler.util.PredefinedFunctionNames
+import com.uabutler.util.Protocol
+import java.math.BigInteger
 
 class ProgramContext(program: ProgramNode) {
 
     private val interfaceDefinitions = program.interfaces
         .map { AbstractInterfaceDefinition.fromNode(it) }
         .associateBy { it.signature.identifier }
+
+    private val functionProtocols = program.functions.associate { it.identifier.value to it.protocol }
+
+    /** A function's layer-3 protocol. Primitives are @dataflow, except the explicit forks, which only make sense in @ready_valid. */
+    fun protocolOf(functionName: String): Protocol = functionProtocols[functionName]
+        ?: when (PredefinedFunctionNames.from(functionName)) {
+            PredefinedFunctionNames.FORK_EAGER, PredefinedFunctionNames.FORK_LAZY -> Protocol.READY_VALID
+            else -> Protocol.DATAFLOW
+        }
 
     /* TODO: We should eventually use this for validation
     private val interfaceSignatures = program.interfaces
@@ -268,6 +280,18 @@ class ProgramContext(program: ProgramNode) {
         fun invalid(reason: String): Nothing =
             throw BuilderDiagnosticException(BuilderDiagnosticKind.InvalidViewConversion(functionName, reason), node.span)
 
+        // Function-typed parameters are @dataflow (type-system.md §5), so only @dataflow functions may be passed.
+        node.genericParameters.filterIsInstance<FunctionInstantiationGenericParameterValueNode>().forEach { argument ->
+            val argumentName = argument.instantiation.definitionIdentifier.value
+            val argumentProtocol = protocolOf(argumentName)
+            if (argumentProtocol != Protocol.DATAFLOW) {
+                throw BuilderDiagnosticException(
+                    BuilderDiagnosticKind.ProtocolFunctionArgument(argumentName, argumentProtocol),
+                    argument.span,
+                )
+            }
+        }
+
         when (PredefinedFunctionNames.from(functionName)) {
             PredefinedFunctionNames.PROJECT, PredefinedFunctionNames.OVERLAY -> {
                 if (interfaces.size != 2 || parameterValues.isNotEmpty()) {
@@ -288,6 +312,15 @@ class ProgramContext(program: ProgramNode) {
             PredefinedFunctionNames.ZEROS -> {
                 if (interfaces.size != 1 || parameterValues.isNotEmpty()) {
                     invalid("expected exactly one interface and no parameters")
+                }
+            }
+            PredefinedFunctionNames.FORK_EAGER, PredefinedFunctionNames.FORK_LAZY -> {
+                val count = (parameterValues.singleOrNull() as? IntegerParameterValue)?.value
+                if (interfaces.size != 1 || count == null || count < BigInteger.ONE) {
+                    throw BuilderDiagnosticException(
+                        BuilderDiagnosticKind.InvalidForkCall(functionName, "expected one interface and a positive branch count, e.g. $functionName(T, 2)"),
+                        node.span,
+                    )
                 }
             }
             else -> {}

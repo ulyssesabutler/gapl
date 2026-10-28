@@ -32,6 +32,7 @@ import com.uabutler.resolver.scope.SemanticTokenKind
 import com.uabutler.resolver.scope.interfaces.InterfaceExpressionScope
 import com.uabutler.resolver.scope.staticexpressions.StaticExpressionScope
 import com.uabutler.resolver.scope.util.GenericParameterValueScope
+import com.uabutler.resolver.scope.util.ProtocolAnnotationScope
 import com.uabutler.resolver.scope.util.toIdentifierNode
 
 class CircuitExpressionScope(
@@ -72,7 +73,7 @@ class CircuitNodeExpressionScope(
 
         return when (body) {
             is CSTParser.LoneCircuitExpressionContext -> {
-                LoneCircuitExpressionScope(this, body.expression()!!).ast()
+                withCoercion(LoneCircuitExpressionScope(this, body.expression()!!).ast(), body.protocolAnnotation())
             }
             is CSTParser.DeclaredCircuitExpressionContext -> {
                 val identifier = body.declaredIdentifier!!.toIdentifierNode()
@@ -84,7 +85,7 @@ class CircuitNodeExpressionScope(
                     return ErrorCircuitNodeExpressionNode(span, "unsupported transformer")
                 }
 
-                when (val circuitExpressionType = LoneCircuitExpressionScope(this, type.expression()!!).ast()) {
+                val declared = when (val circuitExpressionType = LoneCircuitExpressionScope(this, type.expression()!!).ast()) {
                     is AnonymousFunctionCircuitExpressionNode -> DeclaredFunctionCircuitExpressionNode(
                         span, identifier, circuitExpressionType.instantiation,
                     )
@@ -100,11 +101,35 @@ class CircuitNodeExpressionScope(
                         ErrorCircuitNodeExpressionNode(span, "invalid declaration type")
                     }
                 }
+
+                withCoercion(declared, body.protocolAnnotation())
             }
             is CSTParser.ParenCircuitExpressionContext -> {
                 CircuitExpressionNodeCircuitExpression(span, CircuitExpressionScope(this, body.circuitExpression()!!).ast())
             }
             else -> throw IllegalStateException("Unexpected circuit node expression context $body")
+        }
+    }
+
+    // A call-site protocol annotation marks the call as an island; whether that island is legal (and
+    // required) depends on the caller's and callee's protocols, which the builder checks.
+    private fun withCoercion(
+        node: CircuitNodeExpressionNode,
+        annotation: CSTParser.ProtocolAnnotationContext?,
+    ): CircuitNodeExpressionNode {
+        if (annotation == null) return node
+        val coercion = ProtocolAnnotationScope(this, annotation).ast() ?: return node
+
+        return when (node) {
+            is AnonymousFunctionCircuitExpressionNode -> node.copy(instantiation = node.instantiation.copy(coercion = coercion))
+            is DeclaredFunctionCircuitExpressionNode -> node.copy(instantiation = node.instantiation.copy(coercion = coercion))
+            is AnonymousGenericFunctionCircuitExpressionNode -> node.copy(coercion = coercion)
+            is DeclaredGenericFunctionCircuitExpressionNode -> node.copy(coercion = coercion)
+            is ErrorCircuitNodeExpressionNode -> node
+            else -> {
+                diagnostics.reportError(ResolverDiagnosticKind.ProtocolAnnotationOnNonCall, coercion.span)
+                ErrorCircuitNodeExpressionNode(coercion.span, "protocol annotation on something other than a call")
+            }
         }
     }
 
