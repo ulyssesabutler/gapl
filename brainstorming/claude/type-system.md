@@ -1105,6 +1105,17 @@ different questions and merging them would be confusing later.
 - **Out-coercion** (`@dataflow → @ready_valid`) is `valid_out = delay(fire, latency)`, plus
   `enable = fire` on every register in the island.
 
+  > **Corrected (2026-10): the enable is `ready_out || !valid_out`, not `fire`.** `fire` requires a *new*
+  > valid input, so with latency > 0 a gap in the input would freeze the island and the item already
+  > inside would never drain until more input arrived — a packet's last beat could sit there
+  > indefinitely. The enable must depend only on the output side: the island advances whenever its
+  > output can move, i.e. downstream is ready *or* the output slot is empty. The second term fills
+  > bubbles; it costs one OR gate (`valid_out` is registered when latency > 0, so it adds no new
+  > combinational path), and was preferred over the plainer `enable = ready_out`. The input side follows:
+  > `fire = (∧ valid_i) && enable`, each `ready_i = fire`, and the `valid` delay line shifts on `enable`,
+  > taking `∧ valid_i` in. With latency 0 there are no registers, and this reduces to the join alone.
+  > The same enable freezes a `@valid` callee in coercion C.
+
 **Islands are rate-preserving by construction, and this enforces itself.** A `@dataflow` function cannot
 contain a `fold` or `regroup`, because those are lifecycle-aware and need a handshake. So
 `valid_out = delay(fire, latency)` is always correct without a separate check.
